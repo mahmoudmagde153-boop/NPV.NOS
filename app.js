@@ -193,35 +193,41 @@ function applyDiscountLogic(f, contractDateStr) {
     let isFlexible = flexibleToggle ? (flexibleToggle.value === 'yes') : false;
     
     if (currentProject === 'Zomra') {
-        let pmt = Math.round(months / 3);
         let yearIndex = Math.floor(months / 12);
+        let rate = ratesMap[yearIndex] !== undefined ? ratesMap[yearIndex] : 0.09;
         
-        let rate;
-        if (months === 0 || months === 1) rate = 0.19; // DP uses 19%
-        else if (yearIndex === 0) rate = 0.18; // Year 1
-        else if (yearIndex === 1) rate = 0.15; // Year 2
-        else if (yearIndex === 2) rate = 0.13; // Year 3
-        else if (yearIndex === 3 || yearIndex === 4) rate = 0.10; // Year 4, 5
-        else rate = 0.09; // Year 6+
-        
-        if (f.id === 'dp1' || f.isMnt) {
-            f.rate = 0;
-            f.period = 0;
-            f.pvFactor = 1;
-            f.pv = f.amount;
-        } else if (f.id === 'dp2' && months === 1) {
-            f.rate = rate;
-            f.period = 1/3;
-            f.pvFactor = 1 / Math.pow(1 + rate / 4, 1/3);
+        if (isFlexible) {
+            let baseDate = new Date('2025-12-29');
+            let diffFromBase = Math.round((pDate - baseDate) / (1000 * 60 * 60 * 24));
+            let r;
+            if (diffFromBase < 54) r = 0.19;
+            else if (diffFromBase < 419) r = 0.18;
+            else if (diffFromBase < 784) r = 0.15;
+            else if (diffFromBase < 1149) r = 0.13;
+            else if (diffFromBase < 1514) r = 0.10;
+            else if (diffFromBase < 1879) r = 0.10;
+            else r = 0.09;
+            f.rate = r;
+            f.pvFactor = 1 / Math.pow(1 + r / 365, diffFromBase);
             f.pv = f.amount * f.pvFactor;
         } else {
-            // For standard payments, additional, delivery, and any flexible payment
-            f.rate = rate;
-            // ZR.xlsm uses Quarterly compounding exactly: (1 + r/4)^(months/3)
-            let exactQuarters = months / 3;
-            f.period = exactQuarters;
-            f.pvFactor = 1 / Math.pow(1 + rate / 4, exactQuarters);
-            f.pv = f.amount * f.pvFactor;
+            if (f.id === 'dp1' || f.id === 'dp2' || f.isMnt) {
+                f.rate = 0;
+                f.period = 0;
+                f.pvFactor = 1;
+                f.pv = f.amount;
+            } else if (f.id === 'addl') {
+                f.rate = rate;
+                f.period = 2;
+                f.pvFactor = 1 / Math.pow(1 + rate * 2 / 12, 2);
+                f.pv = f.amount * f.pvFactor;
+            } else {
+                let pmt = Math.round(months / 3);
+                f.rate = rate;
+                f.period = pmt;
+                f.pvFactor = 1 / Math.pow(1 + rate / 4, pmt);
+                f.pv = f.amount * f.pvFactor;
+            }
         }
     } else if (currentProject === 'Perla') {
         if (f.id === 'dp1' || f.isMnt) {
@@ -271,7 +277,7 @@ function getRateForPeriod(period, isDP) {
     return getRateForYear(year);
 }
 
-function generateFlowsTemplate(contractDateStr, years, freqMonths, isBase = false, customFirstDateStr = null) {
+function generateFlowsTemplate(contractDateStr, years, freqMonths, isBase = false) {
     let flows = [];
     let totalMonths = years * 12;
     
@@ -308,13 +314,9 @@ function generateFlowsTemplate(contractDateStr, years, freqMonths, isBase = fals
         flows.push({ id: 'mnt2', label: 'Maintenance 2', date: delivDate, months: 37, isMnt: true });
         
         let numInst = overrideInstCount !== null && overrideInstCount !== "" ? parseInt(overrideInstCount) : (years * (12 / freqMonths));
-        let startMonth = (freqMonths === 6) ? 6 : 3;
-        let cDate = new Date(contractDateStr);
-        let firstDate = customFirstDateStr ? new Date(customFirstDateStr) : null;
-        let diffMonths = firstDate ? Math.round((firstDate - cDate) / (1000 * 60 * 60 * 24 * 30.44)) : startMonth;
         for (let i = 0; i < numInst; i++) {
-            let m = diffMonths + i * freqMonths;
-            let dStr = customFirstDateStr ? formatDate(addMonths(customFirstDateStr, i * freqMonths)) : formatDate(addMonths(contractDateStr, m));
+            let m = 4 + i * freqMonths;
+            let dStr = formatDate(addMonths(contractDateStr, m));
             flows.push({ id: `inst_${i}`, label: 'Installment ' + (i+1), date: dStr, months: m, isInst: true });
         }
         
@@ -330,13 +332,11 @@ function generateFlowsTemplate(contractDateStr, years, freqMonths, isBase = fals
         flows.push({ id: 'mnt1', label: 'Maintenance 1', date: mnt1Date, months: 36, isMnt: true });
         flows.push({ id: 'mnt2', label: 'Maintenance 2', date: delivDate, months: 48, isMnt: true });
         
-        let numInst = overrideInstCount !== null && overrideInstCount !== "" ? parseInt(overrideInstCount) : null;
-        let startMonth = 3 + freqMonths;
-        let cDate = new Date(contractDateStr);
-        let firstDate = customFirstDateStr ? new Date(customFirstDateStr) : null;
-        let diffMonths = firstDate ? Math.round((firstDate - cDate) / (1000 * 60 * 60 * 24 * 30.44)) : startMonth;
-        let curMonth = diffMonths;
+        let numInst = overrideInstCount !== null ? overrideInstCount : null;
+        
+        let curMonth = 3 + freqMonths; // 6 (Quarterly) or 9 (Semi-annual)
         let instList = [];
+        
         if (numInst !== null) {
             for (let i=0; i<numInst; i++) {
                 instList.push(curMonth);
@@ -344,10 +344,11 @@ function generateFlowsTemplate(contractDateStr, years, freqMonths, isBase = fals
             }
         } else {
             while (curMonth <= totalMonths) { instList.push(curMonth); curMonth += freqMonths; }
-            if (freqMonths === 6 && !customFirstDateStr && instList.length > 0 && instList[instList.length-1] > totalMonths - 3) instList.pop(); 
+            if (freqMonths === 6 && instList.length > 0 && instList[instList.length-1] > totalMonths - 3) instList.pop(); 
         }
+        
         instList.forEach((m, i) => {
-            let dStr = customFirstDateStr ? formatDate(addMonths(customFirstDateStr, i * freqMonths)) : formatDate(addMonths(contractDateStr, m));
+            let dStr = formatDate(addMonths(contractDateStr, m));
             flows.push({ id: `inst_${i}`, label: 'Installment ' + (i+1), date: dStr, months: m, isInst: true });
         });
     }
@@ -964,9 +965,7 @@ function calculate() {
     renderTable(baseFlows, 'base-tbody');
     updatePreDeliveryTracker(baseFlows, 'base-pre-delivery');
     
-    let firstInstDateEl = document.getElementById('first-inst-date');
-    let customFirstDateStr = firstInstDateEl && firstInstDateEl.value ? firstInstDateEl.value : null;
-    let customTemplate = generateFlowsTemplate(contractDateStr, years, freqMonths, false, customFirstDateStr);
+    let customTemplate = generateFlowsTemplate(contractDateStr, years, freqMonths);
     
     let targetPv = basePvCache;
     
@@ -1015,7 +1014,7 @@ function calculate() {
         
         document.getElementById('duration-years').value = newYears;
         renderCustomInputs();
-        customTemplate = generateFlowsTemplate(contractDateStr, newYears, freqMonths, false, customFirstDateStr);
+        customTemplate = generateFlowsTemplate(contractDateStr, newYears, freqMonths);
         years = newYears;
         
         // Reset option so it doesn't infinitely loop on next calculate
@@ -1044,13 +1043,6 @@ function calculate() {
     
     let actualPrice = globalCustomFlows.filter(f => !f.isMnt).reduce((sum, f) => sum + f.amount, 0);
     globalCustomFlows = applyPerfectPercentages(globalCustomFlows, actualPrice);
-    globalCustomFlows.sort((a, b) => {
-        if (a.months !== b.months) return a.months - b.months;
-        let d1 = new Date(a.date);
-        let d2 = new Date(b.date);
-        if (!isNaN(d1) && !isNaN(d2)) return d1 - d2;
-        return 0;
-    });
     
     // Target Price remains fixed; annual payments absorb any mathematical discrepancy automatically.
     
@@ -1614,7 +1606,6 @@ async function handleTemplateUpload(event) {
         alert("??? ??? ??? ?????.");
     }
 }
-
 
 
 
