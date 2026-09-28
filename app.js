@@ -193,41 +193,35 @@ function applyDiscountLogic(f, contractDateStr) {
     let isFlexible = flexibleToggle ? (flexibleToggle.value === 'yes') : false;
     
     if (currentProject === 'Zomra') {
+        let pmt = Math.round(months / 3);
         let yearIndex = Math.floor(months / 12);
-        let rate = ratesMap[yearIndex] !== undefined ? ratesMap[yearIndex] : 0.09;
         
-        if (isFlexible) {
-            let baseDate = new Date('2025-12-29');
-            let diffFromBase = Math.round((pDate - baseDate) / (1000 * 60 * 60 * 24));
-            let r;
-            if (diffFromBase < 54) r = 0.19;
-            else if (diffFromBase < 419) r = 0.18;
-            else if (diffFromBase < 784) r = 0.15;
-            else if (diffFromBase < 1149) r = 0.13;
-            else if (diffFromBase < 1514) r = 0.10;
-            else if (diffFromBase < 1879) r = 0.10;
-            else r = 0.09;
-            f.rate = r;
-            f.pvFactor = 1 / Math.pow(1 + r / 365, diffFromBase);
+        let rate;
+        if (months === 0 || months === 1) rate = 0.19; // DP uses 19%
+        else if (yearIndex === 0) rate = 0.18; // Year 1
+        else if (yearIndex === 1) rate = 0.15; // Year 2
+        else if (yearIndex === 2) rate = 0.13; // Year 3
+        else if (yearIndex === 3 || yearIndex === 4) rate = 0.10; // Year 4, 5
+        else rate = 0.09; // Year 6+
+        
+        if (f.id === 'dp1' || f.isMnt) {
+            f.rate = 0;
+            f.period = 0;
+            f.pvFactor = 1;
+            f.pv = f.amount;
+        } else if (f.id === 'dp2' && months === 1) {
+            f.rate = rate;
+            f.period = 1/3;
+            f.pvFactor = 1 / Math.pow(1 + rate / 4, 1/3);
             f.pv = f.amount * f.pvFactor;
         } else {
-            if (f.id === 'dp1' || f.id === 'dp2' || f.isMnt) {
-                f.rate = 0;
-                f.period = 0;
-                f.pvFactor = 1;
-                f.pv = f.amount;
-            } else if (f.id === 'addl') {
-                f.rate = rate;
-                f.period = 2;
-                f.pvFactor = 1 / Math.pow(1 + rate * 2 / 12, 2);
-                f.pv = f.amount * f.pvFactor;
-            } else {
-                let pmt = Math.round(months / 3);
-                f.rate = rate;
-                f.period = pmt;
-                f.pvFactor = 1 / Math.pow(1 + rate / 4, pmt);
-                f.pv = f.amount * f.pvFactor;
-            }
+            // For standard payments, additional, delivery, and any flexible payment
+            f.rate = rate;
+            // ZR.xlsm uses Quarterly compounding exactly: (1 + r/4)^(months/3)
+            let exactQuarters = months / 3;
+            f.period = exactQuarters;
+            f.pvFactor = 1 / Math.pow(1 + rate / 4, exactQuarters);
+            f.pv = f.amount * f.pvFactor;
         }
     } else if (currentProject === 'Perla') {
         if (f.id === 'dp1' || f.isMnt) {
@@ -277,7 +271,7 @@ function getRateForPeriod(period, isDP) {
     return getRateForYear(year);
 }
 
-function generateFlowsTemplate(contractDateStr, years, freqMonths, isBase = false) {
+function generateFlowsTemplate(contractDateStr, years, freqMonths, isBase = false, customFirstDateStr = null) {
     let flows = [];
     let totalMonths = years * 12;
     
@@ -297,15 +291,6 @@ function generateFlowsTemplate(contractDateStr, years, freqMonths, isBase = fals
         return def;
     };
     
-    let customFirstDateStr = null;
-    if (!isBase) {
-        let el = document.getElementById('first-inst-date');
-        if (el && el.value) {
-            customFirstDateStr = el.value;
-        }
-    }
-    let cDate = new Date(contractDateStr);
-
     if (currentProject === 'Zomra') {
         flows.push({ id: 'dp1', label: 'Down Payment', date: contractDateStr, months: 0, isDP: true, defaultPct: getOverridePct('dp1', 0.025) });
         
@@ -323,15 +308,14 @@ function generateFlowsTemplate(contractDateStr, years, freqMonths, isBase = fals
         flows.push({ id: 'mnt2', label: 'Maintenance 2', date: delivDate, months: 37, isMnt: true });
         
         let numInst = overrideInstCount !== null && overrideInstCount !== "" ? parseInt(overrideInstCount) : (years * (12 / freqMonths));
-        
-        let startMonth = 1 + freqMonths;
+        let startMonth = (freqMonths === 6) ? 6 : 3;
+        let cDate = new Date(contractDateStr);
         let firstDate = customFirstDateStr ? new Date(customFirstDateStr) : null;
         let diffMonths = firstDate ? Math.round((firstDate - cDate) / (1000 * 60 * 60 * 24 * 30.44)) : startMonth;
-        
         for (let i = 0; i < numInst; i++) {
             let m = diffMonths + i * freqMonths;
             let dStr = customFirstDateStr ? formatDate(addMonths(customFirstDateStr, i * freqMonths)) : formatDate(addMonths(contractDateStr, m));
-            flows.push({ id: 'inst_' + i, label: 'Installment ' + (i+1), date: dStr, months: m, isInst: true });
+            flows.push({ id: `inst_${i}`, label: 'Installment ' + (i+1), date: dStr, months: m, isInst: true });
         }
         
     } else { // Perla
@@ -347,14 +331,12 @@ function generateFlowsTemplate(contractDateStr, years, freqMonths, isBase = fals
         flows.push({ id: 'mnt2', label: 'Maintenance 2', date: delivDate, months: 48, isMnt: true });
         
         let numInst = overrideInstCount !== null && overrideInstCount !== "" ? parseInt(overrideInstCount) : null;
-        
         let startMonth = 3 + freqMonths;
+        let cDate = new Date(contractDateStr);
         let firstDate = customFirstDateStr ? new Date(customFirstDateStr) : null;
         let diffMonths = firstDate ? Math.round((firstDate - cDate) / (1000 * 60 * 60 * 24 * 30.44)) : startMonth;
-        
         let curMonth = diffMonths;
         let instList = [];
-        
         if (numInst !== null) {
             for (let i=0; i<numInst; i++) {
                 instList.push(curMonth);
@@ -364,10 +346,9 @@ function generateFlowsTemplate(contractDateStr, years, freqMonths, isBase = fals
             while (curMonth <= totalMonths) { instList.push(curMonth); curMonth += freqMonths; }
             if (freqMonths === 6 && !customFirstDateStr && instList.length > 0 && instList[instList.length-1] > totalMonths - 3) instList.pop(); 
         }
-        
         instList.forEach((m, i) => {
             let dStr = customFirstDateStr ? formatDate(addMonths(customFirstDateStr, i * freqMonths)) : formatDate(addMonths(contractDateStr, m));
-            flows.push({ id: 'inst_' + i, label: 'Installment ' + (i+1), date: dStr, months: m, isInst: true });
+            flows.push({ id: `inst_${i}`, label: 'Installment ' + (i+1), date: dStr, months: m, isInst: true });
         });
     }
     
@@ -486,8 +467,9 @@ window.onTargetPctChange = function() {
 };
 
 function calculateCustomFlows(price, template, options = {}) {
-    let isFixedInst = document.getElementById('fixed-inst-toggle').checked;
+    let isFixedInstToggle = document.getElementById('fixed-inst-toggle').checked;
     let fixedInstVal = parseFloat(document.getElementById('fixed-inst-val').value) || 0;
+    let isFixedInst = isFixedInstToggle && fixedInstVal > 0;
     
     let dp1 = getCustomInputAmt('dp1', price);
     let dp2 = getCustomInputAmt('dp2', price);
@@ -510,33 +492,41 @@ function calculateCustomFlows(price, template, options = {}) {
                 let d2 = new Date(f.date);
                 f.months = Math.round((d2 - d1) / (1000 * 60 * 60 * 24 * 30.416));
             }
-            let is7030 = document.getElementById('toggle-70-30') && document.getElementById('toggle-70-30').checked;
-            let priceForDPs = is7030 ? basePriceCache : price;
             
             // Priority 1: Table overrides
             if (overrides[f.id] && overrides[f.id].amount !== undefined) {
                 let ov = overrides[f.id];
-                f.amount = ov.isPct ? priceForDPs * (ov.amount / 100) : ov.amount;
+                f.amount = ov.isPct ? price * (ov.amount / 100) : ov.amount;
                 f.isFixedOverride = true;
             } 
             // Priority 2: Input fields for DP/Addl/Deliv
-            else if (f.id === 'dp1') f.amount = dp1 !== null ? dp1 : priceForDPs * (f.defaultPct||0);
-            else if (f.id === 'dp2') f.amount = dp2 !== null ? dp2 : priceForDPs * (f.defaultPct||0);
-            else if (f.id === 'addl') f.amount = addl !== null ? addl : priceForDPs * (f.defaultPct||0);
-            else if (f.id === 'deliv') f.amount = deliv !== null ? deliv : priceForDPs * (f.defaultPct||0);
+            else if (f.id === 'dp1') f.amount = dp1 !== null ? dp1 : price * (f.defaultPct||0);
+            else if (f.id === 'dp2') f.amount = dp2 !== null ? dp2 : price * (f.defaultPct||0);
+            else if (f.id === 'addl') f.amount = addl !== null ? addl : price * (f.defaultPct||0);
+            else if (f.id === 'deliv') f.amount = deliv !== null ? deliv : price * (f.defaultPct||0);
             else if (f.isMerged) {
                 let m_amt = 0;
-                if (f.mergedIds.includes('deliv')) m_amt += deliv !== null ? deliv : priceForDPs * 0.05;
+                if (f.mergedIds.includes('deliv')) m_amt += deliv !== null ? deliv : price * 0.05;
                 f.amount = m_amt; 
                 f._mergedDelivAmt = m_amt;
+                f._mergedAmt = m_amt;
             }
             
             if (f.isMerged && f.amount !== undefined) {
                 f._mergedDelivAmt = f.amount;
+                f._mergedAmt = f.amount;
             }
             
             if (f.amount !== undefined) {
-                if (f.isMerged) remAmt -= f.amount;
+                if (f.isMerged) {
+                    f._mergedAmt = f.amount;
+                    remAmt -= f.amount;
+                }
+                if (f.isBump) {
+                    f.bumpAmount = price * f.bumpPercent;
+                    f._bumpAmt = f.bumpAmount;
+                    remAmt -= f.bumpAmount;
+                }
                 if (f.id === 'deliv' && !f.isMerged) remAmt -= f.amount;
                 if (!f.isInst && f.id !== 'deliv' && !f.isMerged) remAmt -= f.amount;
                 if (f.isInst && !f.isMerged && f.isFixedOverride) remAmt -= f.amount;
@@ -692,6 +682,23 @@ function calculateCustomFlows(price, template, options = {}) {
     let instsPerYear = 12 / freqMonths;
     let is7030 = document.getElementById('toggle-70-30') && document.getElementById('toggle-70-30').checked;
     
+    let annualToggle = document.getElementById('annual-toggle') ? document.getElementById('annual-toggle').checked : false;
+    let annualInterval = instsPerYear;
+    let annualBump = 0;
+    
+    if (isFixedInst && annualToggle && remAmt > 0 && dynamicInsts.length > 0) {
+        let totalNormalAmt = instAmt * dynamicInsts.length;
+        let diff = remAmt - totalNormalAmt; 
+        
+        let targetIdxInYear = annualInterval - 1;
+        let bumpCount = 0;
+        dynamicInsts.forEach((f, idx) => {
+            if ((idx % instsPerYear) === targetIdxInYear) bumpCount++;
+        });
+        
+        annualBump = bumpCount > 0 ? (diff / bumpCount) : 0;
+    }
+    
     let accumulatedWithheld = 0;
 
     flows.forEach(f => {
@@ -714,6 +721,15 @@ function calculateCustomFlows(price, template, options = {}) {
                     } else {
                         currentInstAmt = instAmt * 0.70;
                         accumulatedWithheld += (instAmt * 0.30);
+                    }
+                }
+                f.amount = (f._mergedDelivAmt || 0) + currentInstAmt;
+            } else {
+                let currentInstAmt = instAmt;
+                if (annualToggle && annualBump > 0) {
+                    let targetIdxInYear = annualInterval - 1;
+                    if ((instIndex % instsPerYear) === targetIdxInYear) {
+                        currentInstAmt += annualBump;
                     }
                 }
                 f.amount = (f._mergedDelivAmt || 0) + currentInstAmt;
@@ -948,7 +964,9 @@ function calculate() {
     renderTable(baseFlows, 'base-tbody');
     updatePreDeliveryTracker(baseFlows, 'base-pre-delivery');
     
-    let customTemplate = generateFlowsTemplate(contractDateStr, years, freqMonths);
+    let firstInstDateEl = document.getElementById('first-inst-date');
+    let customFirstDateStr = firstInstDateEl && firstInstDateEl.value ? firstInstDateEl.value : null;
+    let customTemplate = generateFlowsTemplate(contractDateStr, years, freqMonths, false, customFirstDateStr);
     
     let targetPv = basePvCache;
     
@@ -997,7 +1015,7 @@ function calculate() {
         
         document.getElementById('duration-years').value = newYears;
         renderCustomInputs();
-        customTemplate = generateFlowsTemplate(contractDateStr, newYears, freqMonths);
+        customTemplate = generateFlowsTemplate(contractDateStr, newYears, freqMonths, false, customFirstDateStr);
         years = newYears;
         
         // Reset option so it doesn't infinitely loop on next calculate
@@ -1026,6 +1044,13 @@ function calculate() {
     
     let actualPrice = globalCustomFlows.filter(f => !f.isMnt).reduce((sum, f) => sum + f.amount, 0);
     globalCustomFlows = applyPerfectPercentages(globalCustomFlows, actualPrice);
+    globalCustomFlows.sort((a, b) => {
+        if (a.months !== b.months) return a.months - b.months;
+        let d1 = new Date(a.date);
+        let d2 = new Date(b.date);
+        if (!isNaN(d1) && !isNaN(d2)) return d1 - d2;
+        return 0;
+    });
     
     // Target Price remains fixed; annual payments absorb any mathematical discrepancy automatically.
     
@@ -1204,7 +1229,7 @@ window.resetTableEdits = function() {
 // --- PDF & Excel Export Template Generator ---
 function generateExportTemplate(offerPrice, offerPreDelivPct) {
     let years = parseInt(document.getElementById('duration-years').value);
-    let mntTotal = basePriceCache * 0.08;
+    let mntTotal = offerPrice * 0.08;
     let incPct = (offerPrice - basePriceCache) / basePriceCache;
     
     let label1 = incPct < 0 ? 'Discount % :' : 'Increase % :';
@@ -1357,7 +1382,7 @@ function exportExcel() {
     if(actualYears < 1) actualYears = 1;
     
     let bestPrice = parseFloat(document.getElementById('offer-total-amt').innerText.replace(/,/g, '')) || 0;
-    let mntTotal = basePriceCache * 0.08;
+    let mntTotal = bestPrice * 0.08;
     let incAmt = bestPrice - basePriceCache;
     let incPct = basePriceCache > 0 ? (incAmt / basePriceCache) : 0;
     
@@ -1507,7 +1532,6 @@ async function handleTemplateUpload(event) {
                 let excelTotalAmt = 0;
                 let excelTotalPct = 0;
                 
-                let modelRow = ws.getRow(12);
                 function writeRow(idx, colD, colF, colG, colH, colI) {
                     let row = ws.getRow(idx);
                     if(colD !== null) row.getCell(4).value = colD;
@@ -1516,35 +1540,17 @@ async function handleTemplateUpload(event) {
                     if(colH !== null) { row.getCell(8).value = colH; row.getCell(8).numFmt = '#,##0.00'; }
                     if(colI !== null) row.getCell(9).value = colI;
                     
+                    let borderStyle = { style: 'thin', color: { argb: 'FF000000' } };
+                    let border = { top: borderStyle, left: borderStyle, bottom: borderStyle, right: borderStyle };
                     [4,5,6,7,8,9].forEach(c => {
                         let cell = row.getCell(c);
-                        let mCell = modelRow.getCell(c);
-                        if(mCell && mCell.style) {
-                            cell.style = JSON.parse(JSON.stringify(mCell.style));
-                        }
+                        if(!cell.border) cell.border = border;
                     });
                 }
                 
-                let totalRowIdx = 54;
-                for (let i = 11; i < 500; i++) {
-                    let r = ws.getRow(i);
-                    let found = false;
-                    for(let c=2; c<=9; c++) {
-                        let val = r.getCell(c).value;
-                        let str = val ? val.toString().toLowerCase() : '';
-                        if (str.includes('total') || str.includes('amount') || str.includes('إجمالي') || str.includes('اجمالي')) {
-                            totalRowIdx = i;
-                            found = true;
-                            break;
-                        }
-                    }
-                    if (found) break;
-                }
-
-                for(let i=11; i<totalRowIdx; i++) {
+                for(let i=11; i<=52; i++) {
                     let r = ws.getRow(i);
                     [4,5,6,7,8,9].forEach(c => r.getCell(c).value = null);
-                    r.hidden = false;
                 }
                 
                 grouped.forEach(grp => {
@@ -1557,16 +1563,11 @@ async function handleTemplateUpload(event) {
                     });
                 });
                 
-                // Hide any remaining unused rows before the Total row so there are no empty gaps
-                for(let i = rowIdx; i < totalRowIdx; i++) {
-                    ws.getRow(i).hidden = true;
-                }
+                // Write total to 54
+                writeRow(54, null, null, excelTotalPct, excelTotalAmt, null);
                 
-                let rTotal = ws.getRow(totalRowIdx);
-                rTotal.getCell(7).value = excelTotalPct / 100.0;
-                rTotal.getCell(8).value = excelTotalAmt;
-                
-                let mntRowIdx = totalRowIdx + 5;
+                // Write Maintenance Dates to 59 and 60 in column 7
+                let mntRowIdx = 59;
                 let excelMntSum = 0;
                 let excelMntPctSum = 0;
                 mnts.forEach((m, i) => {
@@ -1583,7 +1584,8 @@ async function handleTemplateUpload(event) {
                     excelMntPctSum += mntPct;
                 });
                 
-                let rTot = ws.getRow(totalRowIdx + 8);
+                // Total maintenance percentage and amount to 62
+                let rTot = ws.getRow(62);
                 rTot.getCell(6).value = excelMntSum;
                 rTot.getCell(6).numFmt = '#,##0.00';
                 rTot.getCell(7).value = excelMntPctSum / 100.0;
@@ -1612,9 +1614,6 @@ async function handleTemplateUpload(event) {
         alert("??? ??? ??? ?????.");
     }
 }
-
-
-
 
 
 
