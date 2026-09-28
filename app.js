@@ -197,8 +197,7 @@ function applyDiscountLogic(f, contractDateStr) {
         let rate = ratesMap[yearIndex] !== undefined ? ratesMap[yearIndex] : 0.09;
         
         if (isFlexible) {
-            let baseDate = new Date('2025-12-29');
-            let diffFromBase = Math.round((pDate - baseDate) / (1000 * 60 * 60 * 24));
+            let diffFromBase = Math.round((pDate - cDate) / (1000 * 60 * 60 * 24));
             let r;
             if (diffFromBase < 54) r = 0.19;
             else if (diffFromBase < 419) r = 0.18;
@@ -1606,6 +1605,7 @@ async function handleTemplateUpload(event) {
         alert("??? ??? ??? ?????.");
     }
 }
+
 
 
 
