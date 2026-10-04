@@ -196,6 +196,11 @@ function applyDiscountLogic(f, contractDateStr) {
         let yearIndex = Math.floor(months / 12);
         let rate = ratesMap[yearIndex] !== undefined ? ratesMap[yearIndex] : 0.09;
         
+        // Zomra October 2026 Update: Payments in 2026 for normal mode get 19%
+        if (!isFlexible && yearIndex === 0 && pDate.getFullYear() === 2026) {
+            rate = 0.19;
+        }
+        
         if (isFlexible) {
             let baseDate = new Date('2025-12-29');
             let diffFromBase = Math.round((pDate - baseDate) / (1000 * 60 * 60 * 24));
@@ -219,7 +224,7 @@ function applyDiscountLogic(f, contractDateStr) {
             } else if (f.id === 'addl') {
                 f.rate = rate;
                 f.period = 2;
-                f.pvFactor = 1 / Math.pow(1 + rate * 2 / 12, 2);
+                f.pvFactor = 1 / Math.pow(1 + rate / 4, 2);
                 f.pv = f.amount * f.pvFactor;
             } else {
                 let pmt = Math.round(months / 3);
