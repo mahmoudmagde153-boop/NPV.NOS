@@ -468,6 +468,17 @@ function resetCustomInputs() {
     document.querySelectorAll('#custom-inputs input[type="number"]').forEach(el => el.value = '');
     document.querySelectorAll('#custom-inputs select').forEach(el => el.value = 'pct');
     
+    let manualDiscEl = document.getElementById('manual-discount-val');
+    if (manualDiscEl) manualDiscEl.value = '';
+    let manualInfoEl = document.getElementById('manual-discount-info');
+    if (manualInfoEl) {
+        manualInfoEl.style.display = 'none';
+        manualInfoEl.innerHTML = '';
+    }
+    let firstInstDateEl = document.getElementById('first-inst-date');
+    if (firstInstDateEl) firstInstDateEl.value = '';
+    window.globalTableOverrides = {};
+    
     resetDistPresetInternal();
     calculate();
 }
@@ -540,6 +551,30 @@ function getPeriod(months) {
     return Math.floor(months / 3);
 }
 
+function getFlexiblePvFactor(diffDays) {
+    if (diffDays <= 0) return 1.0;
+    const brackets = [
+        { maxDays: 54, r: 0.19 },
+        { maxDays: 419, r: 0.18 },
+        { maxDays: 784, r: 0.15 },
+        { maxDays: 1149, r: 0.13 },
+        { maxDays: 1879, r: 0.10 },
+        { maxDays: Infinity, r: 0.09 }
+    ];
+    let factor = 1.0;
+    let prevLimit = 0;
+    for (let b of brackets) {
+        if (diffDays > prevLimit) {
+            let daysInBracket = Math.min(diffDays, b.maxDays) - prevLimit;
+            factor *= Math.pow(1 + b.r / 365.0, daysInBracket);
+            prevLimit = b.maxDays;
+        } else {
+            break;
+        }
+    }
+    return 1.0 / factor;
+}
+
 function applyDiscountLogic(f, contractDateStr) {
     if (!contractDateStr) {
         let dateEl = document.getElementById('contract-date');
@@ -585,18 +620,16 @@ function applyDiscountLogic(f, contractDateStr) {
         }
         
         if (isFlexible) {
-            let baseDate = new Date('2025-12-29');
-            let diffFromBase = Math.max(0, Math.round((pDate - baseDate) / (1000 * 60 * 60 * 24)));
+            let diffDays = Math.max(0, Math.round((pDate - cDate) / (1000 * 60 * 60 * 24)));
             let r;
-            if (diffFromBase < 54) r = 0.19;
-            else if (diffFromBase < 419) r = 0.18;
-            else if (diffFromBase < 784) r = 0.15;
-            else if (diffFromBase < 1149) r = 0.13;
-            else if (diffFromBase < 1514) r = 0.10;
-            else if (diffFromBase < 1879) r = 0.10;
+            if (diffDays < 54) r = 0.19;
+            else if (diffDays < 419) r = 0.18;
+            else if (diffDays < 784) r = 0.15;
+            else if (diffDays < 1149) r = 0.13;
+            else if (diffDays < 1879) r = 0.10;
             else r = 0.09;
             f.rate = r;
-            f.pvFactor = 1 / Math.pow(1 + r / 365, diffFromBase);
+            f.pvFactor = getFlexiblePvFactor(diffDays);
             f.pv = (f.amount || 0) * f.pvFactor;
         } else {
             if (f.id === 'dp1' || f.id === 'dp2') {
@@ -641,10 +674,10 @@ function applyDiscountLogic(f, contractDateStr) {
                 else if (diffDays < 419) r = 0.18;
                 else if (diffDays < 784) r = 0.15;
                 else if (diffDays < 1149) r = 0.13;
-                else if (diffDays < 1514) r = 0.10;
                 else if (diffDays < 1879) r = 0.10;
                 else r = 0.09;
-                f.pvFactor = 1 / Math.pow(1 + r / 365, diffDays);
+                f.rate = r;
+                f.pvFactor = getFlexiblePvFactor(diffDays);
             } else {
                 f.pvFactor = 1 / Math.pow(1 + f.rate / 4, f.period);
             }
@@ -1184,17 +1217,15 @@ function applyPerfectPercentages(flows, totalAmt) {
     let validTotal = (totalAmt > 0 && !isNaN(totalAmt)) ? totalAmt : 0;
     flows.forEach(f => {
         if (!f.isMnt) {
-            if ((f.isDP || f.id === 'deliv') && f.defaultPct && !f.isFixedOverride && !f.isMerged) {
-                f.exactPct = f.defaultPct;
-                f.displayPct = parseFloat((f.defaultPct * 100).toFixed(4)).toString();
-            } else if (f.isFixedOverride && window.globalTableOverrides && window.globalTableOverrides[f.id] && window.globalTableOverrides[f.id].isPct) {
-                let p = window.globalTableOverrides[f.id].amount;
-                f.exactPct = p / 100;
-                f.displayPct = parseFloat(p.toFixed(4)).toString();
+            let pct = validTotal > 0 ? ((f.amount || 0) / validTotal) : 0;
+            f.exactPct = pct;
+            let pctVal = pct * 100;
+            if (Math.abs(pctVal - Math.round(pctVal)) < 1e-5) {
+                f.displayPct = Math.round(pctVal).toString();
+            } else if (Math.abs(pctVal - (Math.round(pctVal * 100) / 100)) < 1e-5) {
+                f.displayPct = (Math.round(pctVal * 100) / 100).toFixed(2);
             } else {
-                f.exactPct = validTotal > 0 ? ((f.amount || 0) / validTotal) : 0;
-                let pct = f.exactPct * 100;
-                f.displayPct = parseFloat(pct.toFixed(7)).toString();
+                f.displayPct = parseFloat(pctVal.toFixed(6)).toString();
             }
         } else {
             f.exactPct = 0.04;
@@ -1803,7 +1834,29 @@ function calculate() {
                 bestPrice = basePriceCache * 1.00863920294539959;
             }
         }
-        globalCustomFlows = calculateCustomFlows(bestPrice, customTemplate);
+        // Manual Discount Application
+        let manualDiscEl = document.getElementById('manual-discount-val');
+        let manualDiscTypeEl = document.getElementById('manual-discount-type');
+        let manualDiscVal = manualDiscEl ? parseFloat(manualDiscEl.value) : NaN;
+        let manualDiscType = manualDiscTypeEl ? manualDiscTypeEl.value : 'pct';
+        let hasManualDiscount = !isNaN(manualDiscVal) && manualDiscVal > 0;
+        
+        let manualDiscAmt = 0;
+        let manualDiscPct = 0;
+        let finalOfferPrice = bestPrice;
+        
+        if (hasManualDiscount) {
+            if (manualDiscType === 'pct') {
+                manualDiscPct = manualDiscVal;
+                manualDiscAmt = bestPrice * (manualDiscVal / 100);
+            } else {
+                manualDiscAmt = manualDiscVal;
+                manualDiscPct = bestPrice > 0 ? (manualDiscVal / bestPrice) * 100 : 0;
+            }
+            finalOfferPrice = Math.max(0, bestPrice - manualDiscAmt);
+        }
+        
+        globalCustomFlows = calculateCustomFlows(finalOfferPrice, customTemplate);
         
         let intraLabel = document.getElementById('intra-year-val-label');
         if (intraLabel) {
@@ -1848,11 +1901,36 @@ function calculate() {
         renderTargetPriceGuidance(targetPrice, actualPrice, targetPv);
         generateExportTemplate(actualPrice, offerPreDelivPct);
         
+        let manualInfoEl = document.getElementById('manual-discount-info');
+        if (manualInfoEl) {
+            if (hasManualDiscount) {
+                manualInfoEl.style.display = 'block';
+                manualInfoEl.innerHTML = `✅ تم تطبيق خصم يدوي: <strong>${manualDiscPct.toFixed(2)}%</strong> (${formatCurr(manualDiscAmt)}) — السعر بعد الخصم: <strong>${formatCurr(finalOfferPrice)}</strong>`;
+            } else {
+                manualInfoEl.style.display = 'none';
+                manualInfoEl.innerHTML = '';
+            }
+        }
+        
         let diffEl = document.getElementById('pv-difference');
         if (diffEl) {
             let priceDiff = actualPrice - basePriceCache;
             if (basePriceCache <= 0) {
                 diffEl.innerHTML = `<span style="color:var(--text-muted)">يرجى إدخال سعر الوحدة الأساسي</span>`;
+            } else if (hasManualDiscount) {
+                let color = actualPrice >= basePriceCache ? 'var(--success)' : 'var(--danger)';
+                let netDiffPct = ((actualPrice - basePriceCache) / basePriceCache) * 100;
+                diffEl.innerHTML = `
+                    <div style="color:${color}; font-size: 1.15rem; font-weight: bold;">
+                        السعر النهائي بعد الخصم: ${formatCurr(actualPrice)}
+                    </div>
+                    <div style="font-size: 0.92rem; margin-top: 5px; color: #2ecc71; font-weight: bold;">
+                        🏷️ خصم يدوي: -${manualDiscPct.toFixed(2)}% (-${formatCurr(manualDiscAmt)})
+                    </div>
+                    <div style="font-size: 0.85rem; margin-top: 3px; color: var(--text-muted);">
+                        الفارق الصافي عن السعر الأساسي: ${netDiffPct >= 0 ? '+' : ''}${netDiffPct.toFixed(2)}% (${formatCurr(Math.abs(priceDiff))})
+                    </div>
+                `;
             } else if (Math.abs(priceDiff) < 1000) {
                 diffEl.innerHTML = `<span style="color:var(--success)">✅ Base Plan Applied</span>`;
             } else {
@@ -1965,6 +2043,17 @@ function renderTable(flows, tbodyId) {
         document.getElementById('offer-total-amt').innerText = formatCurr(totalAmt);
     }
 }
+
+window.clearManualDiscount = function() {
+    let el = document.getElementById('manual-discount-val');
+    if (el) el.value = '';
+    let info = document.getElementById('manual-discount-info');
+    if (info) {
+        info.style.display = 'none';
+        info.innerHTML = '';
+    }
+    calculate();
+};
 
 window.applyTableEdits = function() {
     let tbody = document.getElementById('offer-tbody');
@@ -2291,95 +2380,264 @@ function exportPDF() {
     }
 }
 
-function exportExcel() {
-    try {
-        if (!window.XLSX) {
-            alert('مكتبة تصدير الإكسيل غير متوفرة حالياً.');
-            return;
+const EMBEDDED_EXCEL_TEMPLATE_B64 = "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";
+
+async function populateTemplateWorkbook(workbook, offerPrice) {
+    const ws = workbook.worksheets[0];
+    let basePrice = basePriceCache || 0;
+    let mntTotal = basePrice * 0.08;
+    let incAmt = offerPrice - basePrice;
+    let incPct = basePrice > 0 ? (incAmt / basePrice) : 0;
+    let isDiscount = incPct < 0;
+    let years = parseInt(document.getElementById('duration-years')?.value) || 8;
+    let dateEl = document.getElementById('contract-date');
+    let contractDateStr = (dateEl && dateEl.value) ? dateEl.value : formatDate(new Date());
+
+    let projectTitle = 'NATIONS OF SKY — ' + currentProject.toUpperCase() + ' — PAYMENT PLAN (' + years + ' YEARS)';
+    ws.getCell('D2').value = projectTitle;
+    ws.getCell('F2').value = projectTitle;
+
+    ws.getCell('F4').value = basePrice;
+    ws.getCell('F4').numFmt = '#,##0.00';
+
+    ws.getCell('F5').value = mntTotal;
+    ws.getCell('F5').numFmt = '#,##0.00';
+
+    ws.getCell('D6').value = isDiscount ? 'Discount % :' : 'Increase % :';
+    ws.getCell('E6').value = isDiscount ? 'Discount % :' : 'Increase % :';
+    ws.getCell('F6').value = -incPct;
+    ws.getCell('F6').numFmt = '0.00%';
+
+    ws.getCell('D7').value = isDiscount ? 'Price After Discount :' : 'Price After Increase :';
+    ws.getCell('E7').value = isDiscount ? 'Price After Discount :' : 'Price After Increase :';
+    ws.getCell('F7').value = offerPrice;
+    ws.getCell('F7').numFmt = '#,##0.00';
+
+    ws.getCell('G9').value = years + ' Years Payment Plan';
+
+    let nonMntFlows = globalCustomFlows.filter(f => !f.isMnt);
+    let mnts = globalCustomFlows.filter(f => f.isMnt);
+
+    let grouped = [];
+    nonMntFlows.forEach(f => {
+        let grpName = '';
+        if (f.months <= 1 && f.isDP) grpName = 'Down Payment';
+        else {
+            let y = Math.ceil(f.months / 12);
+            if (y < 1) y = 1;
+            grpName = 'Year ' + y;
         }
+        let lastGrp = grouped[grouped.length - 1];
+        if (lastGrp && lastGrp.name === grpName) {
+            lastGrp.items.push(f);
+        } else {
+            grouped.push({ name: grpName, items: [f] });
+        }
+    });
+
+    let totalRowIdx = 54;
+    for (let i = 11; i < 500; i++) {
+        let r = ws.getRow(i);
+        let found = false;
+        for (let c = 2; c <= 9; c++) {
+            let val = r.getCell(c).value;
+            let str = val ? val.toString().toLowerCase() : '';
+            if (str.includes('total') || str.includes('amount') || str.includes('إجمالي') || str.includes('اجمالي')) {
+                totalRowIdx = i;
+                found = true;
+                break;
+            }
+        }
+        if (found) break;
+    }
+
+    for (let i = 11; i < totalRowIdx; i++) {
+        let r = ws.getRow(i);
+        [4, 5, 6, 7, 8, 9].forEach(c => r.getCell(c).value = null);
+        r.hidden = false;
+    }
+
+    let rowIdx = 11;
+    let excelTotalAmt = 0;
+    let excelTotalPct = 0;
+    let modelRow = ws.getRow(12);
+
+    grouped.forEach(grp => {
+        grp.items.forEach((item, j) => {
+            let isFirst = j === 0;
+            let itemPct = offerPrice > 0 ? (item.amount / offerPrice) * 100.0 : 0;
+            
+            if (rowIdx >= totalRowIdx) {
+                ws.spliceRows(totalRowIdx, 0, []);
+                totalRowIdx++;
+            }
+
+            let r = ws.getRow(rowIdx);
+            if (isFirst) r.getCell(4).value = grp.name;
+            r.getCell(6).value = item.label;
+            r.getCell(7).value = itemPct / 100.0;
+            r.getCell(7).numFmt = '0.00%';
+            r.getCell(8).value = item.amount;
+            r.getCell(8).numFmt = '#,##0.00';
+            r.getCell(9).value = formatDateExport(item.date);
+
+            [4, 5, 6, 7, 8, 9].forEach(c => {
+                let cell = r.getCell(c);
+                let mCell = modelRow.getCell(c);
+                if (mCell && mCell.style) {
+                    cell.style = JSON.parse(JSON.stringify(mCell.style));
+                }
+            });
+
+            excelTotalAmt += item.amount;
+            excelTotalPct += itemPct;
+            rowIdx++;
+        });
+    });
+
+    for (let i = rowIdx; i < totalRowIdx; i++) {
+        ws.getRow(i).hidden = true;
+    }
+
+    let rTotal = ws.getRow(totalRowIdx);
+    rTotal.getCell(7).value = excelTotalPct / 100.0;
+    rTotal.getCell(7).numFmt = '0.00%';
+    rTotal.getCell(8).value = excelTotalAmt;
+    rTotal.getCell(8).numFmt = '#,##0.00';
+
+    let mntRowIdx = totalRowIdx + 5;
+    let excelMntSum = 0;
+    let excelMntPctSum = 0;
+    mnts.forEach(m => {
+        let mntPct = offerPrice > 0 ? (m.amount / offerPrice) * 100.0 : 0;
+        let r = ws.getRow(mntRowIdx++);
+        r.getCell(6).value = m.amount;
+        r.getCell(6).numFmt = '#,##0.00';
+        r.getCell(7).value = formatDateExport(m.date);
+        r.getCell(8).value = null;
+        r.getCell(9).value = null;
+
+        excelMntSum += m.amount;
+        excelMntPctSum += mntPct;
+    });
+
+    let rTot = ws.getRow(totalRowIdx + 8);
+    rTot.getCell(6).value = excelMntSum;
+    rTot.getCell(6).numFmt = '#,##0.00';
+    rTot.getCell(7).value = excelMntPctSum / 100.0;
+    rTot.getCell(7).numFmt = '0.00%';
+    rTot.getCell(8).value = null;
+    rTot.getCell(9).value = null;
+}
+
+async function exportExcel() {
+    try {
         if (!globalCustomFlows || globalCustomFlows.length === 0) {
             alert('لا توجد بيانات متاحة للتصدير.');
             return;
         }
 
-        let flowMonths = globalCustomFlows.map(f => f.months || 0);
-        let maxMonths = flowMonths.length > 0 ? Math.max(...flowMonths) : 12;
-        let actualYears = Math.max(1, Math.ceil(maxMonths / 12));
-        
-        let bestPrice = window.lastCalculatedPrice || parseFloat(document.getElementById('offer-total-amt')?.innerText.replace(/[^\d.]/g, '')) || basePriceCache || 0;
-        let mntTotal = (basePriceCache || 0) * 0.08;
-        let incAmt = bestPrice - (basePriceCache || 0);
-        let incPct = basePriceCache > 0 ? (incAmt / basePriceCache) : 0;
-        
-        let ws_data = [
-            ["Payment Plan", "", "", "", ""],
-            ["Unit No :", "", "", "", ""],
-            ["Unit Base Price :", basePriceCache, "", "", ""],
-            ["Maintenance :", mntTotal, "", "", ""],
-            ["Increase Amount :", Math.abs(incAmt), "", "", ""],
-            ["Increase % :", Math.abs(incPct), "", "", ""],
-            ["Price After Increase :", bestPrice, "", "", ""],
-            ["", "", "", "", ""],
-            ["Payment Terms & Types", "", "Payment Plan", "", ""],
-            ["Type", "Description", "%", "Amount", "Date"]
-        ];
-        
-        let nonMntFlows = globalCustomFlows.filter(f => !f.isMnt);
-        let totalAmtSum = 0;
-        let totalPctSum = 0;
-        
-        nonMntFlows.forEach(f => {
-            let grpName = '';
-            if (f.isInst || (f.id && f.id.startsWith('inst'))) grpName = 'Installments';
-            else if (f.isDP) grpName = 'Down Payments';
-            else if (f.isMerged) grpName = 'Mixed Payments';
-            else grpName = 'Other';
-            
-            let row = [
-                grpName,
-                f.label,
-                f.exactPct || 0,
-                f.amount || 0,
-                f.date || ''
-            ];
-            ws_data.push(row);
-            
-            totalAmtSum += (f.amount || 0);
-            totalPctSum += (f.exactPct || 0);
-        });
-        
-        ws_data.push(["Total Payments:", "", totalPctSum, totalAmtSum, ""]);
-        
-        let mnts = globalCustomFlows.filter(f => f.isMnt);
-        if (mnts.length > 0) {
-            ws_data.push(["", "", "", "", ""]);
-            ws_data.push(["Maintenance Schedule", "", "8% of Base Price", "", ""]);
-            ws_data.push(["Type", "Description", "%", "Amount", "Date"]);
-            let mntSum = 0;
-            let mntPctSum = 0;
-            mnts.forEach(m => {
-                let mPct = (parseFloat(m.displayPct) || 0) / 100;
-                ws_data.push([
-                    "Maintenance",
-                    m.label,
-                    mPct,
-                    m.amount || 0,
-                    m.date || ''
-                ]);
-                mntSum += (m.amount || 0);
-                mntPctSum += mPct;
-            });
-            ws_data.push(["Total Maintenance:", "", mntPctSum, mntSum, ""]);
+        let offerAmtText = document.getElementById('offer-total-amt') ? document.getElementById('offer-total-amt').innerText : '';
+        let offerPrice = parseFloat(offerAmtText.replace(/[^0-9.-]+/g, '')) || window.lastCalculatedPrice || basePriceCache || 0;
+
+        if (window.ExcelJS && typeof EMBEDDED_EXCEL_TEMPLATE_B64 !== 'undefined') {
+            const bin = atob(EMBEDDED_EXCEL_TEMPLATE_B64);
+            const bytes = new Uint8Array(bin.length);
+            for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+
+            const workbook = new ExcelJS.Workbook();
+            await workbook.xlsx.load(bytes.buffer);
+            await populateTemplateWorkbook(workbook, offerPrice);
+
+            const outBuffer = await workbook.xlsx.writeBuffer();
+            const blob = new Blob([outBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'Payment_Plan_' + currentProject + '.xlsx';
+            a.click();
+            window.URL.revokeObjectURL(url);
+            return;
         }
-        
-        let ws = XLSX.utils.aoa_to_sheet(ws_data);
-        let wb = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(wb, ws, "Payment Plan");
-        XLSX.writeFile(wb, `Payment_Plan_${currentProject}.xlsx`);
+
+        exportExcelFallback(offerPrice);
     } catch(err) {
         console.error('Excel Export Error:', err);
         alert('حدث خطأ أثناء تصدير ملف الإكسيل.');
     }
+}
+
+function exportExcelFallback(offerPrice) {
+    if (!window.XLSX) {
+        alert('مكتبة تصدير الإكسيل غير متوفرة حالياً.');
+        return;
+    }
+    let basePrice = basePriceCache || 0;
+    let mntTotal = basePrice * 0.08;
+    let incAmt = offerPrice - basePrice;
+    let incPct = basePrice > 0 ? (incAmt / basePrice) : 0;
+    let isDiscount = incPct < 0;
+
+    let ws_data = [
+        ['Payment Plan', '', '', '', ''],
+        ['Unit No :', '', '', '', ''],
+        ['Unit Base Price :', basePrice, '', '', ''],
+        ['Maintenance (8%) :', mntTotal, '', '', ''],
+        [isDiscount ? 'Discount Amount :' : 'Increase Amount :', Math.abs(incAmt), '', '', ''],
+        [isDiscount ? 'Discount % :' : 'Increase % :', Math.abs(incPct), '', '', ''],
+        [isDiscount ? 'Price After Discount :' : 'Price After Increase :', offerPrice, '', '', ''],
+        ['', '', '', '', ''],
+        ['Payment Terms & Types', '', 'Payment Plan', '', ''],
+        ['Type', 'Description', '%', 'Amount', 'Date']
+    ];
+
+    let nonMntFlows = globalCustomFlows.filter(f => !f.isMnt);
+    let totalAmtSum = 0;
+    let totalPctSum = 0;
+
+    nonMntFlows.forEach(f => {
+        let grpName = '';
+        if (f.months <= 1 && f.isDP) grpName = 'Down Payment';
+        else {
+            let y = Math.ceil(f.months / 12);
+            if (y < 1) y = 1;
+            grpName = 'Year ' + y;
+        }
+        let itemPct = offerPrice > 0 ? (f.amount / offerPrice) : 0;
+        let row = [
+            grpName,
+            f.label,
+            itemPct,
+            f.amount || 0,
+            formatDateExport(f.date)
+        ];
+        ws_data.push(row);
+        totalAmtSum += (f.amount || 0);
+        totalPctSum += itemPct;
+    });
+
+    ws_data.push(['Total Payments:', '', totalPctSum, totalAmtSum, '']);
+
+    let mnts = globalCustomFlows.filter(f => f.isMnt);
+    if (mnts.length > 0) {
+        ws_data.push(['', '', '', '', '']);
+        ws_data.push(['Maintenance Schedule', '', '8% of Base Price', '', '']);
+        ws_data.push(['Type', 'Description', '%', 'Amount', 'Date']);
+        let mntSum = 0;
+        let mntPctSum = 0;
+        mnts.forEach(m => {
+            let mPct = offerPrice > 0 ? (m.amount / offerPrice) : 0;
+            ws_data.push(['Maintenance', m.label, mPct, m.amount || 0, formatDateExport(m.date)]);
+            mntSum += (m.amount || 0);
+            mntPctSum += mPct;
+        });
+        ws_data.push(['Total Maintenance:', '', mntPctSum, mntSum, '']);
+    }
+
+    let ws = XLSX.utils.aoa_to_sheet(ws_data);
+    let wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Payment Plan');
+    XLSX.writeFile(wb, 'Payment_Plan_' + currentProject + '.xlsx');
 }
 
 // --- Rates Modal ---
@@ -2427,10 +2685,8 @@ async function handleTemplateUpload(event) {
         const file = event.target.files[0];
         if (!file) return;
         
-        let offerAmtText = document.getElementById('offer-total-amt').innerText;
-        let offerPrice = parseFloat(offerAmtText.replace(/[^0-9.-]+/g,""));
-        let incPct = (offerPrice - basePriceCache) / basePriceCache;
-        let mntTotal = basePriceCache * 0.08; // Maintenance is always 8% of BASE
+        let offerAmtText = document.getElementById('offer-total-amt')?.innerText || '';
+        let offerPrice = parseFloat(offerAmtText.replace(/[^0-9.-]+/g, '')) || window.lastCalculatedPrice || basePriceCache || 0;
         
         const reader = new FileReader();
         reader.onload = async (e) => {
@@ -2438,123 +2694,8 @@ async function handleTemplateUpload(event) {
                 const buffer = e.target.result;
                 const workbook = new ExcelJS.Workbook();
                 await workbook.xlsx.load(buffer);
-                const ws = workbook.worksheets[0];
-                
-                ws.getCell('F4').value = basePriceCache;
-                ws.getCell('F5').value = mntTotal;
-                ws.getCell('F6').value = -incPct;
-                
-                ws.getCell('D2').value = 'Payment Plan';
-                ws.getCell('G9').value = 'Payment Plan';
-                
-                let nonMntFlows = globalCustomFlows.filter(f => !f.isMnt);
-                let mnts = globalCustomFlows.filter(f => f.isMnt);
-                
-                let grouped = [];
-                nonMntFlows.forEach(f => {
-                    let grpName = '';
-                    if (f.months <= 1 && f.isDP) grpName = 'Down Payment';
-                    else {
-                        let y = Math.ceil(f.months / 12);
-                        if (y < 1) y = 1;
-                        grpName = 'Year ' + y;
-                    }
-                    let lastGrp = grouped[grouped.length - 1];
-                    if (lastGrp && lastGrp.name === grpName) {
-                        lastGrp.items.push(f);
-                    } else {
-                        grouped.push({ name: grpName, items: [f] });
-                    }
-                });
-                
-                let rowIdx = 11;
-                let excelTotalAmt = 0;
-                let excelTotalPct = 0;
-                
-                let modelRow = ws.getRow(12);
-                function writeRow(idx, colD, colF, colG, colH, colI) {
-                    let row = ws.getRow(idx);
-                    if(colD !== null) row.getCell(4).value = colD;
-                    if(colF !== null) row.getCell(6).value = colF;
-                    if(colG !== null) { row.getCell(7).value = colG / 100.0; row.getCell(7).numFmt = '0.00%'; }
-                    if(colH !== null) { row.getCell(8).value = colH; row.getCell(8).numFmt = '#,##0.00'; }
-                    if(colI !== null) row.getCell(9).value = colI;
-                    
-                    [4,5,6,7,8,9].forEach(c => {
-                        let cell = row.getCell(c);
-                        let mCell = modelRow.getCell(c);
-                        if(mCell && mCell.style) {
-                            cell.style = JSON.parse(JSON.stringify(mCell.style));
-                        }
-                    });
-                }
-                
-                let totalRowIdx = 54;
-                for (let i = 11; i < 500; i++) {
-                    let r = ws.getRow(i);
-                    let found = false;
-                    for(let c=2; c<=9; c++) {
-                        let val = r.getCell(c).value;
-                        let str = val ? val.toString().toLowerCase() : '';
-                        if (str.includes('total') || str.includes('amount') || str.includes('إجمالي') || str.includes('اجمالي')) {
-                            totalRowIdx = i;
-                            found = true;
-                            break;
-                        }
-                    }
-                    if (found) break;
-                }
+                await populateTemplateWorkbook(workbook, offerPrice);
 
-                for(let i=11; i<totalRowIdx; i++) {
-                    let r = ws.getRow(i);
-                    [4,5,6,7,8,9].forEach(c => r.getCell(c).value = null);
-                    r.hidden = false;
-                }
-                
-                grouped.forEach(grp => {
-                    grp.items.forEach((item, j) => {
-                        let isFirst = j === 0;
-                        let itemPct = (item.amount / offerPrice) * 100.0; // New percentage on offer price
-                        writeRow(rowIdx++, isFirst ? grp.name : null, item.label, itemPct, item.amount, formatDateExport(item.date));
-                        excelTotalAmt += item.amount;
-                        excelTotalPct += itemPct;
-                    });
-                });
-                
-                // Hide any remaining unused rows before the Total row so there are no empty gaps
-                for(let i = rowIdx; i < totalRowIdx; i++) {
-                    ws.getRow(i).hidden = true;
-                }
-                
-                let rTotal = ws.getRow(totalRowIdx);
-                rTotal.getCell(7).value = excelTotalPct / 100.0;
-                rTotal.getCell(8).value = excelTotalAmt;
-                
-                let mntRowIdx = totalRowIdx + 5;
-                let excelMntSum = 0;
-                let excelMntPctSum = 0;
-                mnts.forEach((m, i) => {
-                    let mntPct = (m.amount / offerPrice) * 100.0; // Percentage based on new total
-                    
-                    let r = ws.getRow(mntRowIdx++);
-                    r.getCell(6).value = m.amount; // Put Amount in Column 6
-                    r.getCell(6).numFmt = '#,##0.00';
-                    r.getCell(7).value = formatDateExport(m.date); // Set Date in Column 7
-                    r.getCell(8).value = null; // Ensure no amount on the right
-                    r.getCell(9).value = null; 
-                    
-                    excelMntSum += m.amount;
-                    excelMntPctSum += mntPct;
-                });
-                
-                let rTot = ws.getRow(totalRowIdx + 8);
-                rTot.getCell(6).value = excelMntSum;
-                rTot.getCell(6).numFmt = '#,##0.00';
-                rTot.getCell(7).value = excelMntPctSum / 100.0;
-                rTot.getCell(7).numFmt = '0.00%';
-                rTot.getCell(8).value = null;
-                rTot.getCell(9).value = null;
-                
                 const outBuffer = await workbook.xlsx.writeBuffer();
                 const blob = new Blob([outBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
                 const url = window.URL.createObjectURL(blob);
@@ -2566,24 +2707,14 @@ async function handleTemplateUpload(event) {
                 event.target.value = '';
             } catch(err) {
                 console.error('Template upload processing error:', err);
-                alert("حدث خطأ أثناء معالجة ملف الإكسيل. يرجى التأكد من رفع شيت مطابق وصالح.");
+                alert('حدث خطأ أثناء معالجة ملف الإكسيل. يرجى التأكد من رفع شيت مطابق وصالح.');
                 event.target.value = '';
             }
         };
         reader.readAsArrayBuffer(file);
     } catch (e) {
         console.error('Template upload file reading error:', e);
-        alert("حدث خطأ أثناء قراءة الملف.");
+        alert('حدث خطأ أثناء قراءة ملف الإكسيل.');
+        event.target.value = '';
     }
 }
-
-
-
-
-
-
-
-
-
-
-
