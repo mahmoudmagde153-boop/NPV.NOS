@@ -211,34 +211,103 @@ window.onFixedScopeChange = function() {
 window.applyRecYears = function(y) {
     let yrEl = document.getElementById('duration-years');
     if (yrEl) yrEl.value = y;
-    renderCustomInputs();
+    let toggle = document.getElementById('fixed-inst-toggle');
+    if (toggle) toggle.checked = false;
+    let fixValEl = document.getElementById('fixed-inst-val');
+    if (fixValEl) fixValEl.value = '';
+    let ctrl = document.getElementById('fixed-inst-controls-wrapper');
+    if (ctrl) ctrl.style.display = 'none';
+    let badge = document.getElementById('fixed-inst-status-badge');
+    if (badge) {
+        badge.innerText = 'غير مفعل';
+        badge.style.color = 'var(--text-muted)';
+    }
+    ['dp1', 'dp2', 'addl', 'deliv'].forEach(id => {
+        let el = document.getElementById(id + '-val');
+        let typeEl = document.getElementById(id + '-type');
+        if (el) el.value = '';
+        if (typeEl) typeEl.value = 'pct';
+    });
+    window.globalTableOverrides = {};
     calculate();
 };
 
-window.applyRecDP = function(amt) {
+window.applyRecDP = function(pct) {
     let dp1Val = document.getElementById('dp1-val');
     let dp1Type = document.getElementById('dp1-type');
     if (dp1Val && dp1Type) {
-        dp1Val.value = amt;
-        dp1Type.value = 'amt';
+        dp1Type.value = 'pct';
+        dp1Val.value = parseFloat(Number(pct).toFixed(2));
     }
+    let toggle = document.getElementById('fixed-inst-toggle');
+    if (toggle) toggle.checked = true;
+    let scopeEl = document.getElementById('fixed-inst-scope');
+    if (scopeEl) scopeEl.value = 'all';
+    ['dp2', 'addl', 'deliv'].forEach(id => {
+        let el = document.getElementById(id + '-val');
+        let typeEl = document.getElementById(id + '-type');
+        if (el) el.value = '';
+        if (typeEl) typeEl.value = 'pct';
+    });
+    window.globalTableOverrides = {};
     calculate();
 };
 
-window.applyRecDeliv = function(amt) {
+window.applyRecDeliv = function(pct) {
     let delivVal = document.getElementById('deliv-val');
     let delivType = document.getElementById('deliv-type');
     if (delivVal && delivType) {
-        delivVal.value = amt;
-        delivType.value = 'amt';
+        delivType.value = 'pct';
+        delivVal.value = parseFloat(Number(pct).toFixed(2));
     }
+    let toggle = document.getElementById('fixed-inst-toggle');
+    if (toggle) toggle.checked = true;
+    let scopeEl = document.getElementById('fixed-inst-scope');
+    if (scopeEl) scopeEl.value = 'all';
+    ['dp1', 'dp2', 'addl'].forEach(id => {
+        let el = document.getElementById(id + '-val');
+        let typeEl = document.getElementById(id + '-type');
+        if (el) el.value = '';
+        if (typeEl) typeEl.value = 'pct';
+    });
+    window.globalTableOverrides = {};
+    calculate();
+};
+
+window.applyRecDP2 = function(pct) {
+    let dp2Val = document.getElementById('dp2-val');
+    let dp2Type = document.getElementById('dp2-type');
+    if (dp2Val && dp2Type) {
+        dp2Type.value = 'pct';
+        dp2Val.value = parseFloat(Number(pct).toFixed(2));
+    }
+    let toggle = document.getElementById('fixed-inst-toggle');
+    if (toggle) toggle.checked = true;
+    let scopeEl = document.getElementById('fixed-inst-scope');
+    if (scopeEl) scopeEl.value = 'all';
+    ['dp1', 'addl', 'deliv'].forEach(id => {
+        let el = document.getElementById(id + '-val');
+        let typeEl = document.getElementById(id + '-type');
+        if (el) el.value = '';
+        if (typeEl) typeEl.value = 'pct';
+    });
+    window.globalTableOverrides = {};
     calculate();
 };
 
 window.applyRecPreOnly = function() {
+    let toggle = document.getElementById('fixed-inst-toggle');
+    if (toggle) toggle.checked = true;
     let scopeEl = document.getElementById('fixed-inst-scope');
     if (scopeEl) scopeEl.value = 'pre';
     window.onFixedScopeChange();
+    ['dp1', 'dp2', 'addl', 'deliv'].forEach(id => {
+        let el = document.getElementById(id + '-val');
+        let typeEl = document.getElementById(id + '-type');
+        if (el) el.value = '';
+        if (typeEl) typeEl.value = 'pct';
+    });
+    window.globalTableOverrides = {};
     calculate();
 };
 
@@ -615,9 +684,14 @@ function generateFlowsTemplate(contractDateStr, years, freqMonths, isBase = fals
         let el = document.getElementById(isBase ? 'base-'+id : id+'-val');
         if (el && el.value) {
             let typeEl = document.getElementById(isBase ? 'base-'+id+'-type' : id+'-type');
-            if (!typeEl || typeEl.value === 'pct') {
-                let v = parseFloat(el.value);
-                return (!isNaN(v) && v >= 0) ? (v / 100) : def;
+            let v = parseFloat(el.value);
+            if (!isNaN(v) && v >= 0) {
+                if (!typeEl || typeEl.value === 'pct') {
+                    return v / 100;
+                } else if (typeEl.value === 'amt') {
+                    let p = basePriceCache || 5000000;
+                    return p > 0 ? (v / p) : def;
+                }
             }
         }
         return def;
@@ -867,7 +941,8 @@ function calculateCustomFlows(price, template, options = {}) {
             else if (f.id === 'deliv') f.amount = deliv !== null ? deliv : price * (f.defaultPct||0);
             else if (f.isMerged) {
                 let m_amt = 0;
-                if (f.mergedIds.includes('deliv')) m_amt += deliv !== null ? deliv : price * 0.05;
+                let delivPct = template.find(t => t.id === 'deliv')?.defaultPct || 0.05;
+                if (f.mergedIds.includes('deliv')) m_amt += deliv !== null ? deliv : price * delivPct;
                 f.amount = m_amt; 
                 f._mergedDelivAmt = m_amt;
             }
@@ -941,8 +1016,8 @@ function calculateCustomFlows(price, template, options = {}) {
             // Scope === 'all'
             instAmtPre = fixedAmt;
             instAmtPost = fixedAmt;
-            actualPrePct = price > 0 ? ((nPre * fixedAmt) / price) * 100 : 0;
-            actualPostPct = price > 0 ? ((nPost * fixedAmt) / price) * 100 : 0;
+            actualPrePct = nTotal > 0 ? remPct * (nPre / nTotal) : 0;
+            actualPostPct = nTotal > 0 ? remPct * (nPost / nTotal) : 0;
             distMode = 'equal';
         }
     } else {
@@ -962,21 +1037,13 @@ function calculateCustomFlows(price, template, options = {}) {
         } else if (distMode === 'custom' && typedPost !== null && !isNaN(typedPost)) {
             actualPostPct = Math.max(0, Math.min(remPct, typedPost));
             actualPrePct = remPct - actualPostPct;
-        } else if (distMode === 'equal') {
-            actualPrePct = remPct * (nPre / nTotal);
-            actualPostPct = remPct * (nPost / nTotal);
         } else if (distMode === 'back') {
             actualPrePct = Math.min(remPct, basePrePct);
             actualPostPct = remPct - actualPrePct;
         } else {
-            // 'auto' or 'front':
-            if (remPct >= basePostPct) {
-                actualPostPct = basePostPct;
-                actualPrePct = remPct - actualPostPct;
-            } else {
-                actualPrePct = remPct * (nPre / nTotal);
-                actualPostPct = remPct - actualPostPct;
-            }
+            // Default (auto & equal): All installments are 100% equal across all periods (matching Excel sheets)
+            actualPrePct = nTotal > 0 ? remPct * (nPre / nTotal) : 0;
+            actualPostPct = nTotal > 0 ? remPct * (nPost / nTotal) : 0;
         }
         
         let prePoolAmt = price * (actualPrePct / 100);
@@ -1117,9 +1184,18 @@ function applyPerfectPercentages(flows, totalAmt) {
     let validTotal = (totalAmt > 0 && !isNaN(totalAmt)) ? totalAmt : 0;
     flows.forEach(f => {
         if (!f.isMnt) {
-            f.exactPct = validTotal > 0 ? ((f.amount || 0) / validTotal) : 0;
-            let pct = f.exactPct * 100;
-            f.displayPct = parseFloat(pct.toFixed(7)).toString();
+            if ((f.isDP || f.id === 'deliv') && f.defaultPct && !f.isFixedOverride && !f.isMerged) {
+                f.exactPct = f.defaultPct;
+                f.displayPct = parseFloat((f.defaultPct * 100).toFixed(4)).toString();
+            } else if (f.isFixedOverride && window.globalTableOverrides && window.globalTableOverrides[f.id] && window.globalTableOverrides[f.id].isPct) {
+                let p = window.globalTableOverrides[f.id].amount;
+                f.exactPct = p / 100;
+                f.displayPct = parseFloat(p.toFixed(4)).toString();
+            } else {
+                f.exactPct = validTotal > 0 ? ((f.amount || 0) / validTotal) : 0;
+                let pct = f.exactPct * 100;
+                f.displayPct = parseFloat(pct.toFixed(7)).toString();
+            }
         } else {
             f.exactPct = 0.04;
             f.displayPct = '4';
@@ -1218,9 +1294,46 @@ function renderFixedGuidanceBox(g) {
         return;
     }
     
-    let price = g.price || basePriceCache || 0;
-    let remAmt = g.remAmt || 0;
+    let basePrice = basePriceCache || 5000000;
+    let price = g.price || basePrice;
     let currentYears = parseInt(document.getElementById('duration-years').value) || 8;
+    let contractDateStr = document.getElementById('contract-date').value || new Date();
+    let freqMonths = parseInt(document.getElementById('payment-frequency').value) === 2 ? 6 : 3;
+    let targetPv = basePvCache || (basePrice * 0.712);
+    
+    let isZomra = (currentProject === 'Zomra');
+    let delivMonth = isZomra ? 37 : 48;
+    let instPoolPct = isZomra ? 0.85 : 0.90;
+    let nTotal = g.nTotal || (currentYears * (12 / freqMonths));
+    let naturalInst = nTotal > 0 ? (basePrice * instPoolPct) / nTotal : 0;
+    
+    // Generate standard template for current plan to get exact milestone PV factors
+    let tpl = generateFlowsTemplate(contractDateStr, currentYears, freqMonths, false);
+    
+    let dp1Flow = tpl.find(f => f.id === 'dp1');
+    let dp2Flow = tpl.find(f => f.id === 'dp2');
+    let addlFlow = isZomra ? tpl.find(f => f.id === 'addl') : null;
+    let delivFlow = isZomra ? tpl.find(f => f.id === 'deliv' || (f.mergedIds && f.mergedIds.includes('deliv'))) : null;
+    
+    let getDf = (f) => {
+        if (!f) return 1.0;
+        let tempF = { date: f.date, months: f.months, amount: 1, id: f.id };
+        applyDiscountLogic(tempF, contractDateStr);
+        return tempF.pv || 1.0;
+    };
+    
+    let dfDp1 = 1.0;
+    let dfDp2 = getDf(dp2Flow);
+    let dfAddl = addlFlow ? getDf(addlFlow) : 0;
+    let dfDeliv = delivFlow ? getDf(delivFlow) : 0;
+    
+    let instFlows = tpl.filter(f => (f.isInst || f.isMerged) && !f.isFixedOverride);
+    let preInsts = instFlows.filter(f => f.months <= delivMonth);
+    let postInsts = instFlows.filter(f => f.months > delivMonth);
+    
+    let sumPreDf = preInsts.reduce((sum, f) => sum + getDf(f), 0);
+    let sumPostDf = postInsts.reduce((sum, f) => sum + getDf(f), 0);
+    let sumAllInstDf = sumPreDf + sumPostDf;
     
     // 1. Counterpart Info
     if (counterpartEl) {
@@ -1228,7 +1341,7 @@ function renderFixedGuidanceBox(g) {
         if (g.scope === 'pre') {
             counterpartEl.innerHTML = `
                 <div style="color: var(--accent-blue); font-weight: bold; font-size: 0.9rem;">
-                    ➡️ الأقساط بعد الاستلام (محسوبة تلقائياً بالتساوي): 
+                    ➡️ الأقساط بعد الاستلام (محسوبة بالـ NPV بالتساوي): 
                     <span style="color: #fff;">${formatCurr(g.instAmtPost)}</span> 
                     (${g.actualPostPct.toFixed(2)}% إجمالي / ${(g.nPost > 0 ? g.actualPostPct / g.nPost : 0).toFixed(2)}% لكل قسط) 
                     | عدد: ${g.nPost} قسطاً
@@ -1236,164 +1349,164 @@ function renderFixedGuidanceBox(g) {
         } else if (g.scope === 'post') {
             counterpartEl.innerHTML = `
                 <div style="color: var(--accent-blue); font-weight: bold; font-size: 0.9rem;">
-                    ➡️ الأقساط قبل الاستلام (محسوبة تلقائياً بالتساوي): 
+                    ➡️ الأقساط قبل الاستلام (محسوبة بالـ NPV بالتساوي): 
                     <span style="color: #fff;">${formatCurr(g.instAmtPre)}</span> 
                     (${g.actualPrePct.toFixed(2)}% إجمالي / ${(g.nPre > 0 ? g.actualPrePct / g.nPre : 0).toFixed(2)}% لكل قسط) 
                     | عدد: ${g.nPre} قسطاً
                 </div>`;
         } else {
-            let totalInst = g.nTotal * g.fixedAmt;
+            let totalInst = nTotal * g.fixedAmt;
             counterpartEl.innerHTML = `
                 <div style="color: var(--gold); font-weight: bold; font-size: 0.9rem;">
-                    ➡️ إجمالي الأقساط على ${currentYears} سنوات (${g.nTotal} قسطاً): 
+                    ➡️ إجمالي الأقساط على ${currentYears} سنوات (${nTotal} قسطاً): 
                     <span style="color: #fff;">${formatCurr(totalInst)}</span> 
                     (${(price > 0 ? (totalInst / price) * 100 : 0).toFixed(2)}% من السعر)
                 </div>`;
         }
     }
     
-    // 2. Feasibility & Guidance
+    // 2. Feasibility & Actionable Guidance
     if (guidanceBox) {
         guidanceBox.style.display = 'block';
         
-        if (g.scope === 'pre') {
-            let totalPre = g.nPre * g.fixedAmt;
-            if (totalPre > remAmt) {
-                let maxAllowed = g.nPre > 0 ? remAmt / g.nPre : 0;
-                guidanceBox.style.background = 'rgba(231, 76, 60, 0.15)';
-                guidanceBox.style.border = '1px solid #e74c3c';
-                guidanceBox.innerHTML = `
-                    <div style="color: #e74c3c; font-weight: bold; margin-bottom: 6px;">
-                        ⚠️ تنبيه: القسط قبل الاستلام (${formatCurr(g.fixedAmt)}) كبير جداً! يتجاوز كامل الوعاء المتاح (${formatCurr(remAmt)}).
-                    </div>
-                    <div style="color: var(--text-muted); margin-bottom: 8px;">
-                        الحد الأقصى للقسط قبل الاستلام لتغطية الوعاء هو <strong>${formatCurr(maxAllowed)}</strong>.
-                    </div>
-                    <button class="btn btn-outline" onclick="applyFixedVal(${Math.floor(maxAllowed)})" style="padding: 4px 10px; font-size: 0.8rem; border-color: #e74c3c; color: #fff;">
-                        ضبط القسط عند الحد الأقصى (${formatNum(maxAllowed)} ج.م)
-                    </button>
-                `;
-            } else {
-                guidanceBox.style.background = 'rgba(46, 204, 113, 0.1)';
-                guidanceBox.style.border = '1px solid rgba(46, 204, 113, 0.3)';
-                guidanceBox.innerHTML = `
-                    <div style="color: #2ecc71; font-weight: bold;">
-                        ✅ القسط متوافق تماماً. تم توزيع باقي المبلغ بالتساوي على أقساط ما بعد الاستلام.
-                    </div>
-                `;
-            }
-        } else if (g.scope === 'post') {
-            let totalPost = g.nPost * g.fixedAmt;
-            if (totalPost > remAmt) {
-                let maxAllowed = g.nPost > 0 ? remAmt / g.nPost : 0;
-                guidanceBox.style.background = 'rgba(231, 76, 60, 0.15)';
-                guidanceBox.style.border = '1px solid #e74c3c';
-                guidanceBox.innerHTML = `
-                    <div style="color: #e74c3c; font-weight: bold; margin-bottom: 6px;">
-                        ⚠️ تنبيه: القسط بعد الاستلام (${formatCurr(g.fixedAmt)}) يتجاوز كامل الوعاء المتاح (${formatCurr(remAmt)}).
-                    </div>
-                    <div style="color: var(--text-muted); margin-bottom: 8px;">
-                        الحد الأقصى للقسط بعد الاستلام هو <strong>${formatCurr(maxAllowed)}</strong>.
-                    </div>
-                    <button class="btn btn-outline" onclick="applyFixedVal(${Math.floor(maxAllowed)})" style="padding: 4px 10px; font-size: 0.8rem; border-color: #e74c3c; color: #fff;">
-                        ضبط القسط عند الحد الأقصى (${formatNum(maxAllowed)} ج.م)
-                    </button>
-                `;
-            } else {
-                guidanceBox.style.background = 'rgba(46, 204, 113, 0.1)';
-                guidanceBox.style.border = '1px solid rgba(46, 204, 113, 0.3)';
-                guidanceBox.innerHTML = `
-                    <div style="color: #2ecc71; font-weight: bold;">
-                        ✅ القسط متوافق تماماً. تم توزيع باقي المبلغ بالتساوي على أقساط ما قبل الاستلام.
-                    </div>
-                `;
-            }
-        } else {
-            // Scope === 'all'
-            let totalInst = g.nTotal * g.fixedAmt;
-            let diff = remAmt - totalInst;
-            
-            if (Math.abs(diff) < 100) {
-                guidanceBox.style.background = 'rgba(46, 204, 113, 0.1)';
-                guidanceBox.style.border = '1px solid rgba(46, 204, 113, 0.3)';
-                guidanceBox.innerHTML = `
-                    <div style="color: #2ecc71; font-weight: bold;">
-                        ✅ القسط متطابق تماماً بنسبة 100% مع سنوات الخطة.
-                    </div>
-                `;
-            } else if (diff > 0) {
-                // Deficit: Inst is too small for current years
-                let neededInsts = remAmt / g.fixedAmt;
-                let recYears = Math.ceil(neededInsts / 4);
-                
-                // DP calculation
-                let curDp1 = parseFloat(document.getElementById('dp1-val')?.value) || (price * (currentProject === 'Zomra' ? 0.025 : 0.05));
-                let newDp1Amt = curDp1 + diff;
-                let newDp1Pct = price > 0 ? (newDp1Amt / price) * 100 : 0;
-                
-                // Delivery calculation
-                let curDeliv = parseFloat(document.getElementById('deliv-val')?.value) || (price * 0.05);
-                let newDelivAmt = curDeliv + diff;
-                let newDelivPct = price > 0 ? (newDelivAmt / price) * 100 : 0;
-                
-                guidanceBox.style.background = 'rgba(243, 156, 18, 0.15)';
-                guidanceBox.style.border = '1px solid #f39c12';
-                
-                let yearsHtml = '';
-                if (recYears <= 10) {
-                    yearsHtml = `
-                        <div style="display: flex; justify-content: space-between; align-items: center; background: rgba(0,0,0,0.25); padding: 6px 10px; border-radius: 4px; margin-bottom: 6px;">
-                            <span>🗓️ <strong>تعديل السنين:</strong> هذا القسط يناسب مدة <strong>${recYears} سنوات</strong> (${Math.round(neededInsts)} قسطاً).</span>
-                            <button class="btn btn-primary" onclick="applyRecYears(${recYears})" style="padding: 3px 8px; font-size: 0.78rem;">تطبيق ${recYears} سنوات</button>
-                        </div>
-                    `;
-                } else {
-                    yearsHtml = `
-                        <div style="color: var(--text-muted); margin-bottom: 6px;">
-                            🗓️ يتطلب هذا القسط مدة <strong>${recYears} سنة</strong> (أكبر من الحد الأقصى 10 سنوات).
-                        </div>
-                    `;
-                }
-                
-                guidanceBox.innerHTML = `
-                    <div style="color: #f39c12; font-weight: bold; margin-bottom: 6px;">
-                        ⚠️ تنبيه: القسط (${formatCurr(g.fixedAmt)}) على ${currentYears} سنوات يترك عجزاً قدره ${formatCurr(diff)} (${((diff/price)*100).toFixed(2)}%).
-                    </div>
-                    <div style="display: flex; flex-direction: column; gap: 4px; margin-top: 6px;">
-                        ${yearsHtml}
-                        <div style="display: flex; justify-content: space-between; align-items: center; background: rgba(0,0,0,0.25); padding: 6px 10px; border-radius: 4px; margin-bottom: 6px;">
-                            <span>💰 <strong>زيادة المقدم:</strong> زيادة المقدم بمقدار ${formatNum(diff)} ج.م ليصبح <strong>${formatNum(newDp1Amt)} ج.م</strong> (${newDp1Pct.toFixed(1)}%).</span>
-                            <button class="btn btn-primary" onclick="applyRecDP(${Math.round(newDp1Amt)})" style="padding: 3px 8px; font-size: 0.78rem; background: #217346; border-color: #217346;">تطبيق زيادة المقدم</button>
-                        </div>
-                        <div style="display: flex; justify-content: space-between; align-items: center; background: rgba(0,0,0,0.25); padding: 6px 10px; border-radius: 4px; margin-bottom: 6px;">
-                            <span>📦 <strong>زيادة الاستلام:</strong> زيادة دفعة الاستلام لتصبح <strong>${formatNum(newDelivAmt)} ج.م</strong> (${newDelivPct.toFixed(1)}%).</span>
-                            <button class="btn btn-primary" onclick="applyRecDeliv(${Math.round(newDelivAmt)})" style="padding: 3px 8px; font-size: 0.78rem; background: var(--accent-blue); border-color: var(--accent-blue);">تحميل على الاستلام</button>
-                        </div>
-                        <div style="display: flex; justify-content: space-between; align-items: center; background: rgba(0,0,0,0.25); padding: 6px 10px; border-radius: 4px;">
-                            <span>⚖️ <strong>تثبيت قبل الاستلام فقط:</strong> تثبيت ${formatNum(g.fixedAmt)} ج.م قبل الاستلام وتحميل الفارق بعد الاستلام.</span>
-                            <button class="btn btn-outline" onclick="applyRecPreOnly()" style="padding: 3px 8px; font-size: 0.78rem; border-color: var(--gold); color: #fff;">تثبيت قبل الاستلام فقط</button>
-                        </div>
-                    </div>
-                `;
-            } else {
-                // Surplus: Inst is too large for current years
-                let surplus = -diff;
-                let neededInsts = remAmt / g.fixedAmt;
-                let recYears = Math.max(1, Math.round(neededInsts / 4));
-                
-                guidanceBox.style.background = 'rgba(52, 152, 219, 0.15)';
-                guidanceBox.style.border = '1px solid #3498db';
-                guidanceBox.innerHTML = `
-                    <div style="color: #3498db; font-weight: bold; margin-bottom: 6px;">
-                        ℹ️ ملاحظة: القسط (${formatCurr(g.fixedAmt)}) أكبر من المطلوب على ${currentYears} سنوات (فائض: ${formatCurr(surplus)}).
-                    </div>
-                    <div style="display: flex; justify-content: space-between; align-items: center; background: rgba(0,0,0,0.25); padding: 6px 10px; border-radius: 4px;">
-                        <span>🗓️ يمكنك تقليل المدة إلى <strong>${recYears} سنوات</strong> لتغطية الوحدة تماماً.</span>
-                        <button class="btn btn-primary" onclick="applyRecYears(${recYears})" style="padding: 3px 8px; font-size: 0.78rem;">تطبيق ${recYears} سنوات</button>
-                    </div>
-                `;
+        let fixedInst = g.fixedAmt;
+        let totalFixedInst = nTotal * fixedInst;
+        let pvFixedInsts = fixedInst * sumAllInstDf;
+        
+        let currentOfferPv = globalCustomFlows.filter(f => !f.isMnt).reduce((sum, f) => sum + (f.pv || 0), 0);
+        let pvDeficit = targetPv - currentOfferPv;
+        
+        // Check if balanced
+        let isBalanced = Math.abs(currentOfferPv - targetPv) < 1500 || Math.abs(fixedInst - naturalInst) < 50;
+        
+        if (isBalanced) {
+            guidanceBox.style.background = 'rgba(46, 204, 113, 0.1)';
+            guidanceBox.style.border = '1px solid rgba(46, 204, 113, 0.3)';
+            guidanceBox.innerHTML = `
+                <div style="color: #2ecc71; font-weight: bold;">
+                    ✅ الخطة متطابقة تماماً بنسبة 100% مع شيت الإكسيل (القيمة الحالية NPV متطابقة مع السعر الأصلي).
+                </div>
+            `;
+            return;
+        }
+        
+        // Calculate the 4 exact NPV solutions
+        // Solution 1: Natural Duration (Years) Matching
+        let bestYear = null;
+        let bestYearPrice = 0;
+        let bestYearInst = 0;
+        let bestYearDiffPct = 0;
+        let bestGap = Infinity;
+        
+        for (let y = 3; y <= 12; y++) {
+            if (y === currentYears) continue;
+            let tplY = generateFlowsTemplate(contractDateStr, y, freqMonths, false);
+            let pY = solveForPrice(targetPv, tplY);
+            let nY = tplY.filter(f => (f.isInst || f.isMerged) && !f.isFixedOverride).length;
+            let instY = (pY * instPoolPct) / nY;
+            let gap = Math.abs(instY - fixedInst);
+            if (gap < bestGap) {
+                bestGap = gap;
+                bestYear = y;
+                bestYearPrice = pY;
+                bestYearInst = instY;
+                bestYearDiffPct = ((pY - basePrice) / basePrice) * 100;
             }
         }
+        
+        // Solution 2: Exact Down Payment 1 via NPV preserving other milestone percentages
+        let W_dp1, P_dp1, neededDp1Amt, dp1PctOfPrice, dpPriceDiffPct;
+        if (isZomra) {
+            W_dp1 = 0.875 + 0.025 * dfDp2 + 0.05 * dfAddl + 0.05 * dfDeliv;
+            P_dp1 = (targetPv + totalFixedInst - pvFixedInsts) / W_dp1;
+            neededDp1Amt = 0.875 * P_dp1 - totalFixedInst;
+            dp1PctOfPrice = P_dp1 > 0 ? (neededDp1Amt / P_dp1) * 100 : 0;
+            dpPriceDiffPct = ((P_dp1 - basePrice) / basePrice) * 100;
+        } else {
+            W_dp1 = 0.95 + 0.05 * dfDp2;
+            P_dp1 = (targetPv + totalFixedInst - pvFixedInsts) / W_dp1;
+            neededDp1Amt = 0.95 * P_dp1 - totalFixedInst;
+            dp1PctOfPrice = P_dp1 > 0 ? (neededDp1Amt / P_dp1) * 100 : 0;
+            dpPriceDiffPct = ((P_dp1 - basePrice) / basePrice) * 100;
+        }
+        
+        // Solution 3: Exact Delivery Payment (Zomra) or DP2 (Perla) via NPV
+        let sol3Desc, sol3BtnText, sol3ClickAction;
+        if (isZomra) {
+            let W_deliv = 0.025 + 0.025 * dfDp2 + 0.05 * dfAddl + 0.90 * dfDeliv;
+            let P_deliv = (targetPv + totalFixedInst * dfDeliv - pvFixedInsts) / W_deliv;
+            let neededDelivAmt = 0.90 * P_deliv - totalFixedInst;
+            let delivPctOfPrice = P_deliv > 0 ? (neededDelivAmt / P_deliv) * 100 : 0;
+            let delivPriceDiffPct = ((P_deliv - basePrice) / basePrice) * 100;
+            
+            sol3BtnText = `تحميل ${delivPctOfPrice.toFixed(1)}% على الاستلام`;
+            sol3Desc = `📦 <strong>تحميل على الاستلام:</strong> سداد <strong>${delivPctOfPrice.toFixed(1)}%</strong> (${formatNum(neededDelivAmt)} ج.م) عند الاستلام لتثبيت القسط عند ${formatNum(fixedInst)} ج.م بسعر ${formatNum(P_deliv)} ج.م (${delivPriceDiffPct >= 0 ? '+' : ''}${delivPriceDiffPct.toFixed(2)}%).`;
+            sol3ClickAction = `applyRecDeliv(${delivPctOfPrice.toFixed(4)})`;
+        } else {
+            let W_dp2 = 0.05 + 0.95 * dfDp2;
+            let P_dp2 = (targetPv + totalFixedInst * dfDp2 - pvFixedInsts) / W_dp2;
+            let neededDp2Amt = 0.95 * P_dp2 - totalFixedInst;
+            let dp2PctOfPrice = P_dp2 > 0 ? (neededDp2Amt / P_dp2) * 100 : 0;
+            let dp2PriceDiffPct = ((P_dp2 - basePrice) / basePrice) * 100;
+            
+            sol3BtnText = `تعديل الدفعة 2 إلى ${dp2PctOfPrice.toFixed(1)}%`;
+            sol3Desc = `💰 <strong>تعديل الدفعة الثانية:</strong> سداد <strong>${dp2PctOfPrice.toFixed(1)}%</strong> (${formatNum(neededDp2Amt)} ج.م) بعد 3 شهور لتثبيت القسط عند ${formatNum(fixedInst)} ج.م بسعر ${formatNum(P_dp2)} ج.م (${dp2PriceDiffPct >= 0 ? '+' : ''}${dp2PriceDiffPct.toFixed(2)}%).`;
+            sol3ClickAction = `applyRecDP2(${dp2PctOfPrice.toFixed(4)})`;
+        }
+        
+        // Solution 4: Exact Pre-Delivery Only via NPV
+        let W_ms = isZomra ? (0.025 + 0.025 * dfDp2 + 0.05 * dfAddl + 0.05 * dfDeliv) : (0.05 + 0.05 * dfDp2);
+        let instPool = isZomra ? 0.85 : 0.90;
+        let nPreCount = preInsts.length;
+        let nPostCount = postInsts.length;
+        let W_post = nPostCount > 0 ? (instPool / nPostCount) * sumPostDf : 0;
+        let P_pre = (nPostCount > 0 && (W_ms + W_post) > 0)
+            ? (targetPv - (fixedInst * sumPreDf) + ((nPreCount * fixedInst) / nPostCount) * sumPostDf) / (W_ms + W_post)
+            : basePrice;
+        let solvedPostInst = nPostCount > 0 ? (instPool * P_pre - nPreCount * fixedInst) / nPostCount : 0;
+        let prePriceDiffPct = ((P_pre - basePrice) / basePrice) * 100;
+        
+        let isDeficit = pvDeficit > 0;
+        guidanceBox.style.background = isDeficit ? 'rgba(243, 156, 18, 0.15)' : 'rgba(52, 152, 219, 0.15)';
+        guidanceBox.style.border = isDeficit ? '1px solid #f39c12' : '1px solid #3498db';
+        
+        let headerText = isDeficit 
+            ? `⚠️ تنبيه: القسط (${formatCurr(fixedInst)}) أقل من القسط الطبيعي (${formatCurr(naturalInst)}). لمطابقة شيت الإكسيل (NPV) بنسبة 100%، اختر أحد الحلول الآتية:`
+            : `ℹ️ ملاحظة: القسط (${formatCurr(fixedInst)}) أكبر من القسط الطبيعي (${formatCurr(naturalInst)}). لمطابقة شيت الإكسيل (NPV) بنسبة 100%، اختر أحد الحلول الآتية:`;
+            
+        let yearsBtnText = `تطبيق ${bestYear} سنوات`;
+        let yearsDesc = `🗓️ <strong>تعديل السنين (${bestYear} سنوات):</strong> القسط في الإكسيل يصبح <strong>${formatNum(bestYearInst)} ج.م</strong> بسعر إجمالي ${formatNum(bestYearPrice)} ج.م (${bestYearDiffPct >= 0 ? '+' : ''}${bestYearDiffPct.toFixed(2)}%).`;
+        
+        let dpBtnText = `تطبيق مقدم ${dp1PctOfPrice.toFixed(1)}%`;
+        let dpDesc = `💰 <strong>تعديل المقدم:</strong> سداد مقدم <strong>${dp1PctOfPrice.toFixed(1)}%</strong> (${formatNum(neededDp1Amt)} ج.م) لتثبيت القسط عند ${formatNum(fixedInst)} ج.م بسعر ${formatNum(P_dp1)} ج.م (${dpPriceDiffPct >= 0 ? '+' : ''}${dpPriceDiffPct.toFixed(2)}%).`;
+        
+        let preBtnText = `تثبيت قبل الاستلام فقط`;
+        let preDesc = `⚖️ <strong>تثبيت قبل الاستلام فقط:</strong> دفع <strong>${formatNum(fixedInst)} ج.م</strong> قبل الاستلام، ويكون قسط ما بعد الاستلام <strong>${formatNum(solvedPostInst)} ج.م</strong> بسعر ${formatNum(P_pre)} ج.م (${prePriceDiffPct >= 0 ? '+' : ''}${prePriceDiffPct.toFixed(2)}%).`;
+
+        guidanceBox.innerHTML = `
+            <div style="color: ${isDeficit ? '#f39c12' : '#3498db'}; font-weight: bold; margin-bottom: 8px;">
+                ${headerText}
+            </div>
+            <div style="display: flex; flex-direction: column; gap: 6px;">
+                ${bestYear ? `
+                <div style="display: flex; justify-content: space-between; align-items: center; background: rgba(0,0,0,0.25); padding: 8px 10px; border-radius: 4px;">
+                    <span>${yearsDesc}</span>
+                    <button class="btn btn-primary" onclick="applyRecYears(${bestYear})" style="padding: 4px 10px; font-size: 0.8rem; white-space: nowrap;">${yearsBtnText}</button>
+                </div>` : ''}
+                <div style="display: flex; justify-content: space-between; align-items: center; background: rgba(0,0,0,0.25); padding: 8px 10px; border-radius: 4px;">
+                    <span>${dpDesc}</span>
+                    <button class="btn btn-primary" onclick="applyRecDP(${dp1PctOfPrice.toFixed(4)})" style="padding: 4px 10px; font-size: 0.8rem; background: #217346; border-color: #217346; white-space: nowrap;">${dpBtnText}</button>
+                </div>
+                <div style="display: flex; justify-content: space-between; align-items: center; background: rgba(0,0,0,0.25); padding: 8px 10px; border-radius: 4px;">
+                    <span>${sol3Desc}</span>
+                    <button class="btn btn-primary" onclick="${sol3ClickAction}" style="padding: 4px 10px; font-size: 0.8rem; background: var(--accent-blue); border-color: var(--accent-blue); white-space: nowrap;">${sol3BtnText}</button>
+                </div>
+                <div style="display: flex; justify-content: space-between; align-items: center; background: rgba(0,0,0,0.25); padding: 8px 10px; border-radius: 4px;">
+                    <span>${preDesc}</span>
+                    <button class="btn btn-outline" onclick="applyRecPreOnly()" style="padding: 4px 10px; font-size: 0.8rem; border-color: var(--gold); color: #fff; white-space: nowrap;">${preBtnText}</button>
+                </div>
+            </div>
+        `;
     }
 }
 
@@ -1489,17 +1602,60 @@ function renderTargetPriceGuidance(targetPrice, currentOfferPrice, targetPv) {
         `;
     }
 
-    // 3. Target Installment
-    let nInsts = currentYears * (12 / freqMonths);
-    if (currentProject === 'Perla') nInsts -= 1;
-    let baseMilestonesPct = (currentProject === 'Zomra') ? 15 : 10;
-    let targetInstAmt = (targetPrice * (1 - baseMilestonesPct / 100)) / nInsts;
-    let instActionHtml = `
-        <div style="display: flex; justify-content: space-between; align-items: center; background: rgba(0,0,0,0.25); padding: 6px 10px; border-radius: 4px;">
-            <span>💵 <strong>تثبيت الأقساط:</strong> كل قسط سيكون <strong>${formatNum(targetInstAmt)} ج.م</strong> لتغطية السعر المستهدف.</span>
-            <button class="btn btn-outline" onclick="applyTargetInst(${Math.round(targetInstAmt)})" style="padding: 3px 8px; font-size: 0.78rem; border-color: var(--gold); color: #fff;">تثبيت عند ${formatNum(targetInstAmt)}</button>
-        </div>
-    `;
+    // 3. Exact Pre-Delivery Installment Solver on Current Plan
+    let tplCurrent = generateFlowsTemplate(contractDateStr, currentYears, freqMonths, false);
+    let delivMonth = currentProject === 'Zomra' ? 37 : 48;
+    let dynInsts = tplCurrent.filter(f => (f.isInst || f.isMerged) && !f.isFixedOverride);
+    let preCount = dynInsts.filter(f => f.months <= delivMonth).length;
+    let postCount = dynInsts.filter(f => f.months > delivMonth).length;
+    
+    let instActionHtml = '';
+    if (preCount > 0 && postCount > 0) {
+        let fixedPv = 0;
+        let totalMilestonesPct = 0;
+        tplCurrent.forEach(f => {
+            if (f.isDP || f.id === 'deliv') {
+                totalMilestonesPct += (f.defaultPct || 0);
+                let tempF = { date: f.date, months: f.months, amount: targetPrice * (f.defaultPct || 0), id: f.id };
+                applyDiscountLogic(tempF, contractDateStr);
+                fixedPv += (tempF.pv || 0);
+            } else if (f.isMerged) {
+                let dPct = 0.05;
+                totalMilestonesPct += dPct;
+                let tempF = { date: f.date, months: f.months, amount: targetPrice * dPct, id: 'deliv' };
+                applyDiscountLogic(tempF, contractDateStr);
+                fixedPv += (tempF.pv || 0);
+            }
+        });
+        
+        let remCash = targetPrice * (1.0 - totalMilestonesPct);
+        let sumPreF = 0;
+        let sumPostF = 0;
+        dynInsts.forEach(f => {
+            let tempF = { date: f.date, months: f.months, amount: 1, id: f.id };
+            applyDiscountLogic(tempF, contractDateStr);
+            if (f.months <= delivMonth) sumPreF += (tempF.pv || 0);
+            else sumPostF += (tempF.pv || 0);
+        });
+        
+        let coeff = sumPreF - (preCount / postCount) * sumPostF;
+        if (Math.abs(coeff) > 1e-6) {
+            let neededPv = targetPv - fixedPv - (remCash / postCount) * sumPostF;
+            let solvedPreAmt = neededPv / coeff;
+            let solvedPostAmt = (remCash - preCount * solvedPreAmt) / postCount;
+            
+            if (solvedPreAmt > 0 && solvedPostAmt > 0) {
+                let solvedPrePct = (solvedPreAmt / targetPrice) * 100;
+                let solvedPostPct = (solvedPostAmt / targetPrice) * 100;
+                instActionHtml = `
+                    <div style="display: flex; justify-content: space-between; align-items: center; background: rgba(0,0,0,0.25); padding: 6px 10px; border-radius: 4px;">
+                        <span>⚡ <strong>أقساط ما قبل الاستلام:</strong> قسط <strong>${formatNum(solvedPreAmt)} ج.م</strong> (${solvedPrePct.toFixed(2)}%) قبل الاستلام، و <strong>${formatNum(solvedPostAmt)} ج.م</strong> (${solvedPostPct.toFixed(2)}%) بعد الاستلام.</span>
+                        <button class="btn btn-outline" onclick="applyTargetPreInst(${Math.round(solvedPreAmt)})" style="padding: 3px 8px; font-size: 0.78rem; border-color: var(--gold); color: #fff;">تطبيق قسط ${formatNum(solvedPreAmt)}</button>
+                    </div>
+                `;
+            }
+        }
+    }
 
     let statusHeader = isDiscount ?
         `<div style="color: #3498db; font-weight: bold; margin-bottom: 6px;">
@@ -1541,11 +1697,11 @@ window.applyTargetDP = function(pct) {
     calculate();
 };
 
-window.applyTargetInst = function(amt) {
+window.applyTargetPreInst = function(amt) {
     let toggle = document.getElementById('fixed-inst-toggle');
     if (toggle) toggle.checked = true;
     let scopeEl = document.getElementById('fixed-inst-scope');
-    if (scopeEl) scopeEl.value = 'all';
+    if (scopeEl) scopeEl.value = 'pre';
     let typeEl = document.getElementById('fixed-inst-type');
     if (typeEl) typeEl.value = 'amt';
     let valEl = document.getElementById('fixed-inst-val');
@@ -1624,7 +1780,12 @@ function calculate() {
         
         let hasTargetPrice = targetPrice !== null;
         let fixedInstScope = document.getElementById('fixed-inst-scope') ? document.getElementById('fixed-inst-scope').value : 'all';
-        if (hasFixedInst && fixedInstScope === 'all') {
+        let hasCustomMilestones = ['dp1', 'dp2', 'addl', 'deliv'].some(id => {
+            let el = document.getElementById(id + '-val');
+            return el && el.value.trim() !== '';
+        });
+
+        if (hasFixedInst && fixedInstScope === 'all' && !hasCustomMilestones) {
             bestPrice = basePriceCache;
         } else {
             bestPrice = solveForPrice(targetPv, customTemplate);
@@ -1636,10 +1797,7 @@ function calculate() {
                           parseFloat(document.getElementById('intra-year-val')?.value) === 70 &&
                           document.getElementById('intra-year-scope')?.value === 'all');
             let hasTableOverrides = window.globalTableOverrides && Object.keys(window.globalTableOverrides).length > 0;
-            let hasCustomInputs = ['dp1', 'dp2', 'addl', 'deliv'].some(id => {
-                let el = document.getElementById(id + '-val');
-                return el && el.value.trim() !== '';
-            });
+            let hasCustomInputs = hasCustomMilestones;
             let isDistCustomized = window.globalDistState && (window.globalDistState.mode !== 'auto' || window.globalDistState.typedPrePct !== null || window.globalDistState.typedPostPct !== null);
             if (currentProject === 'Perla' && is7030 && !hasFixedInst && !hasTableOverrides && !hasCustomInputs && !isDistCustomized && years === 8) {
                 bestPrice = basePriceCache * 1.00863920294539959;
@@ -1836,12 +1994,15 @@ window.applyTableEdits = function() {
             
             if (!window.globalTableOverrides[flowId]) window.globalTableOverrides[flowId] = {};
             
-            if (typedAmt !== currentAmt) {
-                window.globalTableOverrides[flowId].amount = typedAmt;
-                window.globalTableOverrides[flowId].isPct = false;
-            } else if (typedPct !== currentPct) {
+            let pctChanged = Math.abs(typedPct - currentPct) > 0.005;
+            let amtChanged = Math.abs(typedAmt - currentAmt) > 1;
+            
+            if (pctChanged) {
                 window.globalTableOverrides[flowId].amount = typedPct;
                 window.globalTableOverrides[flowId].isPct = true;
+            } else if (amtChanged) {
+                window.globalTableOverrides[flowId].amount = typedAmt;
+                window.globalTableOverrides[flowId].isPct = false;
             }
         }
     });
