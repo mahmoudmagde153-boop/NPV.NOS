@@ -10,24 +10,103 @@ let globalCustomFlows = [];
 let basePvCache = 0;
 let basePriceCache = 0;
 
+// --- Installment Distribution State & Handlers ---
+window.globalDistState = {
+    mode: 'auto', // 'auto', 'front', 'back', 'equal', 'custom'
+    typedPrePct: null,
+    typedPostPct: null
+};
+
+window.onPreDelivPctInput = function() {
+    let valStr = document.getElementById('pre-deliv-inst-pct').value;
+    if (valStr.trim() === '') {
+        window.globalDistState.mode = 'auto';
+        window.globalDistState.typedPrePct = null;
+        window.globalDistState.typedPostPct = null;
+    } else {
+        window.globalDistState.mode = 'custom';
+        window.globalDistState.typedPrePct = parseFloat(valStr) || 0;
+        window.globalDistState.typedPostPct = null;
+    }
+    delayedCalculate();
+};
+
+window.onPostDelivPctInput = function() {
+    let valStr = document.getElementById('post-deliv-inst-pct').value;
+    if (valStr.trim() === '') {
+        window.globalDistState.mode = 'auto';
+        window.globalDistState.typedPrePct = null;
+        window.globalDistState.typedPostPct = null;
+    } else {
+        window.globalDistState.mode = 'custom';
+        window.globalDistState.typedPostPct = parseFloat(valStr) || 0;
+        window.globalDistState.typedPrePct = null;
+    }
+    delayedCalculate();
+};
+
+window.setDistPreset = function(preset) {
+    window.globalDistState.mode = preset;
+    window.globalDistState.typedPrePct = null;
+    window.globalDistState.typedPostPct = null;
+    calculate();
+};
+
+window.resetDistPreset = function() {
+    resetDistPresetInternal();
+    calculate();
+};
+
+function resetDistPresetInternal() {
+    window.globalDistState = {
+        mode: 'auto',
+        typedPrePct: null,
+        typedPostPct: null
+    };
+    let preInput = document.getElementById('pre-deliv-inst-pct');
+    let postInput = document.getElementById('post-deliv-inst-pct');
+    if (preInput) preInput.value = '';
+    if (postInput) postInput.value = '';
+}
+
+// --- Global Error & Exception Guards ---
+if (typeof window !== 'undefined') {
+    window.addEventListener('error', function(event) {
+        console.error('System Safety Guard intercepted error:', event.error || event.message);
+    });
+    window.addEventListener('unhandledrejection', function(event) {
+        console.error('System Safety Guard intercepted unhandled rejection:', event.reason);
+    });
+}
+
 // --- Utilities ---
 function formatDate(date) {
-    if (isNaN(date)) return '';
-    let d = new Date(date), month = '' + (d.getMonth() + 1), day = '' + d.getDate(), year = d.getFullYear();
+    if (!date) return '';
+    let d = new Date(date);
+    if (isNaN(d.getTime())) return '';
+    let month = '' + (d.getMonth() + 1), day = '' + d.getDate(), year = d.getFullYear();
     if (month.length < 2) month = '0' + month;
     if (day.length < 2) day = '0' + day;
     return [year, month, day].join('-');
 }
+
 function formatDateExport(dateStr) {
+    if (!dateStr) return '';
     let d = new Date(dateStr);
+    if (isNaN(d.getTime())) return '';
     const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
-    return `${d.getDate()}-${months[d.getMonth()]}-${d.getFullYear().toString().substr(-2)}`;
+    let day = d.getDate();
+    let monthName = months[d.getMonth()] || '';
+    let yearShort = d.getFullYear().toString().substr(-2);
+    return `${day}-${monthName}-${yearShort}`;
 }
 
 function addMonths(date, months) {
     let d = new Date(date);
+    if (isNaN(d.getTime())) d = new Date();
     let originalDay = d.getDate();
-    d.setMonth(d.getMonth() + months);
+    let m = parseInt(months) || 0;
+    d.setMonth(d.getMonth() + m);
     if (d.getDate() !== originalDay && d.getDate() < 5) {
         d.setDate(0); 
     }
@@ -35,26 +114,47 @@ function addMonths(date, months) {
 }
 
 function formatCurr(num) {
-    return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'EGP' }).format(num);
+    if (num === null || num === undefined || isNaN(num)) return '0 EGP';
+    try {
+        return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'EGP' }).format(num);
+    } catch(e) {
+        return (Math.round(num) || 0) + ' EGP';
+    }
 }
+
 function formatNum(num) {
-    return new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 }).format(num);
+    if (num === null || num === undefined || isNaN(num)) return '0';
+    try {
+        return new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 }).format(num);
+    } catch(e) {
+        return (Math.round(num) || 0).toString();
+    }
 }
+
 function formatPct(num) {
+    if (num === null || num === undefined || isNaN(num)) return '0.00%';
     return (num * 100).toFixed(2) + '%';
 }
 
 function getRateForYear(y) {
-    if (y < 0) y = 0;
+    if (isNaN(y) || y < 0) y = 0;
     if (y > 15) y = 15;
-    return discountRates[y] / 100;
+    return (discountRates[y] || 0) / 100;
 }
 
 // --- UI Logic ---
 function setProject(proj) {
     currentProject = proj;
-    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-    event.target.classList.add('active');
+    document.querySelectorAll('.tab-btn').forEach(b => {
+        b.classList.remove('active');
+        if (b.innerText && b.innerText.includes(proj)) {
+            b.classList.add('active');
+        }
+    });
+    if (typeof event !== 'undefined' && event && event.target && event.target.classList) {
+        event.target.classList.add('active');
+    }
+    resetDistPresetInternal();
     renderBaseInputs();
     renderCustomInputs();
     calculate();
@@ -78,8 +178,16 @@ function applyTargetPrice() {
 
 function toggleFixedInst() {
     let chk = document.getElementById('fixed-inst-toggle').checked;
+    let wrapper = document.getElementById('fixed-inst-controls-wrapper');
+    let badge = document.getElementById('fixed-inst-status-badge');
     let valEl = document.getElementById('fixed-inst-val');
-    valEl.disabled = !chk;
+    
+    if (wrapper) wrapper.style.display = chk ? 'block' : 'none';
+    if (badge) {
+        badge.innerText = chk ? 'مفعّل' : 'غير مفعّل';
+        badge.style.color = chk ? 'var(--gold)' : 'var(--text-muted)';
+    }
+    
     if (chk && (!valEl.value || parseFloat(valEl.value) === 0)) {
         if (typeof globalCustomFlows !== 'undefined' && globalCustomFlows) {
             let currentInst = globalCustomFlows.find(f => f.isInst && !f.isMnt);
@@ -90,12 +198,200 @@ function toggleFixedInst() {
     calculate();
 }
 
+window.onFixedScopeChange = function() {
+    let scope = document.getElementById('fixed-inst-scope') ? document.getElementById('fixed-inst-scope').value : 'all';
+    let label = document.getElementById('fixed-inst-val-label');
+    if (label) {
+        if (scope === 'pre') label.innerText = 'قسط ما قبل الاستلام';
+        else if (scope === 'post') label.innerText = 'قسط ما بعد الاستلام';
+        else label.innerText = 'قيمة كل قسط';
+    }
+};
+
+window.applyRecYears = function(y) {
+    let yrEl = document.getElementById('duration-years');
+    if (yrEl) yrEl.value = y;
+    renderCustomInputs();
+    calculate();
+};
+
+window.applyRecDP = function(amt) {
+    let dp1Val = document.getElementById('dp1-val');
+    let dp1Type = document.getElementById('dp1-type');
+    if (dp1Val && dp1Type) {
+        dp1Val.value = amt;
+        dp1Type.value = 'amt';
+    }
+    calculate();
+};
+
+window.applyRecDeliv = function(amt) {
+    let delivVal = document.getElementById('deliv-val');
+    let delivType = document.getElementById('deliv-type');
+    if (delivVal && delivType) {
+        delivVal.value = amt;
+        delivType.value = 'amt';
+    }
+    calculate();
+};
+
+window.applyRecPreOnly = function() {
+    let scopeEl = document.getElementById('fixed-inst-scope');
+    if (scopeEl) scopeEl.value = 'pre';
+    window.onFixedScopeChange();
+    calculate();
+};
+
+window.applyFixedVal = function(v) {
+    let valEl = document.getElementById('fixed-inst-val');
+    if (valEl) valEl.value = v;
+    calculate();
+};
+
+window.onIntraYearToggle = function() {
+    let chk = document.getElementById('toggle-intra-year') ? document.getElementById('toggle-intra-year').checked : false;
+    let wrapper = document.getElementById('intra-year-controls-wrapper');
+    let badge = document.getElementById('intra-year-status-badge');
+    let valEl = document.getElementById('intra-year-val');
+    
+    if (wrapper) wrapper.style.display = chk ? 'block' : 'none';
+    if (badge) {
+        badge.innerText = chk ? 'مفعّل' : 'غير مفعّل';
+        badge.style.color = chk ? 'var(--accent-blue)' : 'var(--text-muted)';
+    }
+    
+    if (chk && valEl && (!valEl.value || parseFloat(valEl.value) === 0)) {
+        let type = document.getElementById('intra-year-type')?.value || 'amt';
+        valEl.value = (type === 'pct') ? '70' : '200000';
+    }
+    window.globalTableOverrides = {};
+    calculate();
+};
+
+window.onIntraYearTypeChange = function() {
+    let type = document.getElementById('intra-year-type')?.value || 'amt';
+    let valEl = document.getElementById('intra-year-val');
+    let freqMonths = parseInt(document.getElementById('payment-frequency')?.value) === 2 ? 6 : 3;
+    let label = document.getElementById('intra-year-val-label');
+    
+    if (label) {
+        label.innerText = freqMonths === 3 ? 'قسط أول 3 فترات ربع سنوية' : 'قسط الفترة النصف سنوية الأولى';
+    }
+    
+    if (valEl) {
+        if (type === 'pct') {
+            valEl.placeholder = 'مثال: 70%';
+            if (parseFloat(valEl.value) > 100) valEl.value = '70';
+        } else {
+            valEl.placeholder = 'مثال: 200000';
+            if (parseFloat(valEl.value) <= 100) valEl.value = '200000';
+        }
+    }
+    calculate();
+};
+
+window.applyIntraPreset = function(preset) {
+    let toggle = document.getElementById('toggle-intra-year');
+    if (toggle) toggle.checked = true;
+    let wrapper = document.getElementById('intra-year-controls-wrapper');
+    if (wrapper) wrapper.style.display = 'block';
+    let badge = document.getElementById('intra-year-status-badge');
+    if (badge) {
+        badge.innerText = 'مفعّل';
+        badge.style.color = 'var(--accent-blue)';
+    }
+    
+    let typeEl = document.getElementById('intra-year-type');
+    let valEl = document.getElementById('intra-year-val');
+    let scopeEl = document.getElementById('intra-year-scope');
+    
+    if (preset === '70_30') {
+        if (typeEl) typeEl.value = 'pct';
+        if (valEl) valEl.value = '70';
+    } else if (preset === 'amt_200k') {
+        if (typeEl) typeEl.value = 'amt';
+        if (valEl) valEl.value = '200000';
+    } else if (preset === 'amt_100k') {
+        if (typeEl) typeEl.value = 'amt';
+        if (valEl) valEl.value = '100000';
+    }
+    
+    if (scopeEl) scopeEl.value = 'all';
+    window.globalTableOverrides = {};
+    calculate();
+};
+
+function renderIntraGuidanceBox(g) {
+    let box = document.getElementById('intra-year-guidance-box');
+    let badge = document.getElementById('intra-year-status-badge');
+    if (!box) return;
+    
+    let isToggled = document.getElementById('toggle-intra-year') && document.getElementById('toggle-intra-year').checked;
+    
+    if (!g || !g.active || !isToggled) {
+        box.style.display = 'none';
+        if (badge && !isToggled) {
+            badge.innerText = 'غير مفعّل';
+            badge.style.color = 'var(--text-muted)';
+        }
+        return;
+    }
+    
+    if (badge) {
+        badge.innerText = 'مفعّل';
+        badge.style.color = 'var(--accent-blue)';
+    }
+    
+    box.style.display = 'block';
+    
+    let isQuarterly = (g.freqMonths === 3);
+    let regLabel = isQuarterly ? 'أول 3 أقساط ربع سنوية (Q1, Q2, Q3)' : 'القسط النصف سنوي الأول (H1)';
+    let bumpLabel = isQuarterly ? 'قسط نهاية السنة (Q4 المحمّل)' : 'قسط نهاية السنة (H2 المحمّل)';
+    
+    let html = '';
+    if (g.warning) {
+        html += `<div style="color: #e74c3c; font-weight: bold; margin-bottom: 6px;">⚠️ ${g.warning}</div>`;
+    }
+    
+    html += `
+        <div style="display: flex; flex-direction: column; gap: 4px;">
+            <div style="color: var(--text); font-weight: 600;">
+                💡 <strong>تفاصيل توزيع أقساط السنة:</strong>
+            </div>
+            <div style="display: flex; gap: 15px; flex-wrap: wrap; margin-top: 4px;">
+                <span style="color: var(--accent-blue);">• ${regLabel}: <strong>${formatCurr(g.regularAmt)}</strong></span>
+                <span style="color: var(--gold);">• ${bumpLabel}: <strong>${formatCurr(g.bumpAmt)}</strong></span>
+                <span style="color: var(--text-muted);">• إجمالي أقساط السنة: <strong>${formatCurr(g.yearTotal)}</strong></span>
+            </div>
+        </div>
+    `;
+    box.innerHTML = html;
+}
+
 function resetCustomInputs() {
     document.getElementById('duration-years').value = 8;
     document.getElementById('payment-frequency').value = 4;
-    document.getElementById('fixed-inst-toggle').checked = false;
-    document.getElementById('fixed-inst-val').disabled = true;
-    document.getElementById('fixed-inst-val').value = '';
+    
+    let fixToggle = document.getElementById('fixed-inst-toggle');
+    if (fixToggle) fixToggle.checked = false;
+    let fixVal = document.getElementById('fixed-inst-val');
+    if (fixVal) fixVal.value = '';
+    let fixScope = document.getElementById('fixed-inst-scope');
+    if (fixScope) fixScope.value = 'all';
+    let fixType = document.getElementById('fixed-inst-type');
+    if (fixType) fixType.value = 'amt';
+    
+    let wrapper = document.getElementById('fixed-inst-controls-wrapper');
+    if (wrapper) wrapper.style.display = 'none';
+    let badge = document.getElementById('fixed-inst-status-badge');
+    if (badge) {
+        badge.innerText = 'غير مفعّل';
+        badge.style.color = 'var(--text-muted)';
+    }
+    let counterpartEl = document.getElementById('fixed-inst-counterpart-info');
+    if (counterpartEl) counterpartEl.style.display = 'none';
+    let guidanceBox = document.getElementById('fixed-inst-guidance-box');
+    if (guidanceBox) guidanceBox.style.display = 'none';
     
     let instOverride = document.getElementById('custom-inst-count');
     if (instOverride) instOverride.value = '';
@@ -103,6 +399,7 @@ function resetCustomInputs() {
     document.querySelectorAll('#custom-inputs input[type="number"]').forEach(el => el.value = '');
     document.querySelectorAll('#custom-inputs select').forEach(el => el.value = 'pct');
     
+    resetDistPresetInternal();
     calculate();
 }
 
@@ -176,15 +473,25 @@ function getPeriod(months) {
 
 function applyDiscountLogic(f, contractDateStr) {
     if (!contractDateStr) {
-        contractDateStr = document.getElementById('contract-date').value;
+        let dateEl = document.getElementById('contract-date');
+        contractDateStr = dateEl ? dateEl.value : '';
+    }
+    if (!contractDateStr || isNaN(new Date(contractDateStr).getTime())) {
+        contractDateStr = formatDate(new Date());
     }
     
     let pDate = new Date(f.date);
+    if (isNaN(pDate.getTime())) {
+        pDate = new Date(contractDateStr);
+        f.date = contractDateStr;
+    }
     let cDate = new Date(contractDateStr);
+    
     let months = (pDate.getFullYear() - cDate.getFullYear()) * 12 + pDate.getMonth() - cDate.getMonth();
     if (pDate.getDate() < cDate.getDate() && pDate.getDate() < 28) {
         months--;
     }
+    months = Math.max(0, months);
     
     let ratesMap = {
         0: 0.18, 1: 0.15, 2: 0.13, 3: 0.10, 4: 0.10, 5: 0.09, 6: 0.09, 7: 0.09, 8: 0.09, 9: 0.09, 10: 0.09
@@ -193,6 +500,13 @@ function applyDiscountLogic(f, contractDateStr) {
     let isFlexible = flexibleToggle ? (flexibleToggle.value === 'yes') : false;
     
     if (currentProject === 'Zomra') {
+        if (f.isMnt) {
+            f.rate = 0;
+            f.period = 0;
+            f.pvFactor = 1;
+            f.pv = f.amount || 0;
+            return;
+        }
         let yearIndex = Math.floor(months / 12);
         let rate = ratesMap[yearIndex] !== undefined ? ratesMap[yearIndex] : 0.09;
         
@@ -203,7 +517,7 @@ function applyDiscountLogic(f, contractDateStr) {
         
         if (isFlexible) {
             let baseDate = new Date('2025-12-29');
-            let diffFromBase = Math.round((pDate - baseDate) / (1000 * 60 * 60 * 24));
+            let diffFromBase = Math.max(0, Math.round((pDate - baseDate) / (1000 * 60 * 60 * 24)));
             let r;
             if (diffFromBase < 54) r = 0.19;
             else if (diffFromBase < 419) r = 0.18;
@@ -214,24 +528,24 @@ function applyDiscountLogic(f, contractDateStr) {
             else r = 0.09;
             f.rate = r;
             f.pvFactor = 1 / Math.pow(1 + r / 365, diffFromBase);
-            f.pv = f.amount * f.pvFactor;
+            f.pv = (f.amount || 0) * f.pvFactor;
         } else {
-            if (f.id === 'dp1' || f.id === 'dp2' || f.isMnt) {
+            if (f.id === 'dp1' || f.id === 'dp2') {
                 f.rate = 0;
                 f.period = 0;
                 f.pvFactor = 1;
-                f.pv = f.amount;
+                f.pv = f.amount || 0;
             } else if (f.id === 'addl') {
                 f.rate = rate;
                 f.period = 2;
                 f.pvFactor = 1 / Math.pow(1 + rate / 4, 2);
-                f.pv = f.amount * f.pvFactor;
+                f.pv = (f.amount || 0) * f.pvFactor;
             } else {
-                let pmt = Math.round(months / 3);
+                let pmt = Math.max(0, Math.round(months / 3));
                 f.rate = rate;
                 f.period = pmt;
                 f.pvFactor = 1 / Math.pow(1 + rate / 4, pmt);
-                f.pv = f.amount * f.pvFactor;
+                f.pv = (f.amount || 0) * f.pvFactor;
             }
         }
     } else if (currentProject === 'Perla') {
@@ -239,21 +553,20 @@ function applyDiscountLogic(f, contractDateStr) {
             f.rate = 0;
             f.period = 0;
             f.pvFactor = 1;
-            f.pv = f.amount;
+            f.pv = f.amount || 0;
         } else {
-            let pmt = Math.round(months / 3);
+            let pmt = Math.max(0, Math.round(months / 3));
             f.period = pmt;
             
             if (pmt === 1) {
                 f.rate = 0.19; // DP2 in Excel gets 19%
             } else {
-                let yearIndex = Math.floor((pmt - 2) / 4);
+                let yearIndex = Math.max(0, Math.floor((pmt - 2) / 4));
                 f.rate = ratesMap[yearIndex] !== undefined ? ratesMap[yearIndex] : 0.09;
             }
             
             if (isFlexible) {
-                let diffDays = (pDate - cDate) / (1000 * 60 * 60 * 24);
-                diffDays = Math.round(diffDays);
+                let diffDays = Math.max(0, Math.round((pDate - cDate) / (1000 * 60 * 60 * 24)));
                 let r;
                 if (diffDays < 54) r = 0.19;
                 else if (diffDays < 419) r = 0.18;
@@ -266,14 +579,18 @@ function applyDiscountLogic(f, contractDateStr) {
             } else {
                 f.pvFactor = 1 / Math.pow(1 + f.rate / 4, f.period);
             }
-            f.pv = f.amount * f.pvFactor;
+            f.pv = (f.amount || 0) * f.pvFactor;
         }
     } else {
         f.period = getPeriod(f.months);
         f.rate = getRateForPeriod(f.period, f.isDP && f.months === 0);
         f.pvFactor = 1 / Math.pow(1 + f.rate / 4, f.period);
-        f.pv = f.amount * f.pvFactor;
+        f.pv = (f.amount || 0) * f.pvFactor;
     }
+    
+    // Final guard against any NaN or infinity
+    if (isNaN(f.pv) || !isFinite(f.pv)) f.pv = f.amount || 0;
+    if (isNaN(f.pvFactor) || !isFinite(f.pvFactor)) f.pvFactor = 1;
 }
 
 function getRateForPeriod(period, isDP) {
@@ -282,13 +599,16 @@ function getRateForPeriod(period, isDP) {
     return getRateForYear(year);
 }
 
-function generateFlowsTemplate(contractDateStr, years, freqMonths, isBase = false) {
+function generateFlowsTemplate(contractDateStr, years, freqMonths, isBase = false, customFirstDateStrParam = null) {
     let flows = [];
+    years = Math.max(1, Math.min(20, parseInt(years) || 8));
+    freqMonths = (parseInt(freqMonths) === 6 || parseInt(freqMonths) === 3) ? parseInt(freqMonths) : 3;
     let totalMonths = years * 12;
     
     // Check for overridden installment count
     let overrideEl = document.getElementById(isBase ? 'base-inst-count' : 'custom-inst-count');
     let overrideInstCount = (overrideEl && overrideEl.value) ? parseInt(overrideEl.value) : null;
+    if (isNaN(overrideInstCount) || overrideInstCount <= 0 || overrideInstCount > 120) overrideInstCount = null;
     
     // Check for overridden percentages (if empty, fallback to defaults)
     let getOverridePct = (id, def) => {
@@ -296,18 +616,22 @@ function generateFlowsTemplate(contractDateStr, years, freqMonths, isBase = fals
         if (el && el.value) {
             let typeEl = document.getElementById(isBase ? 'base-'+id+'-type' : id+'-type');
             if (!typeEl || typeEl.value === 'pct') {
-                return parseFloat(el.value) / 100;
+                let v = parseFloat(el.value);
+                return (!isNaN(v) && v >= 0) ? (v / 100) : def;
             }
         }
         return def;
     };
     
-    let customFirstDateStr = null;
-    if (!isBase) {
+    let customFirstDateStr = customFirstDateStrParam;
+    if (!isBase && !customFirstDateStr) {
         let el = document.getElementById('first-inst-date');
-        if (el && el.value) {
+        if (el && el.value && !isNaN(new Date(el.value).getTime())) {
             customFirstDateStr = el.value;
         }
+    }
+    if (!contractDateStr || isNaN(new Date(contractDateStr).getTime())) {
+        contractDateStr = formatDate(new Date());
     }
     let cDate = new Date(contractDateStr);
 
@@ -327,11 +651,12 @@ function generateFlowsTemplate(contractDateStr, years, freqMonths, isBase = fals
         flows.push({ id: 'mnt1', label: 'Maintenance 1', date: mnt1Date, months: 25, isMnt: true });
         flows.push({ id: 'mnt2', label: 'Maintenance 2', date: delivDate, months: 37, isMnt: true });
         
-        let numInst = overrideInstCount !== null && overrideInstCount !== "" ? parseInt(overrideInstCount) : (years * (12 / freqMonths));
+        let numInst = overrideInstCount !== null ? overrideInstCount : (years * (12 / freqMonths));
         
         let startMonth = 1 + freqMonths;
         let firstDate = customFirstDateStr ? new Date(customFirstDateStr) : null;
         let diffMonths = firstDate ? Math.round((firstDate - cDate) / (1000 * 60 * 60 * 24 * 30.44)) : startMonth;
+        if (diffMonths < 0) diffMonths = startMonth;
         
         for (let i = 0; i < numInst; i++) {
             let m = diffMonths + i * freqMonths;
@@ -351,11 +676,12 @@ function generateFlowsTemplate(contractDateStr, years, freqMonths, isBase = fals
         flows.push({ id: 'mnt1', label: 'Maintenance 1', date: mnt1Date, months: 36, isMnt: true });
         flows.push({ id: 'mnt2', label: 'Maintenance 2', date: delivDate, months: 48, isMnt: true });
         
-        let numInst = overrideInstCount !== null && overrideInstCount !== "" ? parseInt(overrideInstCount) : null;
+        let numInst = overrideInstCount !== null ? overrideInstCount : null;
         
         let startMonth = 3 + freqMonths;
         let firstDate = customFirstDateStr ? new Date(customFirstDateStr) : null;
         let diffMonths = firstDate ? Math.round((firstDate - cDate) / (1000 * 60 * 60 * 24 * 30.44)) : startMonth;
+        if (diffMonths < 0) diffMonths = startMonth;
         
         let curMonth = diffMonths;
         let instList = [];
@@ -366,7 +692,11 @@ function generateFlowsTemplate(contractDateStr, years, freqMonths, isBase = fals
                 curMonth += freqMonths;
             }
         } else {
-            while (curMonth <= totalMonths) { instList.push(curMonth); curMonth += freqMonths; }
+            let loopSafety = 0;
+            while (curMonth <= totalMonths && loopSafety++ < 200) { 
+                instList.push(curMonth); 
+                curMonth += freqMonths; 
+            }
             if (freqMonths === 6 && !customFirstDateStr && instList.length > 0 && instList[instList.length-1] > totalMonths - 3) instList.pop(); 
         }
         
@@ -431,24 +761,26 @@ function calculateBaseFlows(price, template) {
 function getCustomInputAmt(id, price) {
     let valEl = document.getElementById(id + '-val');
     let typeEl = document.getElementById(id + '-type');
-    if (!valEl || !valEl.value) return null;
+    if (!valEl || valEl.value.trim() === '') return null;
     let v = parseFloat(valEl.value);
-    if (isNaN(v)) return null;
-    if (typeEl.value === 'pct') return price * (v / 100);
+    if (isNaN(v) || v < 0) return null;
+    if (typeEl && typeEl.value === 'pct') return price * (v / 100);
     return v;
 }
 
 function solveForPrice(basePv, template) {
+    if (!template || template.length === 0 || basePriceCache <= 0 || !basePv || isNaN(basePv) || basePv <= 0) {
+        return basePriceCache || 0;
+    }
     let low = 0, high = basePriceCache * 10, bestPrice = basePriceCache;
     
     for (let i = 0; i < 50; i++) {
         let mid = (low + high) / 2;
         let testPv = 0;
         
-        // Use the exact custom flow logic (including table overrides) to calculate PV for this test price
         let tempFlows = calculateCustomFlows(mid, template);
         tempFlows.forEach(f => {
-            if (!f.isMnt) testPv += f.pv;
+            if (!f.isMnt) testPv += (f.pv || 0);
         });
         
         if (testPv > basePv) high = mid; else low = mid;
@@ -459,9 +791,12 @@ function solveForPrice(basePv, template) {
 }
 
 window.onTargetPriceChange = function() {
-    let priceStr = document.getElementById('target-price-val').value;
-    let basePrice = parseFloat(document.getElementById('base-price').value) || 0;
+    let priceEl = document.getElementById('target-price-val');
     let pctEl = document.getElementById('target-pct-val');
+    if (!priceEl || !pctEl) return;
+    let priceStr = priceEl.value;
+    let basePriceInput = document.getElementById('base-price');
+    let basePrice = parseFloat(basePriceInput ? basePriceInput.value : 0) || 0;
     
     if (priceStr.trim() === '') {
         pctEl.value = '';
@@ -470,14 +805,19 @@ window.onTargetPriceChange = function() {
         if (!isNaN(price) && basePrice > 0) {
             let pct = ((price - basePrice) / basePrice) * 100;
             pctEl.value = pct.toFixed(2);
+        } else {
+            pctEl.value = '';
         }
     }
 };
 
 window.onTargetPctChange = function() {
-    let pctStr = document.getElementById('target-pct-val').value;
-    let basePrice = parseFloat(document.getElementById('base-price').value) || 0;
+    let pctEl = document.getElementById('target-pct-val');
     let priceEl = document.getElementById('target-price-val');
+    if (!pctEl || !priceEl) return;
+    let pctStr = pctEl.value;
+    let basePriceInput = document.getElementById('base-price');
+    let basePrice = parseFloat(basePriceInput ? basePriceInput.value : 0) || 0;
     
     if (pctStr.trim() === '') {
         priceEl.value = '';
@@ -486,14 +826,13 @@ window.onTargetPctChange = function() {
         if (!isNaN(pct) && basePrice > 0) {
             let price = basePrice * (1 + pct / 100);
             priceEl.value = Math.round(price);
+        } else {
+            priceEl.value = '';
         }
     }
 };
 
 function calculateCustomFlows(price, template, options = {}) {
-    let isFixedInst = document.getElementById('fixed-inst-toggle').checked;
-    let fixedInstVal = parseFloat(document.getElementById('fixed-inst-val').value) || 0;
-    
     let dp1 = getCustomInputAmt('dp1', price);
     let dp2 = getCustomInputAmt('dp2', price);
     let addl = getCustomInputAmt('addl', price);
@@ -515,23 +854,20 @@ function calculateCustomFlows(price, template, options = {}) {
                 let d2 = new Date(f.date);
                 f.months = Math.round((d2 - d1) / (1000 * 60 * 60 * 24 * 30.416));
             }
-            let is7030 = document.getElementById('toggle-70-30') && document.getElementById('toggle-70-30').checked;
-            let priceForDPs = is7030 ? basePriceCache : price;
-            
             // Priority 1: Table overrides
             if (overrides[f.id] && overrides[f.id].amount !== undefined) {
                 let ov = overrides[f.id];
-                f.amount = ov.isPct ? priceForDPs * (ov.amount / 100) : ov.amount;
+                f.amount = ov.isPct ? price * (ov.amount / 100) : ov.amount;
                 f.isFixedOverride = true;
             } 
             // Priority 2: Input fields for DP/Addl/Deliv
-            else if (f.id === 'dp1') f.amount = dp1 !== null ? dp1 : priceForDPs * (f.defaultPct||0);
-            else if (f.id === 'dp2') f.amount = dp2 !== null ? dp2 : priceForDPs * (f.defaultPct||0);
-            else if (f.id === 'addl') f.amount = addl !== null ? addl : priceForDPs * (f.defaultPct||0);
-            else if (f.id === 'deliv') f.amount = deliv !== null ? deliv : priceForDPs * (f.defaultPct||0);
+            else if (f.id === 'dp1') f.amount = dp1 !== null ? dp1 : price * (f.defaultPct||0);
+            else if (f.id === 'dp2') f.amount = dp2 !== null ? dp2 : price * (f.defaultPct||0);
+            else if (f.id === 'addl') f.amount = addl !== null ? addl : price * (f.defaultPct||0);
+            else if (f.id === 'deliv') f.amount = deliv !== null ? deliv : price * (f.defaultPct||0);
             else if (f.isMerged) {
                 let m_amt = 0;
-                if (f.mergedIds.includes('deliv')) m_amt += deliv !== null ? deliv : priceForDPs * 0.05;
+                if (f.mergedIds.includes('deliv')) m_amt += deliv !== null ? deliv : price * 0.05;
                 f.amount = m_amt; 
                 f._mergedDelivAmt = m_amt;
             }
@@ -550,195 +886,238 @@ function calculateCustomFlows(price, template, options = {}) {
     });
     
     let dynamicInsts = flows.filter(f => (f.isInst || f.isMerged) && !f.isFixedOverride);
+    
+    let isFixedInst = document.getElementById('fixed-inst-toggle') && document.getElementById('fixed-inst-toggle').checked;
+    let fixedInstScope = document.getElementById('fixed-inst-scope') ? document.getElementById('fixed-inst-scope').value : 'all';
+    let fixedInstVal = document.getElementById('fixed-inst-val') ? parseFloat(document.getElementById('fixed-inst-val').value) : 0;
+    let fixedInstType = document.getElementById('fixed-inst-type') ? document.getElementById('fixed-inst-type').value : 'amt';
     let hasFixedInst = isFixedInst && fixedInstVal > 0;
+    
+    let delivMonth = currentProject === 'Zomra' ? 37 : 48;
+    let preInsts = dynamicInsts.filter(f => f.months <= delivMonth);
+    let postInsts = dynamicInsts.filter(f => f.months > delivMonth);
+    let nPre = preInsts.length;
+    let nPost = postInsts.length;
+    let nTotal = nPre + nPost;
+    
+    let remPct = price > 0 ? (remAmt / price) * 100 : 0;
+    let standardMilestonesPct = (currentProject === 'Zomra') ? 15.0 : 10.0;
+    let standardBaselinePool = 100.0 - standardMilestonesPct;
+    let basePrePct = nTotal > 0 ? standardBaselinePool * (nPre / nTotal) : 0;
+    let basePostPct = nTotal > 0 ? standardBaselinePool * (nPost / nTotal) : 0;
+    
+    let distMode = window.globalDistState ? window.globalDistState.mode : 'auto';
+    let typedPre = window.globalDistState ? window.globalDistState.typedPrePct : null;
+    let typedPost = window.globalDistState ? window.globalDistState.typedPostPct : null;
+    
+    let fixedAmt = 0;
     if (hasFixedInst) {
-        let dynInsts = flows.filter(f => (f.isInst || f.isMerged) && !f.isFixedOverride);
-        if (dynInsts.length > 0) {
-            let totalDynInstsAmt = dynInsts.length * fixedInstVal;
-            
-            let sumFixedAmts = 0;
-            let sumPct = 0;
-            
-            flows.forEach(f => {
-                if (f.isMnt) return;
-                
-                if ((f.isInst || f.isMerged) && !f.isFixedOverride) {
-                    // Handled above
-                } else {
-                    let isPct = false;
-                    let pctVal = 0;
-                    
-                    let ov = overrides[f.id];
-                    if (ov && ov.amount !== undefined) {
-                        isPct = ov.isPct;
-                        pctVal = isPct ? ov.amount / 100 : 0;
-                    } else {
-                        // Check side panel explicitly
-                        let el = document.getElementById(f.id + '-val');
-                        if (el && el.value) {
-                            isPct = document.getElementById(f.id + '-type').value === 'pct';
-                            pctVal = isPct ? parseFloat(el.value) / 100 : 0;
-                        } else {
-                            // Default behavior
-                            if (f.defaultPct !== undefined) {
-                                isPct = true;
-                                pctVal = f.defaultPct;
-                            } else {
-                                isPct = false;
-                            }
-                        }
-                    }
-                    
-                    if (isPct) {
-                        sumPct += pctVal;
-                    } else {
-                        sumFixedAmts += f.amount; // Use the properly calculated amount
-                    }
-                    
-                    f._tempIsPct = isPct;
-                    f._tempPctVal = pctVal;
-                }
-            });
-            
-            let targetPriceStr = document.getElementById('target-price-val') ? document.getElementById('target-price-val').value : '';
-            let targetPrice = parseFloat(targetPriceStr);
-            let hasTargetPrice = targetPriceStr.trim() !== '' && !isNaN(targetPrice);
+        fixedAmt = fixedInstType === 'pct' ? price * (fixedInstVal / 100) : fixedInstVal;
+    }
+    
+    let actualPrePct = 0;
+    let actualPostPct = 0;
+    let instAmtPre = 0;
+    let instAmtPost = 0;
 
-            if (hasTargetPrice && sumPct < 1) {
-                let newTotalPrice = targetPrice;
-                let freqMonths = document.getElementById('payment-frequency') ? parseInt(document.getElementById('payment-frequency').value) : 3;
-                if (freqMonths !== 3 && freqMonths !== 6) freqMonths = 3;
-                let instsPerYear = 12 / freqMonths;
-                
-                let annualInsts = [];
-                dynInsts.forEach((f, i) => {
-                    if ((i % instsPerYear) === (instsPerYear - 1)) {
-                        annualInsts.push(f);
-                    }
-                });
-                
-                if (annualInsts.length === 0 && dynInsts.length > 0) {
-                    annualInsts.push(dynInsts[dynInsts.length - 1]);
-                }
-                
-                let sumDPsAndOverrides = sumFixedAmts + (newTotalPrice * sumPct);
-                let annualPool = newTotalPrice - sumDPsAndOverrides - totalDynInstsAmt;
-                let annualBonus = annualInsts.length > 0 ? (annualPool / annualInsts.length) : 0;
-                
-                flows.forEach(f => {
-                    if (f.isMnt) return;
-                    if ((f.isInst || f.isMerged) && !f.isFixedOverride) {
-                        f.amount = (f._mergedDelivAmt || 0) + fixedInstVal;
-                    } else {
-                        if (f._tempIsPct) {
-                            f.amount = newTotalPrice * f._tempPctVal;
-                        }
-                    }
-                    if (f.pvFactor !== undefined) f.pv = f.amount * f.pvFactor;
-                    
-                    delete f._tempIsPct;
-                    delete f._tempPctVal;
-                });
-                
-                // Add independent Annual Bonus rows
-                if (annualBonus > 0 && annualInsts.length > 0) {
-                    let bonusFlows = [];
-                    annualInsts.forEach((inst, index) => {
-                        bonusFlows.push({
-                            id: 'annual_bonus_' + index,
-                            label: `دفعة سنوية (السنة ${index + 1})`,
-                            date: inst.date, // Same date as Q4 installment
-                            amount: annualBonus,
-                            pvFactor: inst.pvFactor,
-                            pv: annualBonus * (inst.pvFactor || 1),
-                            isAnnualBonus: true
-                        });
-                    });
-                    
-                    // Insert bonus flows immediately after their corresponding Q4 installments
-                    bonusFlows.forEach(bf => {
-                        let insertIndex = flows.findIndex(f => f.date === bf.date && (f.isInst || f.isMerged));
-                        if (insertIndex !== -1) {
-                            flows.splice(insertIndex + 1, 0, bf);
-                        } else {
-                            flows.push(bf);
-                        }
-                    });
-                }
-            } else if (sumPct < 1) {
-                let newTotalPrice = (sumFixedAmts + totalDynInstsAmt) / (1 - sumPct);
-                
-                flows.forEach(f => {
-                    if (f.isMnt) return;
-                    if ((f.isInst || f.isMerged) && !f.isFixedOverride) {
-                        f.amount = (f._mergedDelivAmt || 0) + fixedInstVal;
-                    } else {
-                        if (f._tempIsPct) {
-                            f.amount = newTotalPrice * f._tempPctVal;
-                        }
-                    }
-                    if (f.pvFactor !== undefined) f.pv = f.amount * f.pvFactor;
-                    
-                    delete f._tempIsPct;
-                    delete f._tempPctVal;
-                });
+    if (hasFixedInst) {
+        if (fixedInstScope === 'pre') {
+            instAmtPre = fixedAmt;
+            let totalPreAmt = nPre * instAmtPre;
+            let remPost = remAmt - totalPreAmt;
+            instAmtPost = nPost > 0 ? (remPost / nPost) : 0;
+            actualPrePct = price > 0 ? (totalPreAmt / price) * 100 : 0;
+            actualPostPct = price > 0 ? ((nPost * instAmtPost) / price) * 100 : 0;
+            distMode = 'custom';
+        } else if (fixedInstScope === 'post') {
+            instAmtPost = fixedAmt;
+            let totalPostAmt = nPost * instAmtPost;
+            let remPre = remAmt - totalPostAmt;
+            instAmtPre = nPre > 0 ? (remPre / nPre) : 0;
+            actualPostPct = price > 0 ? (totalPostAmt / price) * 100 : 0;
+            actualPrePct = price > 0 ? ((nPre * instAmtPre) / price) * 100 : 0;
+            distMode = 'custom';
+        } else {
+            // Scope === 'all'
+            instAmtPre = fixedAmt;
+            instAmtPost = fixedAmt;
+            actualPrePct = price > 0 ? ((nPre * fixedAmt) / price) * 100 : 0;
+            actualPostPct = price > 0 ? ((nPost * fixedAmt) / price) * 100 : 0;
+            distMode = 'equal';
+        }
+    } else {
+        // Normal distribution (auto / front / back / equal / custom typed percentages)
+        if (nTotal === 0) {
+            actualPrePct = 0;
+            actualPostPct = 0;
+        } else if (nPost === 0) {
+            actualPrePct = remPct;
+            actualPostPct = 0;
+        } else if (nPre === 0) {
+            actualPrePct = 0;
+            actualPostPct = remPct;
+        } else if (distMode === 'custom' && typedPre !== null && !isNaN(typedPre)) {
+            actualPrePct = Math.max(0, Math.min(remPct, typedPre));
+            actualPostPct = remPct - actualPrePct;
+        } else if (distMode === 'custom' && typedPost !== null && !isNaN(typedPost)) {
+            actualPostPct = Math.max(0, Math.min(remPct, typedPost));
+            actualPrePct = remPct - actualPostPct;
+        } else if (distMode === 'equal') {
+            actualPrePct = remPct * (nPre / nTotal);
+            actualPostPct = remPct * (nPost / nTotal);
+        } else if (distMode === 'back') {
+            actualPrePct = Math.min(remPct, basePrePct);
+            actualPostPct = remPct - actualPrePct;
+        } else {
+            // 'auto' or 'front':
+            if (remPct >= basePostPct) {
+                actualPostPct = basePostPct;
+                actualPrePct = remPct - actualPostPct;
             } else {
-                dynInsts.forEach(f => {
-                    f.amount = (f._mergedDelivAmt || 0) + fixedInstVal;
-                    if (f.pvFactor !== undefined) f.pv = f.amount * f.pvFactor;
-                });
+                actualPrePct = remPct * (nPre / nTotal);
+                actualPostPct = remPct - actualPostPct;
             }
         }
+        
+        let prePoolAmt = price * (actualPrePct / 100);
+        let postPoolAmt = price * (actualPostPct / 100);
+        instAmtPre = nPre > 0 ? prePoolAmt / nPre : 0;
+        instAmtPost = nPost > 0 ? postPoolAmt / nPost : 0;
     }
-    let instAmt = isFixedInst ? fixedInstVal : (dynamicInsts.length > 0 ? remAmt / dynamicInsts.length : 0);
+    
+    flows._distInfo = {
+        remPct: remPct,
+        actualPrePct: actualPrePct,
+        actualPostPct: actualPostPct,
+        mode: distMode,
+        nPre: nPre,
+        nPost: nPost
+    };
+    
+    flows._fixedGuidance = {
+        isFixedInst: isFixedInst,
+        hasFixedInst: hasFixedInst,
+        scope: fixedInstScope,
+        val: fixedInstVal,
+        type: fixedInstType,
+        fixedAmt: fixedAmt,
+        instAmtPre: instAmtPre,
+        instAmtPost: instAmtPost,
+        nPre: nPre,
+        nPost: nPost,
+        nTotal: nTotal,
+        remAmt: remAmt,
+        price: price,
+        actualPrePct: actualPrePct,
+        actualPostPct: actualPostPct
+    };
     
     let instIndex = 0;
     let freqMonths = parseInt(document.getElementById('payment-frequency')?.value) === 2 ? 6 : 3;
     let instsPerYear = 12 / freqMonths;
-    let is7030 = document.getElementById('toggle-70-30') && document.getElementById('toggle-70-30').checked;
+    
+    // Intra-Year Shift / Balloon logic (Supports custom amount, percentage, and legacy 70/30)
+    let isIntraToggle = document.getElementById('toggle-intra-year') && document.getElementById('toggle-intra-year').checked;
+    let isLegacy7030 = document.getElementById('toggle-70-30') && document.getElementById('toggle-70-30').checked;
+    let isIntraYearActive = isIntraToggle || isLegacy7030;
+    
+    let intraScope = document.getElementById('intra-year-scope')?.value || 'all';
+    let intraType = document.getElementById('intra-year-type')?.value || 'amt';
+    let intraValRaw = document.getElementById('intra-year-val') ? parseFloat(document.getElementById('intra-year-val').value) : NaN;
+    
+    if (isLegacy7030 && (!isIntraToggle || isNaN(intraValRaw) || intraValRaw <= 0)) {
+        intraType = 'pct';
+        intraValRaw = 70;
+        intraScope = 'all';
+    }
+    
+    let hasIntraYearShift = isIntraYearActive && !isNaN(intraValRaw) && intraValRaw > 0;
     
     let accumulatedWithheld = 0;
+    let intraGuidanceInfo = {
+        active: hasIntraYearShift,
+        scope: intraScope,
+        type: intraType,
+        val: intraValRaw,
+        freqMonths: freqMonths,
+        instsPerYear: instsPerYear,
+        regularAmt: 0,
+        bumpAmt: 0,
+        yearTotal: 0,
+        warning: null
+    };
 
     flows.forEach(f => {
         if ((f.isInst || f.isMerged) && !f.isFixedOverride) {
-            if (!hasFixedInst) {
-                let currentInstAmt = instAmt;
-                if (is7030) {
-                    let isBumpInst = false;
-                    if (currentProject === 'Perla') {
-                        isBumpInst = (f.months % 12 === 0 && f.months > 0);
-                    } else {
-                        isBumpInst = (instIndex % instsPerYear === instsPerYear - 1);
-                    }
-                    
-                    let isLastInst = (instIndex === dynamicInsts.length - 1);
-                    
-                    if (isBumpInst || isLastInst) {
-                        currentInstAmt = instAmt + accumulatedWithheld;
-                        accumulatedWithheld = 0;
-                    } else {
-                        currentInstAmt = instAmt * 0.70;
-                        accumulatedWithheld += (instAmt * 0.30);
+            let baseInstAmt = (f.months <= delivMonth) ? instAmtPre : instAmtPost;
+            let currentInstAmt = baseInstAmt;
+            
+            let applyShift = hasIntraYearShift;
+            if (intraScope === 'pre' && f.months > delivMonth) applyShift = false;
+            if (intraScope === 'post' && f.months <= delivMonth) applyShift = false;
+            
+            if (applyShift) {
+                let isBumpInst = false;
+                if (currentProject === 'Perla') {
+                    isBumpInst = (f.months % 12 === 0 && f.months > 0);
+                } else {
+                    isBumpInst = (instIndex % instsPerYear === instsPerYear - 1);
+                }
+                
+                let isLastInst = (instIndex === dynamicInsts.length - 1);
+                
+                let cycleTotal = baseInstAmt * instsPerYear;
+                let regularInstCount = instsPerYear - 1;
+                let maxSafeLight = regularInstCount > 0 ? (cycleTotal / regularInstCount) * 0.99 : cycleTotal;
+                
+                let lightAmt = 0;
+                if (intraType === 'pct') {
+                    lightAmt = baseInstAmt * (intraValRaw / 100);
+                } else {
+                    lightAmt = intraValRaw;
+                    if (regularInstCount > 0 && lightAmt >= cycleTotal / regularInstCount) {
+                        intraGuidanceInfo.warning = `القسط المدخل (${Math.round(lightAmt).toLocaleString()} ج.م) أكبر من المتاح لكل فترة (${Math.round(cycleTotal/regularInstCount).toLocaleString()} ج.م)`;
+                        lightAmt = maxSafeLight;
                     }
                 }
-                f.amount = (f._mergedDelivAmt || 0) + currentInstAmt;
+                
+                if (isBumpInst || isLastInst) {
+                    currentInstAmt = baseInstAmt + accumulatedWithheld;
+                    accumulatedWithheld = 0;
+                    if (intraGuidanceInfo.bumpAmt === 0) {
+                        intraGuidanceInfo.bumpAmt = currentInstAmt;
+                        intraGuidanceInfo.yearTotal = cycleTotal;
+                    }
+                } else {
+                    currentInstAmt = lightAmt;
+                    let withheld = baseInstAmt - lightAmt;
+                    accumulatedWithheld += withheld;
+                    if (intraGuidanceInfo.regularAmt === 0) {
+                        intraGuidanceInfo.regularAmt = lightAmt;
+                    }
+                }
             }
+            
+            f.amount = (f._mergedDelivAmt || 0) + currentInstAmt;
             instIndex++;
         } else if ((f.isInst || f.isMerged) && f.isFixedOverride) {
-            instIndex++; // maintain 70/30 rhythm if relevant
+            instIndex++;
         }
         
         delete f._mergedDelivAmt;
         applyDiscountLogic(f);
     });
     
+    flows._intraGuidance = intraGuidanceInfo;
     return flows;
 }
 
 function applyPerfectPercentages(flows, totalAmt) {
+    if (!flows || !Array.isArray(flows)) return [];
+    let validTotal = (totalAmt > 0 && !isNaN(totalAmt)) ? totalAmt : 0;
     flows.forEach(f => {
         if (!f.isMnt) {
-            f.exactPct = f.amount / totalAmt;
+            f.exactPct = validTotal > 0 ? ((f.amount || 0) / validTotal) : 0;
             let pct = f.exactPct * 100;
             f.displayPct = parseFloat(pct.toFixed(7)).toString();
         } else {
@@ -750,6 +1129,7 @@ function applyPerfectPercentages(flows, totalAmt) {
 }
 
 function updatePreDeliveryTracker(flows, elementId) {
+    if (!flows || !Array.isArray(flows)) return;
     let delivMonth = currentProject === 'Zomra' ? 37 : 48; // Zomra delivery is month 37
     let pct = 0;
     flows.forEach(f => {
@@ -762,322 +1142,587 @@ function updatePreDeliveryTracker(flows, elementId) {
     if (el) el.innerText = pct.toFixed(2) + '%';
 }
 
-window.generateSmartOptions = function() {
-    let targetPriceStr = document.getElementById('target-price-val') ? document.getElementById('target-price-val').value : '';
+function updateDistUI(distInfo) {
+    if (!distInfo) return;
+    let remPct = distInfo.remPct || 0;
+    let actualPrePct = distInfo.actualPrePct || 0;
+    let actualPostPct = distInfo.actualPostPct || 0;
+    let mode = window.globalDistState ? window.globalDistState.mode : 'auto';
+
+    let poolBadge = document.getElementById('inst-pool-badge');
+    if (poolBadge) {
+        poolBadge.innerText = `المتاح للأقساط: ${remPct.toFixed(2)}%`;
+    }
+
+    let preInput = document.getElementById('pre-deliv-inst-pct');
+    let postInput = document.getElementById('post-deliv-inst-pct');
+    let indicator = document.getElementById('dist-mode-indicator');
+
     let isFixedInst = document.getElementById('fixed-inst-toggle') && document.getElementById('fixed-inst-toggle').checked;
+    let fixedInstScope = document.getElementById('fixed-inst-scope') ? document.getElementById('fixed-inst-scope').value : 'all';
     let fixedInstVal = document.getElementById('fixed-inst-val') ? parseFloat(document.getElementById('fixed-inst-val').value) : 0;
-    
-    let container = document.getElementById('smart-options-container');
-    let targetPrice = parseFloat(targetPriceStr);
-    let hasTargetPrice = targetPriceStr.trim() !== '' && !isNaN(targetPrice);
     let hasFixedInst = isFixedInst && fixedInstVal > 0;
+
+    if (preInput && postInput) {
+        preInput.placeholder = actualPrePct.toFixed(2) + '%';
+        postInput.placeholder = actualPostPct.toFixed(2) + '%';
+
+        if (document.activeElement === preInput) {
+            postInput.value = actualPostPct.toFixed(2);
+        } else if (document.activeElement === postInput) {
+            preInput.value = actualPrePct.toFixed(2);
+        } else {
+            preInput.value = actualPrePct.toFixed(2);
+            postInput.value = actualPostPct.toFixed(2);
+        }
+    }
+
+    if (indicator) {
+        if (hasFixedInst) {
+            if (fixedInstScope === 'pre') {
+                indicator.innerText = `الوضع: تثبيت قسط قبل الاستلام عند ${formatNum(fixedInstVal)} ج.م (بعد الاستلام محسوب بالتساوي)`;
+                indicator.style.color = 'var(--gold)';
+            } else if (fixedInstScope === 'post') {
+                indicator.innerText = `الوضع: تثبيت قسط بعد الاستلام عند ${formatNum(fixedInstVal)} ج.م (قبل الاستلام محسوب بالتساوي)`;
+                indicator.style.color = 'var(--accent-blue)';
+            } else {
+                indicator.innerText = `الوضع: تثبيت جميع الأقساط عند ${formatNum(fixedInstVal)} ج.م`;
+                indicator.style.color = 'var(--gold)';
+            }
+        } else if (mode === 'front') {
+            indicator.innerText = `الوضع: Front-Loaded (تحميل قبل الاستلام: ${actualPrePct.toFixed(2)}% | بعد: ${actualPostPct.toFixed(2)}%)`;
+            indicator.style.color = 'var(--gold)';
+        } else if (mode === 'back') {
+            indicator.innerText = `الوضع: Back-Loaded (تحميل بعد الاستلام: ${actualPostPct.toFixed(2)}% | قبل: ${actualPrePct.toFixed(2)}%)`;
+            indicator.style.color = 'var(--accent-blue)';
+        } else if (mode === 'equal') {
+            indicator.innerText = `الوضع: متساوي (توزيع متساوي على كل الأقساط)`;
+            indicator.style.color = 'var(--text-muted)';
+        } else if (mode === 'custom') {
+            indicator.innerText = `الوضع: مخصص يدوي (قبل: ${actualPrePct.toFixed(2)}% | بعد: ${actualPostPct.toFixed(2)}%)`;
+            indicator.style.color = '#2ecc71';
+        } else {
+            indicator.innerText = `الوضع: تلقائي (تحميل أي دفعة ملغية على ما قبل الاستلام)`;
+            indicator.style.color = 'var(--text-muted)';
+        }
+    }
+}
+
+function renderFixedGuidanceBox(g) {
+    let counterpartEl = document.getElementById('fixed-inst-counterpart-info');
+    let guidanceBox = document.getElementById('fixed-inst-guidance-box');
     
-    if (!hasTargetPrice && !hasFixedInst) {
-        container.style.display = 'none';
-        window.activeSmartOption = null;
-        calculate();
+    if (!g || !g.hasFixedInst) {
+        if (counterpartEl) counterpartEl.style.display = 'none';
+        if (guidanceBox) guidanceBox.style.display = 'none';
         return;
     }
     
-    container.style.display = 'block';
-    let currentYrs = parseInt(document.getElementById('duration-years').value) || 8;
-    let freqMonths = parseInt(document.getElementById('payment-frequency').value) === 2 ? 6 : 3;
-    let dStr = document.getElementById('contract-date').value || new Date();
+    let price = g.price || basePriceCache || 0;
+    let remAmt = g.remAmt || 0;
+    let currentYears = parseInt(document.getElementById('duration-years').value) || 8;
     
-    function simulateOutcome(testYrs) {
-        let tempTpl = generateFlowsTemplate(dStr, testYrs, freqMonths);
-        let priceToUse = hasTargetPrice ? targetPrice : (basePriceCache || 1000000);
-        let tempFlows = calculateCustomFlows(priceToUse, tempTpl);
-        
-        let price = tempFlows.filter(f => !f.isMnt).reduce((s, f) => s + f.amount, 0);
-        let firstInst = tempFlows.find(f => (f.isInst || f.isMerged) && !f.isFixedOverride);
-        let inst = firstInst ? firstInst.amount : 0;
-        
-        let annualFlow = tempFlows.find(f => f.label && f.label.indexOf('دفعة سنوية') !== -1);
-        let annualBonus = 0;
-        if (hasTargetPrice && hasFixedInst) {
-            annualBonus = annualFlow ? annualFlow.amount - inst : 0;
+    // 1. Counterpart Info
+    if (counterpartEl) {
+        counterpartEl.style.display = 'block';
+        if (g.scope === 'pre') {
+            counterpartEl.innerHTML = `
+                <div style="color: var(--accent-blue); font-weight: bold; font-size: 0.9rem;">
+                    ➡️ الأقساط بعد الاستلام (محسوبة تلقائياً بالتساوي): 
+                    <span style="color: #fff;">${formatCurr(g.instAmtPost)}</span> 
+                    (${g.actualPostPct.toFixed(2)}% إجمالي / ${(g.nPost > 0 ? g.actualPostPct / g.nPost : 0).toFixed(2)}% لكل قسط) 
+                    | عدد: ${g.nPost} قسطاً
+                </div>`;
+        } else if (g.scope === 'post') {
+            counterpartEl.innerHTML = `
+                <div style="color: var(--accent-blue); font-weight: bold; font-size: 0.9rem;">
+                    ➡️ الأقساط قبل الاستلام (محسوبة تلقائياً بالتساوي): 
+                    <span style="color: #fff;">${formatCurr(g.instAmtPre)}</span> 
+                    (${g.actualPrePct.toFixed(2)}% إجمالي / ${(g.nPre > 0 ? g.actualPrePct / g.nPre : 0).toFixed(2)}% لكل قسط) 
+                    | عدد: ${g.nPre} قسطاً
+                </div>`;
+        } else {
+            let totalInst = g.nTotal * g.fixedAmt;
+            counterpartEl.innerHTML = `
+                <div style="color: var(--gold); font-weight: bold; font-size: 0.9rem;">
+                    ➡️ إجمالي الأقساط على ${currentYears} سنوات (${g.nTotal} قسطاً): 
+                    <span style="color: #fff;">${formatCurr(totalInst)}</span> 
+                    (${(price > 0 ? (totalInst / price) * 100 : 0).toFixed(2)}% من السعر)
+                </div>`;
         }
-        return { price, inst, annualBonus };
     }
     
-    let html = '<h4 style="color:#0078D7;">💡 تحليلات الذكاء الاصطناعي لتوقع السداد</h4><div style="display:flex; flex-direction:column; gap:10px;">';
-    
-    let optionsToTest = [];
-    if (currentYrs < 10) optionsToTest.push({ id: 'add_1', label: `زيادة سنة (${currentYrs + 1} سنوات)`, yrs: currentYrs + 1 });
-    if (currentYrs < 9) optionsToTest.push({ id: 'add_2', label: `زيادة سنتين (${currentYrs + 2} سنوات)`, yrs: currentYrs + 2 });
-    if (currentYrs > 1) optionsToTest.push({ id: 'sub_1', label: `تقليل سنة (${currentYrs - 1} سنوات)`, yrs: currentYrs - 1 });
-    
-    let scaleOut = simulateOutcome(currentYrs);
-    
-    if (hasTargetPrice && hasFixedInst) {
-        let aiYrs = adjustDurationToHitInstallment(targetPrice, fixedInstVal);
-        let aiOut = simulateOutcome(aiYrs);
+    // 2. Feasibility & Guidance
+    if (guidanceBox) {
+        guidanceBox.style.display = 'block';
         
-        html += `<div class="smart-option" onclick="applySmartOption('fixed_ai')">
-            <strong>🤖 الوصول التلقائي (${aiYrs} سنوات)</strong><br>
-            <small>المدة الأنسب ليكون السعر المستهدف والقسط الثابت متطابقين (دفعة سنوية تقريباً صفر).</small>
-        </div>`;
-        
-        html += `<div class="smart-option" onclick="applySmartOption('scale')">
-            <strong>🎯 الحفاظ على المدة (${currentYrs} سنوات)</strong><br>
-            <small>سيتم إضافة دفعة سنوية بقيمة <b>${formatCurr(scaleOut.annualBonus)}</b> للحفاظ على السعر.</small>
-        </div>`;
-        
-        optionsToTest.forEach(opt => {
-            let out = simulateOutcome(opt.yrs);
-            html += `<div class="smart-option" onclick="applySmartOption('${opt.id}')">
-                <strong>⏳ ${opt.label}</strong><br>
-                <small>سيتم إضافة دفعة سنوية بقيمة <b>${formatCurr(out.annualBonus)}</b>.</small>
-            </div>`;
-        });
-        
-    } else if (hasTargetPrice && !hasFixedInst) {
-        html += `<div class="smart-option" onclick="applySmartOption('scale')">
-            <strong>🎯 الحفاظ على المدة (${currentYrs} سنوات)</strong><br>
-            <small>القسط الربع سنوي سيكون بالضبط <b>${formatCurr(scaleOut.inst)}</b>.</small>
-        </div>`;
-        
-        optionsToTest.forEach(opt => {
-            let out = simulateOutcome(opt.yrs);
-            html += `<div class="smart-option" onclick="applySmartOption('${opt.id}')">
-                <strong>⏳ ${opt.label}</strong><br>
-                <small>القسط الربع سنوي سيصبح <b>${formatCurr(out.inst)}</b>.</small>
-            </div>`;
-        });
-        
-    } else if (!hasTargetPrice && hasFixedInst) {
-        let aiYrs = adjustDurationToHitInstallment(basePriceCache, fixedInstVal);
-        let aiOut = simulateOutcome(aiYrs);
-        
-        html += `<div class="smart-option" onclick="applySmartOption('fixed_ai')">
-            <strong>🤖 الوصول للسعر الأصلي (${aiYrs} سنوات)</strong><br>
-            <small>المدة المطلوبة للوصول للسعر الأصلي (${formatCurr(aiOut.price)}) تقريباً.</small>
-        </div>`;
-        
-        html += `<div class="smart-option" onclick="applySmartOption('scale')">
-            <strong>🎯 الحفاظ على المدة (${currentYrs} سنوات)</strong><br>
-            <small>السعر الإجمالي سيتغير ليصبح <b>${formatCurr(scaleOut.price)}</b>.</small>
-        </div>`;
-        
-        optionsToTest.forEach(opt => {
-            let out = simulateOutcome(opt.yrs);
-            html += `<div class="smart-option" onclick="applySmartOption('${opt.id}')">
-                <strong>⏳ ${opt.label}</strong><br>
-                <small>السعر الإجمالي سيتغير ليصبح <b>${formatCurr(out.price)}</b>.</small>
-            </div>`;
-        });
-    }
-    
-    html += '</div>';
-    container.innerHTML = html;
-    
-    if(!document.getElementById('smart-btn-style')) {
-        let style = document.createElement('style');
-        style.id = 'smart-btn-style';
-        style.innerHTML = `
-            .smart-option {
-                background: white; border: 2px solid var(--accent-blue); color: var(--accent-blue);
-                padding: 10px; border-radius: 6px; cursor: pointer; text-align: right; font-weight: bold;
-                transition: all 0.2s; font-family: inherit; font-size: 0.95rem;
+        if (g.scope === 'pre') {
+            let totalPre = g.nPre * g.fixedAmt;
+            if (totalPre > remAmt) {
+                let maxAllowed = g.nPre > 0 ? remAmt / g.nPre : 0;
+                guidanceBox.style.background = 'rgba(231, 76, 60, 0.15)';
+                guidanceBox.style.border = '1px solid #e74c3c';
+                guidanceBox.innerHTML = `
+                    <div style="color: #e74c3c; font-weight: bold; margin-bottom: 6px;">
+                        ⚠️ تنبيه: القسط قبل الاستلام (${formatCurr(g.fixedAmt)}) كبير جداً! يتجاوز كامل الوعاء المتاح (${formatCurr(remAmt)}).
+                    </div>
+                    <div style="color: var(--text-muted); margin-bottom: 8px;">
+                        الحد الأقصى للقسط قبل الاستلام لتغطية الوعاء هو <strong>${formatCurr(maxAllowed)}</strong>.
+                    </div>
+                    <button class="btn btn-outline" onclick="applyFixedVal(${Math.floor(maxAllowed)})" style="padding: 4px 10px; font-size: 0.8rem; border-color: #e74c3c; color: #fff;">
+                        ضبط القسط عند الحد الأقصى (${formatNum(maxAllowed)} ج.م)
+                    </button>
+                `;
+            } else {
+                guidanceBox.style.background = 'rgba(46, 204, 113, 0.1)';
+                guidanceBox.style.border = '1px solid rgba(46, 204, 113, 0.3)';
+                guidanceBox.innerHTML = `
+                    <div style="color: #2ecc71; font-weight: bold;">
+                        ✅ القسط متوافق تماماً. تم توزيع باقي المبلغ بالتساوي على أقساط ما بعد الاستلام.
+                    </div>
+                `;
             }
-            .smart-option:hover { background: var(--accent-blue); color: white; }
-        `;
-        document.head.appendChild(style);
+        } else if (g.scope === 'post') {
+            let totalPost = g.nPost * g.fixedAmt;
+            if (totalPost > remAmt) {
+                let maxAllowed = g.nPost > 0 ? remAmt / g.nPost : 0;
+                guidanceBox.style.background = 'rgba(231, 76, 60, 0.15)';
+                guidanceBox.style.border = '1px solid #e74c3c';
+                guidanceBox.innerHTML = `
+                    <div style="color: #e74c3c; font-weight: bold; margin-bottom: 6px;">
+                        ⚠️ تنبيه: القسط بعد الاستلام (${formatCurr(g.fixedAmt)}) يتجاوز كامل الوعاء المتاح (${formatCurr(remAmt)}).
+                    </div>
+                    <div style="color: var(--text-muted); margin-bottom: 8px;">
+                        الحد الأقصى للقسط بعد الاستلام هو <strong>${formatCurr(maxAllowed)}</strong>.
+                    </div>
+                    <button class="btn btn-outline" onclick="applyFixedVal(${Math.floor(maxAllowed)})" style="padding: 4px 10px; font-size: 0.8rem; border-color: #e74c3c; color: #fff;">
+                        ضبط القسط عند الحد الأقصى (${formatNum(maxAllowed)} ج.م)
+                    </button>
+                `;
+            } else {
+                guidanceBox.style.background = 'rgba(46, 204, 113, 0.1)';
+                guidanceBox.style.border = '1px solid rgba(46, 204, 113, 0.3)';
+                guidanceBox.innerHTML = `
+                    <div style="color: #2ecc71; font-weight: bold;">
+                        ✅ القسط متوافق تماماً. تم توزيع باقي المبلغ بالتساوي على أقساط ما قبل الاستلام.
+                    </div>
+                `;
+            }
+        } else {
+            // Scope === 'all'
+            let totalInst = g.nTotal * g.fixedAmt;
+            let diff = remAmt - totalInst;
+            
+            if (Math.abs(diff) < 100) {
+                guidanceBox.style.background = 'rgba(46, 204, 113, 0.1)';
+                guidanceBox.style.border = '1px solid rgba(46, 204, 113, 0.3)';
+                guidanceBox.innerHTML = `
+                    <div style="color: #2ecc71; font-weight: bold;">
+                        ✅ القسط متطابق تماماً بنسبة 100% مع سنوات الخطة.
+                    </div>
+                `;
+            } else if (diff > 0) {
+                // Deficit: Inst is too small for current years
+                let neededInsts = remAmt / g.fixedAmt;
+                let recYears = Math.ceil(neededInsts / 4);
+                
+                // DP calculation
+                let curDp1 = parseFloat(document.getElementById('dp1-val')?.value) || (price * (currentProject === 'Zomra' ? 0.025 : 0.05));
+                let newDp1Amt = curDp1 + diff;
+                let newDp1Pct = price > 0 ? (newDp1Amt / price) * 100 : 0;
+                
+                // Delivery calculation
+                let curDeliv = parseFloat(document.getElementById('deliv-val')?.value) || (price * 0.05);
+                let newDelivAmt = curDeliv + diff;
+                let newDelivPct = price > 0 ? (newDelivAmt / price) * 100 : 0;
+                
+                guidanceBox.style.background = 'rgba(243, 156, 18, 0.15)';
+                guidanceBox.style.border = '1px solid #f39c12';
+                
+                let yearsHtml = '';
+                if (recYears <= 10) {
+                    yearsHtml = `
+                        <div style="display: flex; justify-content: space-between; align-items: center; background: rgba(0,0,0,0.25); padding: 6px 10px; border-radius: 4px; margin-bottom: 6px;">
+                            <span>🗓️ <strong>تعديل السنين:</strong> هذا القسط يناسب مدة <strong>${recYears} سنوات</strong> (${Math.round(neededInsts)} قسطاً).</span>
+                            <button class="btn btn-primary" onclick="applyRecYears(${recYears})" style="padding: 3px 8px; font-size: 0.78rem;">تطبيق ${recYears} سنوات</button>
+                        </div>
+                    `;
+                } else {
+                    yearsHtml = `
+                        <div style="color: var(--text-muted); margin-bottom: 6px;">
+                            🗓️ يتطلب هذا القسط مدة <strong>${recYears} سنة</strong> (أكبر من الحد الأقصى 10 سنوات).
+                        </div>
+                    `;
+                }
+                
+                guidanceBox.innerHTML = `
+                    <div style="color: #f39c12; font-weight: bold; margin-bottom: 6px;">
+                        ⚠️ تنبيه: القسط (${formatCurr(g.fixedAmt)}) على ${currentYears} سنوات يترك عجزاً قدره ${formatCurr(diff)} (${((diff/price)*100).toFixed(2)}%).
+                    </div>
+                    <div style="display: flex; flex-direction: column; gap: 4px; margin-top: 6px;">
+                        ${yearsHtml}
+                        <div style="display: flex; justify-content: space-between; align-items: center; background: rgba(0,0,0,0.25); padding: 6px 10px; border-radius: 4px; margin-bottom: 6px;">
+                            <span>💰 <strong>زيادة المقدم:</strong> زيادة المقدم بمقدار ${formatNum(diff)} ج.م ليصبح <strong>${formatNum(newDp1Amt)} ج.م</strong> (${newDp1Pct.toFixed(1)}%).</span>
+                            <button class="btn btn-primary" onclick="applyRecDP(${Math.round(newDp1Amt)})" style="padding: 3px 8px; font-size: 0.78rem; background: #217346; border-color: #217346;">تطبيق زيادة المقدم</button>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; align-items: center; background: rgba(0,0,0,0.25); padding: 6px 10px; border-radius: 4px; margin-bottom: 6px;">
+                            <span>📦 <strong>زيادة الاستلام:</strong> زيادة دفعة الاستلام لتصبح <strong>${formatNum(newDelivAmt)} ج.م</strong> (${newDelivPct.toFixed(1)}%).</span>
+                            <button class="btn btn-primary" onclick="applyRecDeliv(${Math.round(newDelivAmt)})" style="padding: 3px 8px; font-size: 0.78rem; background: var(--accent-blue); border-color: var(--accent-blue);">تحميل على الاستلام</button>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; align-items: center; background: rgba(0,0,0,0.25); padding: 6px 10px; border-radius: 4px;">
+                            <span>⚖️ <strong>تثبيت قبل الاستلام فقط:</strong> تثبيت ${formatNum(g.fixedAmt)} ج.م قبل الاستلام وتحميل الفارق بعد الاستلام.</span>
+                            <button class="btn btn-outline" onclick="applyRecPreOnly()" style="padding: 3px 8px; font-size: 0.78rem; border-color: var(--gold); color: #fff;">تثبيت قبل الاستلام فقط</button>
+                        </div>
+                    </div>
+                `;
+            } else {
+                // Surplus: Inst is too large for current years
+                let surplus = -diff;
+                let neededInsts = remAmt / g.fixedAmt;
+                let recYears = Math.max(1, Math.round(neededInsts / 4));
+                
+                guidanceBox.style.background = 'rgba(52, 152, 219, 0.15)';
+                guidanceBox.style.border = '1px solid #3498db';
+                guidanceBox.innerHTML = `
+                    <div style="color: #3498db; font-weight: bold; margin-bottom: 6px;">
+                        ℹ️ ملاحظة: القسط (${formatCurr(g.fixedAmt)}) أكبر من المطلوب على ${currentYears} سنوات (فائض: ${formatCurr(surplus)}).
+                    </div>
+                    <div style="display: flex; justify-content: space-between; align-items: center; background: rgba(0,0,0,0.25); padding: 6px 10px; border-radius: 4px;">
+                        <span>🗓️ يمكنك تقليل المدة إلى <strong>${recYears} سنوات</strong> لتغطية الوحدة تماماً.</span>
+                        <button class="btn btn-primary" onclick="applyRecYears(${recYears})" style="padding: 3px 8px; font-size: 0.78rem;">تطبيق ${recYears} سنوات</button>
+                    </div>
+                `;
+            }
+        }
     }
-};
+}
 
-window.applySmartOption = function(opt) {
-    window.activeSmartOption = opt;
+function renderTargetPriceGuidance(targetPrice, currentOfferPrice, targetPv) {
+    let guidanceBox = document.getElementById('target-price-guidance-box');
+    if (!guidanceBox) return;
+
+    if (!targetPrice || isNaN(targetPrice) || targetPrice <= 0) {
+        guidanceBox.style.display = 'none';
+        return;
+    }
+
+    guidanceBox.style.display = 'block';
+
+    let diff = targetPrice - currentOfferPrice;
+    let basePrice = basePriceCache || 5000000;
+    let currentYears = parseInt(document.getElementById('duration-years').value) || 8;
+    let contractDateStr = document.getElementById('contract-date').value || new Date();
+    let freqMonths = parseInt(document.getElementById('payment-frequency').value) === 2 ? 6 : 3;
+
+    if (Math.abs(diff) < 100) {
+        guidanceBox.style.background = 'rgba(46, 204, 113, 0.1)';
+        guidanceBox.style.border = '1px solid rgba(46, 204, 113, 0.3)';
+        guidanceBox.innerHTML = `
+            <div style="color: #2ecc71; font-weight: bold;">
+                ✅ سعر الوحدة (${formatNum(targetPrice)} ج.م) متطابق تماماً بنسبة 100% مع الخطة الحالية.
+            </div>
+        `;
+        return;
+    }
+
+    let diffPct = (diff / basePrice) * 100;
+    let isDiscount = diff < 0;
+
+    guidanceBox.style.background = isDiscount ? 'rgba(52, 152, 219, 0.15)' : 'rgba(243, 156, 18, 0.15)';
+    guidanceBox.style.border = isDiscount ? '1px solid #3498db' : '1px solid #f39c12';
+
+    // 1. Natural Duration Matching
+    let bestY = null;
+    let bestYPrice = 0;
+    let bestYGap = Infinity;
+
+    for (let y = 3; y <= 10; y++) {
+        let tpl = generateFlowsTemplate(contractDateStr, y, freqMonths, false);
+        let p = solveForPrice(targetPv, tpl);
+        let gap = Math.abs(p - targetPrice);
+        if (gap < bestYGap) {
+            bestYGap = gap;
+            bestY = y;
+            bestYPrice = p;
+        }
+    }
+
+    let yearsHtml = '';
+    if (bestY && bestY !== currentYears) {
+        yearsHtml = `
+            <div style="display: flex; justify-content: space-between; align-items: center; background: rgba(0,0,0,0.25); padding: 6px 10px; border-radius: 4px; margin-bottom: 6px;">
+                <span>🗓️ <strong>تعديل السنين:</strong> خطة <strong>${bestY} سنوات</strong> تعطي سعراً طبيعياً <strong>${formatNum(bestYPrice)} ج.م</strong> (فارق: ${formatNum(Math.abs(bestYPrice - targetPrice))} ج.م).</span>
+                <button class="btn btn-primary" onclick="applyTargetYears(${bestY})" style="padding: 3px 8px; font-size: 0.78rem;">تطبيق ${bestY} سنوات</button>
+            </div>
+        `;
+    }
+
+    // 2. Exact Down Payment on Current Plan
+    let low = 0, high = 85, bestDp = null;
+    for (let iter = 0; iter < 45; iter++) {
+        let mid = (low + high) / 2;
+        let tpl = generateFlowsTemplate(contractDateStr, currentYears, freqMonths, false);
+        tpl.forEach(f => {
+            if (f.id === 'dp1') f.defaultPct = mid / 100;
+        });
+        let flows = calculateCustomFlows(targetPrice, tpl);
+        let pv = flows.filter(f => !f.isMnt).reduce((sum, f) => sum + f.pv, 0);
+        if (pv < targetPv) {
+            low = mid;
+        } else {
+            high = mid;
+            bestDp = mid;
+        }
+    }
+
+    let dpNeededPct = bestDp !== null ? bestDp : 0;
+    let dpNeededAmt = targetPrice * (dpNeededPct / 100);
+    let dpCurPct = parseFloat(document.getElementById('dp1-val')?.value) || (currentProject === 'Zomra' ? 2.5 : 5);
+
+    let dpActionHtml = '';
+    if (dpNeededPct > 0.5 && dpNeededPct < 85 && Math.abs(dpNeededPct - dpCurPct) > 0.2) {
+        dpActionHtml = `
+            <div style="display: flex; justify-content: space-between; align-items: center; background: rgba(0,0,0,0.25); padding: 6px 10px; border-radius: 4px; margin-bottom: 6px;">
+                <span>💰 <strong>تعديل المقدم:</strong> دفع مقدم <strong>${dpNeededPct.toFixed(1)}%</strong> (${formatNum(dpNeededAmt)} ج.م) للوصول للسعر المستهدف بالمليم على نفس السنين.</span>
+                <button class="btn btn-primary" onclick="applyTargetDP(${dpNeededPct.toFixed(2)})" style="padding: 3px 8px; font-size: 0.78rem; background: #217346; border-color: #217346;">تطبيق مقدم ${dpNeededPct.toFixed(1)}%</button>
+            </div>
+        `;
+    }
+
+    // 3. Target Installment
+    let nInsts = currentYears * (12 / freqMonths);
+    if (currentProject === 'Perla') nInsts -= 1;
+    let baseMilestonesPct = (currentProject === 'Zomra') ? 15 : 10;
+    let targetInstAmt = (targetPrice * (1 - baseMilestonesPct / 100)) / nInsts;
+    let instActionHtml = `
+        <div style="display: flex; justify-content: space-between; align-items: center; background: rgba(0,0,0,0.25); padding: 6px 10px; border-radius: 4px;">
+            <span>💵 <strong>تثبيت الأقساط:</strong> كل قسط سيكون <strong>${formatNum(targetInstAmt)} ج.م</strong> لتغطية السعر المستهدف.</span>
+            <button class="btn btn-outline" onclick="applyTargetInst(${Math.round(targetInstAmt)})" style="padding: 3px 8px; font-size: 0.78rem; border-color: var(--gold); color: #fff;">تثبيت عند ${formatNum(targetInstAmt)}</button>
+        </div>
+    `;
+
+    let statusHeader = isDiscount ?
+        `<div style="color: #3498db; font-weight: bold; margin-bottom: 6px;">
+            💡 للوصول لسعر مستهدف: ${formatCurr(targetPrice)} (خصم مطلوب: ${Math.abs(diffPct).toFixed(2)}% — فارق: ${formatNum(Math.abs(diff))} ج.م):
+        </div>` :
+        `<div style="color: #f39c12; font-weight: bold; margin-bottom: 6px;">
+            💡 للوصول لسعر مستهدف: ${formatCurr(targetPrice)} (زيادة مطلوبة: ${diffPct.toFixed(2)}% — فارق: ${formatNum(diff)} ج.م):
+        </div>`;
+
+    guidanceBox.innerHTML = `
+        ${statusHeader}
+        <div style="display: flex; flex-direction: column; gap: 4px; margin-top: 6px;">
+            ${yearsHtml}
+            ${dpActionHtml}
+            ${instActionHtml}
+        </div>
+    `;
+}
+
+window.applyTargetYears = function(y) {
+    let yrEl = document.getElementById('duration-years');
+    if (yrEl) yrEl.value = y;
+    let targetPriceEl = document.getElementById('target-price-val');
+    if (targetPriceEl) targetPriceEl.value = '';
+    let targetPctEl = document.getElementById('target-pct-val');
+    if (targetPctEl) targetPctEl.value = '';
     calculate();
 };
 
-function adjustDurationToHitInstallment(targetAmount, targetInstAmt) {
-    if (targetInstAmt <= 0) return parseInt(document.getElementById('duration-years').value) || 8;
-    
-    let dp1 = getCustomInputAmt('dp1', targetAmount);
-    let dp2 = getCustomInputAmt('dp2', targetAmount);
-    let addl = getCustomInputAmt('addl', targetAmount);
-    let deliv = getCustomInputAmt('deliv', targetAmount);
-    
-    let priceForPct = targetAmount;
-    let freqMonths = parseInt(document.getElementById('payment-frequency').value) === 2 ? 6 : 3;
-    
-    let d = document.getElementById('contract-date').value || new Date();
-    let tempTemplate = generateFlowsTemplate(d, 8, freqMonths);
-    
-    let sumFixed = 0;
-    tempTemplate.forEach(f => {
-        let amt = 0;
-        if (f.id === 'dp1') amt = dp1 !== null ? dp1 : priceForPct * (f.defaultPct||0);
-        else if (f.id === 'dp2') amt = dp2 !== null ? dp2 : priceForPct * (f.defaultPct||0);
-        else if (f.id === 'addl') amt = addl !== null ? addl : priceForPct * (f.defaultPct||0);
-        else if (f.id === 'deliv') amt = deliv !== null ? deliv : priceForPct * (f.defaultPct||0);
-        if (amt > 0) sumFixed += amt;
-    });
-    
-    let remAmt = targetAmount - sumFixed;
-    if (remAmt <= 0) return 8;
-    
-    let numInsts = remAmt / targetInstAmt;
-    let instsPerYear = 12 / freqMonths;
-    let newYears = Math.round(numInsts / instsPerYear);
-    
-    if (newYears > 10) newYears = 10;
-    if (newYears < 1) newYears = 1;
-    
-    return newYears;
-}
+window.applyTargetDP = function(pct) {
+    let dpEl = document.getElementById('dp1-val');
+    let dpType = document.getElementById('dp1-type');
+    if (dpEl) dpEl.value = pct;
+    if (dpType) dpType.value = 'pct';
+    let targetPriceEl = document.getElementById('target-price-val');
+    if (targetPriceEl) targetPriceEl.value = '';
+    let targetPctEl = document.getElementById('target-pct-val');
+    if (targetPctEl) targetPctEl.value = '';
+    calculate();
+};
+
+window.applyTargetInst = function(amt) {
+    let toggle = document.getElementById('fixed-inst-toggle');
+    if (toggle) toggle.checked = true;
+    let scopeEl = document.getElementById('fixed-inst-scope');
+    if (scopeEl) scopeEl.value = 'all';
+    let typeEl = document.getElementById('fixed-inst-type');
+    if (typeEl) typeEl.value = 'amt';
+    let valEl = document.getElementById('fixed-inst-val');
+    if (valEl) valEl.value = amt;
+    let ctrl = document.getElementById('fixed-inst-controls-wrapper');
+    if (ctrl) ctrl.style.display = 'block';
+    let badge = document.getElementById('fixed-inst-status-badge');
+    if (badge) {
+        badge.innerText = 'مفعّل';
+        badge.style.color = 'var(--gold)';
+    }
+    let targetPriceEl = document.getElementById('target-price-val');
+    if (targetPriceEl) targetPriceEl.value = '';
+    let targetPctEl = document.getElementById('target-pct-val');
+    if (targetPctEl) targetPctEl.value = '';
+    calculate();
+};
 
 function calculate() {
-    let basePrice = parseFloat(document.getElementById('base-price').value) || 0;
-    let contractDateStr = document.getElementById('contract-date').value;
-    let years = parseInt(document.getElementById('duration-years').value) || 8;
-    let freqMonths = parseInt(document.getElementById('payment-frequency').value) === 2 ? 6 : 3;
-    
-    if(!contractDateStr) return;
-    
-    basePriceCache = basePrice;
-    
-    let baseYears = parseInt(document.getElementById('base-duration-years').value) || 8;
-    let baseFreq = parseInt(document.getElementById('base-payment-frequency').value) === 2 ? 6 : 3;
-    
-    let baseTemplate = generateFlowsTemplate(contractDateStr, baseYears, baseFreq, true);
-    let baseFlows = calculateBaseFlows(basePrice, baseTemplate);
-    basePvCache = baseFlows.filter(f => !f.isMnt).reduce((sum, f) => sum + f.pv, 0); // Exclude Mnt from NPV
-    
-    baseFlows = applyPerfectPercentages(baseFlows, basePrice);
-    
-    document.getElementById('base-total-amt').innerText = formatCurr(basePrice);
-    document.getElementById('base-total-pv').innerText = formatCurr(basePvCache);
-    renderTable(baseFlows, 'base-tbody');
-    updatePreDeliveryTracker(baseFlows, 'base-pre-delivery');
-    
-    let customTemplate = generateFlowsTemplate(contractDateStr, years, freqMonths);
-    
-    let targetPv = basePvCache;
-    
-    let targetPriceStr = document.getElementById('target-price-val') ? document.getElementById('target-price-val').value : '';
-    let targetPrice = parseFloat(targetPriceStr);
-    
-    let bestPrice = basePriceCache;
-
-    let isFixedInst = document.getElementById('fixed-inst-toggle') && document.getElementById('fixed-inst-toggle').checked;
-    let fixedInstVal = document.getElementById('fixed-inst-val') ? parseFloat(document.getElementById('fixed-inst-val').value) : 0;
-    
-    let hasTargetPrice = targetPriceStr.trim() !== '' && !isNaN(targetPrice);
-    let hasFixedInst = isFixedInst && fixedInstVal > 0;
-    let opt = window.activeSmartOption || 'scale';
-    
-    // Dynamic Duration logic
-    if (opt === 'fixed_ai' || opt === 'add_1' || opt === 'add_2' || opt === 'sub_1') {
-        let currentYrs = parseInt(document.getElementById('duration-years').value) || 8;
-        let newYears = currentYrs;
+    try {
+        let basePriceInput = document.getElementById('base-price');
+        let basePrice = parseFloat(basePriceInput ? basePriceInput.value : 0) || 0;
+        if (basePrice < 0) basePrice = 0;
         
-        if (opt === 'fixed_ai') {
-            newYears = adjustDurationToHitInstallment(hasTargetPrice ? targetPrice : basePriceCache, fixedInstVal);
-        } else if (opt === 'add_1') {
-            newYears = currentYrs + 1;
-        } else if (opt === 'add_2') {
-            newYears = currentYrs + 2;
-        } else if (opt === 'sub_1') {
-            newYears = currentYrs - 1;
+        let dateEl = document.getElementById('contract-date');
+        let contractDateStr = dateEl ? dateEl.value : '';
+        if (!contractDateStr || isNaN(new Date(contractDateStr).getTime())) {
+            contractDateStr = formatDate(new Date());
+            if (dateEl) dateEl.value = contractDateStr;
         }
         
-        if (newYears > 10) newYears = 10;
-        if (newYears < 1) newYears = 1;
+        let yearsEl = document.getElementById('duration-years');
+        let years = parseInt(yearsEl ? yearsEl.value : 8) || 8;
+        years = Math.max(1, Math.min(20, years));
         
-        let freqMonths = parseInt(document.getElementById('payment-frequency').value) === 2 ? 6 : 3;
+        let freqEl = document.getElementById('payment-frequency');
+        let freqMonths = (freqEl && parseInt(freqEl.value) === 2) ? 6 : 3;
         
-        ['dp1', 'dp2', 'addl', 'deliv'].forEach(id => {
-            let el = document.getElementById(id + '-val');
-            if (el && el.value) {
-                if (!window.globalTableOverrides) window.globalTableOverrides = {};
-                window.globalTableOverrides[id] = {
-                    amount: parseFloat(el.value),
-                    isPct: document.getElementById(id + '-type').value === 'pct'
-                };
-            }
-        });
+        basePriceCache = basePrice;
         
-        document.getElementById('duration-years').value = newYears;
-        renderCustomInputs();
-        customTemplate = generateFlowsTemplate(contractDateStr, newYears, freqMonths);
-        years = newYears;
+        let baseYearsEl = document.getElementById('base-duration-years');
+        let baseYears = parseInt(baseYearsEl ? baseYearsEl.value : 8) || 8;
+        baseYears = Math.max(1, Math.min(20, baseYears));
         
-        // Reset option so it doesn't infinitely loop on next calculate
-        window.activeSmartOption = 'scale';
-    }
+        let baseFreqEl = document.getElementById('base-payment-frequency');
+        let baseFreq = (baseFreqEl && parseInt(baseFreqEl.value) === 2) ? 6 : 3;
+        
+        let baseTemplate = generateFlowsTemplate(contractDateStr, baseYears, baseFreq, true);
+        let baseFlows = calculateBaseFlows(basePrice, baseTemplate);
+        basePvCache = baseFlows.filter(f => !f.isMnt).reduce((sum, f) => sum + (f.pv || 0), 0); // Exclude Mnt from NPV
+        
+        baseFlows = applyPerfectPercentages(baseFlows, basePrice);
+        
+        let baseTotAmtEl = document.getElementById('base-total-amt');
+        if (baseTotAmtEl) baseTotAmtEl.innerText = formatCurr(basePrice);
+        let baseTotPvEl = document.getElementById('base-total-pv');
+        if (baseTotPvEl) baseTotPvEl.innerText = formatCurr(basePvCache);
+        renderTable(baseFlows, 'base-tbody');
+        updatePreDeliveryTracker(baseFlows, 'base-pre-delivery');
+        
+        let firstInstDateEl = document.getElementById('first-inst-date');
+        let customFirstDateStr = (firstInstDateEl && firstInstDateEl.value && !isNaN(new Date(firstInstDateEl.value).getTime())) ? firstInstDateEl.value : null;
+        let customTemplate = generateFlowsTemplate(contractDateStr, years, freqMonths, false, customFirstDateStr);
+        
+        let targetPv = basePvCache;
+        
+        let targetPriceStr = document.getElementById('target-price-val') ? document.getElementById('target-price-val').value : '';
+        let targetPrice = parseFloat(targetPriceStr);
+        if (isNaN(targetPrice) || targetPrice <= 0) targetPrice = null;
+        
+        let bestPrice = basePriceCache;
 
-    if (hasTargetPrice) {
-        globalCustomFlows = calculateCustomFlows(targetPrice, customTemplate);
-        bestPrice = targetPrice;
-    } else {
-        if (hasFixedInst) {
-            // Already solved duration, just calculate using basePrice
+        let isFixedInst = document.getElementById('fixed-inst-toggle') && document.getElementById('fixed-inst-toggle').checked;
+        let fixedInstVal = document.getElementById('fixed-inst-val') ? parseFloat(document.getElementById('fixed-inst-val').value) : 0;
+        let hasFixedInst = isFixedInst && fixedInstVal > 0;
+        
+        let hasTargetPrice = targetPrice !== null;
+        let fixedInstScope = document.getElementById('fixed-inst-scope') ? document.getElementById('fixed-inst-scope').value : 'all';
+        if (hasFixedInst && fixedInstScope === 'all') {
             bestPrice = basePriceCache;
         } else {
             bestPrice = solveForPrice(targetPv, customTemplate);
             
             // User explicit requirement: Perla 70/30 should strictly be 0.863920294539959% increase for the base 8 years
-            let is7030 = document.getElementById('toggle-70-30') && document.getElementById('toggle-70-30').checked;
+            let is7030 = (document.getElementById('toggle-70-30') && document.getElementById('toggle-70-30').checked) ||
+                         (document.getElementById('toggle-intra-year') && document.getElementById('toggle-intra-year').checked &&
+                          document.getElementById('intra-year-type')?.value === 'pct' &&
+                          parseFloat(document.getElementById('intra-year-val')?.value) === 70 &&
+                          document.getElementById('intra-year-scope')?.value === 'all');
             let hasTableOverrides = window.globalTableOverrides && Object.keys(window.globalTableOverrides).length > 0;
-            if (currentProject === 'Perla' && is7030 && !hasFixedInst && !hasTableOverrides && years === 8) {
+            let hasCustomInputs = ['dp1', 'dp2', 'addl', 'deliv'].some(id => {
+                let el = document.getElementById(id + '-val');
+                return el && el.value.trim() !== '';
+            });
+            let isDistCustomized = window.globalDistState && (window.globalDistState.mode !== 'auto' || window.globalDistState.typedPrePct !== null || window.globalDistState.typedPostPct !== null);
+            if (currentProject === 'Perla' && is7030 && !hasFixedInst && !hasTableOverrides && !hasCustomInputs && !isDistCustomized && years === 8) {
                 bestPrice = basePriceCache * 1.00863920294539959;
             }
         }
         globalCustomFlows = calculateCustomFlows(bestPrice, customTemplate);
-    }
-    
-    let actualPrice = globalCustomFlows.filter(f => !f.isMnt).reduce((sum, f) => sum + f.amount, 0);
-    globalCustomFlows = applyPerfectPercentages(globalCustomFlows, actualPrice);
-    
-    // Target Price remains fixed; annual payments absorb any mathematical discrepancy automatically.
-    
-    let offerPv = globalCustomFlows.filter(f => !f.isMnt).reduce((sum, f) => sum + f.pv, 0);
-    
-    document.getElementById('offer-total-amt').innerText = formatCurr(actualPrice);
-    document.getElementById('offer-total-pv').innerText = formatCurr(offerPv);
-    
-    let offerPreDelivPct = 0;
-    let delivMonth = currentProject === 'Zomra' ? 37 : 48;
-    globalCustomFlows.forEach(f => {
-        if (!f.isMnt && f.months <= delivMonth) {
-            offerPreDelivPct += parseFloat(f.displayPct) || 0;
-        }
-    });
-    if(document.getElementById('offer-pre-delivery')) document.getElementById('offer-pre-delivery').innerText = offerPreDelivPct.toFixed(2) + '%';
-
-    renderTable(globalCustomFlows, 'offer-tbody');
-    updatePreDeliveryTracker(globalCustomFlows, 'offer-pre-delivery');
-    generateExportTemplate(actualPrice, offerPreDelivPct);
-    
-    let diffEl = document.getElementById('pv-difference');
-    let priceDiff = actualPrice - basePriceCache;
-    
-    if (Math.abs(priceDiff) < 1000) {
-        diffEl.innerHTML = `<span style="color:var(--success)">✅ Base Plan Applied</span>`;
-    } else {
-        let isIncrease = priceDiff > 0;
-        let diffPct = Math.abs(priceDiff / basePrice * 100).toFixed(2);
-        let color = isIncrease ? 'var(--success)' : 'var(--danger)';
-        let text = isIncrease ? 'Increase %' : 'Discount %';
         
-        diffEl.innerHTML = `
-            <div style="color:${color}; font-size: 1.3rem;">${text}: ${diffPct}%</div>
-            <div style="color:${color}; font-size: 1rem; margin-top:5px;">Amount: ${formatCurr(Math.abs(priceDiff))}</div>
-        `;
+        let intraLabel = document.getElementById('intra-year-val-label');
+        if (intraLabel) {
+            intraLabel.innerText = freqMonths === 3 ? 'قسط أول 3 فترات ربع سنوية (Q1, Q2, Q3)' : 'قسط الفترة النصف سنوية الأولى (H1)';
+        }
+        
+        let actualPrice = globalCustomFlows.filter(f => !f.isMnt).reduce((sum, f) => sum + (f.amount || 0), 0);
+        window.lastCalculatedPrice = actualPrice;
+        globalCustomFlows = applyPerfectPercentages(globalCustomFlows, actualPrice);
+        globalCustomFlows.sort((a, b) => {
+            if (a.isMnt && !b.isMnt) return 1;
+            if (!a.isMnt && b.isMnt) return -1;
+            if (a.months !== b.months) return a.months - b.months;
+            let d1 = new Date(a.date);
+            let d2 = new Date(b.date);
+            if (!isNaN(d1) && !isNaN(d2)) return d1 - d2;
+            return 0;
+        });
+        
+        let offerPv = globalCustomFlows.filter(f => !f.isMnt).reduce((sum, f) => sum + (f.pv || 0), 0);
+        
+        let offerTotAmtEl = document.getElementById('offer-total-amt');
+        if (offerTotAmtEl) offerTotAmtEl.innerText = formatCurr(actualPrice);
+        let offerTotPvEl = document.getElementById('offer-total-pv');
+        if (offerTotPvEl) offerTotPvEl.innerText = formatCurr(offerPv);
+        
+        let offerPreDelivPct = 0;
+        let delivMonth = currentProject === 'Zomra' ? 37 : 48;
+        globalCustomFlows.forEach(f => {
+            if (!f.isMnt && f.months <= delivMonth) {
+                offerPreDelivPct += parseFloat(f.displayPct) || 0;
+            }
+        });
+        let offerPreDelivEl = document.getElementById('offer-pre-delivery');
+        if (offerPreDelivEl) offerPreDelivEl.innerText = offerPreDelivPct.toFixed(2) + '%';
+
+        renderTable(globalCustomFlows, 'offer-tbody');
+        updatePreDeliveryTracker(globalCustomFlows, 'offer-pre-delivery');
+        updateDistUI(globalCustomFlows._distInfo);
+        renderFixedGuidanceBox(globalCustomFlows._fixedGuidance);
+        renderIntraGuidanceBox(globalCustomFlows._intraGuidance);
+        renderTargetPriceGuidance(targetPrice, actualPrice, targetPv);
+        generateExportTemplate(actualPrice, offerPreDelivPct);
+        
+        let diffEl = document.getElementById('pv-difference');
+        if (diffEl) {
+            let priceDiff = actualPrice - basePriceCache;
+            if (basePriceCache <= 0) {
+                diffEl.innerHTML = `<span style="color:var(--text-muted)">يرجى إدخال سعر الوحدة الأساسي</span>`;
+            } else if (Math.abs(priceDiff) < 1000) {
+                diffEl.innerHTML = `<span style="color:var(--success)">✅ Base Plan Applied</span>`;
+            } else {
+                let isIncrease = priceDiff > 0;
+                let diffPct = (Math.abs(priceDiff / basePriceCache) * 100).toFixed(2);
+                let color = isIncrease ? 'var(--success)' : 'var(--danger)';
+                let text = isIncrease ? 'Increase %' : 'Discount %';
+                
+                diffEl.innerHTML = `
+                    <div style="color:${color}; font-size: 1.3rem;">${text}: ${diffPct}%</div>
+                    <div style="color:${color}; font-size: 1rem; margin-top:5px;">Amount: ${formatCurr(Math.abs(priceDiff))}</div>
+                `;
+            }
+        }
+    } catch (e) {
+        console.error('Calculation Guard caught error:', e);
     }
 }
 
 function renderTable(flows, tbodyId) {
     const tbody = document.getElementById(tbodyId);
+    if (!tbody) return;
     tbody.innerHTML = '';
     
     let totalAmt = 0;
     let totalPv = 0;
     
-    let nonMntFlows = flows.filter(f => !f.isMnt);
+    let nonMntFlows = (flows || []).filter(f => !f.isMnt);
     nonMntFlows.forEach((cf) => {
         let idx = flows.indexOf(cf);
         let tr = document.createElement('tr');
@@ -1093,19 +1738,20 @@ function renderTable(flows, tbodyId) {
                 <td style="color:var(--gold); font-weight:bold;">${formatCurr(cf.pv)}</td>
             `;
             tbody.appendChild(tr);
-            totalAmt += cf.amount;
-            totalPv += cf.pv;
+            totalAmt += (cf.amount || 0);
+            totalPv += (cf.pv || 0);
         } else {
+            tr.dataset.flowId = cf.id;
             tr.innerHTML = `
                 <td style="text-align:left">${cf.label}</td>
-                <td><input type="text" style="width:90px;" class="tbl-input tbl-date" value="${cf.date}"></td>
-                <td><input type="number" step="0.01" style="width:60px;" class="tbl-input tbl-pct" value="${displayPct}">%</td>
-                <td><input type="number" style="width:90px; color:var(--accent-blue); font-weight:bold;" class="tbl-input tbl-amt" value="${Math.round(cf.amount)}"></td>
+                <td><input type="date" style="width:125px; padding: 2px 4px; font-size: 0.85rem;" class="tbl-input tbl-date" value="${cf.date}" onchange="applyTableEdits()"></td>
+                <td><input type="number" step="0.01" style="width:60px;" class="tbl-input tbl-pct" value="${displayPct}" onchange="applyTableEdits()">%</td>
+                <td><input type="number" style="width:90px; color:var(--accent-blue); font-weight:bold;" class="tbl-input tbl-amt" value="${Math.round(cf.amount || 0)}" onchange="applyTableEdits()"></td>
                 <td style="color:var(--gold); font-weight:bold;" class="tbl-pv">${formatCurr(cf.pv)}</td>
             `;
             tbody.appendChild(tr);
-            totalAmt += cf.amount;
-            totalPv += cf.pv;
+            totalAmt += (cf.amount || 0);
+            totalPv += (cf.pv || 0);
         }
     });
     
@@ -1166,16 +1812,19 @@ window.applyTableEdits = function() {
     let tbody = document.getElementById('offer-tbody');
     if (!window.globalTableOverrides) window.globalTableOverrides = {};
     
-    Array.from(tbody.rows).forEach((tr, i) => {
-        let f = globalCustomFlows[i];
+    Array.from(tbody.rows).forEach((tr) => {
+        let flowId = tr.dataset.flowId;
+        if (!flowId) return;
+        let f = globalCustomFlows.find(item => item.id === flowId);
+        if (!f) return;
         
         let dateInput = tr.querySelector('.tbl-date');
         let pctInput = tr.querySelector('.tbl-pct');
         let amtInput = tr.querySelector('.tbl-amt');
         
-        if (dateInput) {
-            if (!window.globalTableOverrides[f.id]) window.globalTableOverrides[f.id] = {};
-            window.globalTableOverrides[f.id].date = dateInput.value;
+        if (dateInput && dateInput.value) {
+            if (!window.globalTableOverrides[flowId]) window.globalTableOverrides[flowId] = {};
+            window.globalTableOverrides[flowId].date = dateInput.value;
         }
         
         if (amtInput && pctInput) {
@@ -1185,14 +1834,14 @@ window.applyTableEdits = function() {
             let currentPct = parseFloat(f.displayPct);
             let typedPct = parseFloat(pctInput.value) || 0;
             
-            if (!window.globalTableOverrides[f.id]) window.globalTableOverrides[f.id] = {};
+            if (!window.globalTableOverrides[flowId]) window.globalTableOverrides[flowId] = {};
             
             if (typedAmt !== currentAmt) {
-                window.globalTableOverrides[f.id].amount = typedAmt;
-                window.globalTableOverrides[f.id].isPct = false;
+                window.globalTableOverrides[flowId].amount = typedAmt;
+                window.globalTableOverrides[flowId].isPct = false;
             } else if (typedPct !== currentPct) {
-                window.globalTableOverrides[f.id].amount = typedPct;
-                window.globalTableOverrides[f.id].isPct = true;
+                window.globalTableOverrides[flowId].amount = typedPct;
+                window.globalTableOverrides[flowId].isPct = true;
             }
         }
     });
@@ -1206,46 +1855,75 @@ window.resetTableEdits = function() {
 };
 
 // --- PDF & Excel Export Template Generator ---
-// --- PDF & Excel Export Template Generator ---
 function generateExportTemplate(offerPrice, offerPreDelivPct) {
-    let years = parseInt(document.getElementById('duration-years').value);
-    let mntTotal = basePriceCache * 0.08;
+    let dateEl = document.getElementById('contract-date');
+    let contractDateStr = (dateEl && dateEl.value) ? dateEl.value : formatDate(new Date());
+    let years = parseInt(document.getElementById('duration-years').value) || 0;
+    let mntTotal = offerPrice * 0.08;
     let incPct = (offerPrice - basePriceCache) / basePriceCache;
     
     let label1 = incPct < 0 ? 'Discount % :' : 'Increase % :';
     let label2 = incPct < 0 ? 'Price After Discount :' : 'Price After Increase :';
     let displayIncPct = Math.abs(incPct);
     
+    let nonMntFlows = globalCustomFlows.filter(f => !f.isMnt);
+    let mntFlows = globalCustomFlows.filter(f => f.isMnt);
+    let totalItems = nonMntFlows.length + mntFlows.length;
+
+    // Adaptive sizing based on total items to guarantee 100% fit on a single A4 page
+    let fontSize = '7.2px';
+    let cellPadding = '1.2px 3px';
+    let titleFontSize = '9px';
+    let subHeaderFontSize = '7.5px';
+
+    if (totalItems >= 42) { // 9, 10 Years
+        fontSize = '6.5px';
+        cellPadding = '0.8px 2.5px';
+        titleFontSize = '8.5px';
+        subHeaderFontSize = '7px';
+    } else if (totalItems >= 34) { // 7, 8 Years
+        fontSize = '7.2px';
+        cellPadding = '1.2px 3px';
+        titleFontSize = '9px';
+        subHeaderFontSize = '7.5px';
+    } else { // 4, 5, 6 Years
+        fontSize = '7.8px';
+        cellPadding = '1.8px 3.5px';
+        titleFontSize = '9.5px';
+        subHeaderFontSize = '8px';
+    }
+
+    let projectTitle = `NATIONS OF SKY \u2014 ${currentProject.toUpperCase()} \u2014 PAYMENT PLAN (${years} YEARS)`;
+
     let html = `
         <colgroup>
-            <col style="width: 12%;">
-            <col style="width: 33%;">
-            <col style="width: 10%;">
-            <col style="width: 25%;">
-            <col style="width: 20%;">
+            <col style="width: 14.5%;">
+            <col style="width: 30%;">
+            <col style="width: 10.5%;">
+            <col style="width: 26%;">
+            <col style="width: 19%;">
         </colgroup>
-        <tr><th colspan="5" class="export-header-blue" style="font-size: 11px; border: 2px solid black; padding: 2px;">Payment Plan ${years} Years</th></tr>
-        <tr><td colspan="2" class="export-bold" style="text-align: left; border-left: 2px solid black;">Unit No :</td><td colspan="3" style="border-right: 2px solid black;"></td></tr>
-        <tr><td colspan="2" class="export-bold" style="text-align: left; border-left: 2px solid black;">Unit Base Price :</td><td colspan="3" style="border-right: 2px solid black;">${formatNum(basePriceCache)}</td></tr>
-        <tr><td colspan="2" class="export-bold" style="text-align: left; border-left: 2px solid black;">Maintenance :</td><td colspan="3" style="border-right: 2px solid black;">${formatNum(mntTotal)}</td></tr>
-        <tr><td colspan="2" class="export-bold" style="text-align: left; border-left: 2px solid black;">${label1}</td><td colspan="3" style="border-right: 2px solid black;">${formatPct(displayIncPct)}</td></tr>
-        <tr><td colspan="2" class="export-bold" style="text-align: left; border-left: 2px solid black;">${label2}</td><td colspan="3" class="export-bold" style="border-right: 2px solid black;">${formatNum(offerPrice)}</td></tr>
-        <tr><td colspan="2" class="export-bold" style="text-align: left; border-left: 2px solid black; border-bottom: 2px solid black;">Collected Till Delivery:</td><td colspan="3" class="export-bold" style="border-right: 2px solid black; border-bottom: 2px solid black;">${(offerPreDelivPct || 0).toFixed(2)}%</td></tr>
-        <tr><td colspan="5" style="height: 5px; border: none;"></td></tr>
+        <tr><th colspan="5" class="export-header-blue" style="font-size: ${titleFontSize}; border: 1.5px solid black; padding: 3px; letter-spacing: 0.3px;">${projectTitle}</th></tr>
+        <tr><td colspan="2" class="export-bold" style="text-align: left; border-left: 1.5px solid black; padding: ${cellPadding};">Unit No :</td><td colspan="3" style="border-right: 1.5px solid black; padding: ${cellPadding};"></td></tr>
+        <tr><td colspan="2" class="export-bold" style="text-align: left; border-left: 1.5px solid black; padding: ${cellPadding};">Date :</td><td colspan="3" style="border-right: 1.5px solid black; padding: ${cellPadding};">${formatDateExport(contractDateStr || new Date())}</td></tr>
+        <tr><td colspan="2" class="export-bold" style="text-align: left; border-left: 1.5px solid black; padding: ${cellPadding};">Unit Base Price :</td><td colspan="3" style="border-right: 1.5px solid black; padding: ${cellPadding};">${formatNum(basePriceCache)}</td></tr>
+        <tr><td colspan="2" class="export-bold" style="text-align: left; border-left: 1.5px solid black; padding: ${cellPadding};">Maintenance (8%) :</td><td colspan="3" style="border-right: 1.5px solid black; padding: ${cellPadding};">${formatNum(mntTotal)}</td></tr>
+        <tr><td colspan="2" class="export-bold" style="text-align: left; border-left: 1.5px solid black; padding: ${cellPadding};">${label1}</td><td colspan="3" style="border-right: 1.5px solid black; padding: ${cellPadding};">${formatPct(displayIncPct)}</td></tr>
+        <tr><td colspan="2" class="export-bold" style="text-align: left; border-left: 1.5px solid black; padding: ${cellPadding};">${label2}</td><td colspan="3" class="export-bold" style="border-right: 1.5px solid black; padding: ${cellPadding};">${formatNum(offerPrice)}</td></tr>
+        <tr><td colspan="2" class="export-bold" style="text-align: left; border-left: 1.5px solid black; border-bottom: 1.5px solid black; padding: ${cellPadding};">Collected Till Delivery:</td><td colspan="3" style="border-right: 1.5px solid black; border-bottom: 1.5px solid black; padding: ${cellPadding};">${(offerPreDelivPct || 0).toFixed(2)}%</td></tr>
+        <tr><td colspan="5" style="height: 4px; border: none; padding: 0;"></td></tr>
         
         <tr>
-            <th colspan="2" class="export-header-blue" style="border: 2px solid black; padding: 2px;">Payment Terms & Types</th>
-            <th colspan="3" class="export-header-blue" style="border: 2px solid black; padding: 2px;">${years} Years Payment Plan</th>
+            <th colspan="2" class="export-header-blue" style="border: 1.5px solid black; padding: ${cellPadding}; font-size: ${subHeaderFontSize};">Payment Terms & Types</th>
+            <th colspan="3" class="export-header-blue" style="border: 1.5px solid black; padding: ${cellPadding}; font-size: ${subHeaderFontSize};">${years} Years Payment Plan</th>
         </tr>
         <tr>
-            <th colspan="2" class="export-header-blue" style="border-left: 2px solid black; border-bottom: 2px solid black;"></th>
-            <th class="export-header-blue" style="border-bottom: 2px solid black;">%</th>
-            <th class="export-header-blue" style="border-bottom: 2px solid black;">Unit Price :</th>
-            <th class="export-header-blue" style="border-right: 2px solid black; border-bottom: 2px solid black;">Date</th>
+            <th colspan="2" class="export-header-blue" style="border-left: 1.5px solid black; border-bottom: 1.5px solid black; padding: ${cellPadding};"></th>
+            <th class="export-header-blue" style="border-bottom: 1.5px solid black; padding: ${cellPadding};">%</th>
+            <th class="export-header-blue" style="border-bottom: 1.5px solid black; padding: ${cellPadding};">Unit Price :</th>
+            <th class="export-header-blue" style="border-right: 1.5px solid black; border-bottom: 1.5px solid black; padding: ${cellPadding};">Date</th>
         </tr>
     `;
-    
-    let nonMntFlows = globalCustomFlows.filter(f => !f.isMnt);
     
     let grouped = [];
     nonMntFlows.forEach(f => {
@@ -1267,171 +1945,280 @@ function generateExportTemplate(offerPrice, offerPreDelivPct) {
         let isLastGrp = gIdx === grouped.length - 1;
         grp.items.forEach((item, iIdx) => {
             let isLastItem = iIdx === grp.items.length - 1;
-            let bottomBorder = isLastItem ? 'border-bottom: 1px solid black;' : 'border-bottom: 1px dotted black;';
-            if (isLastGrp && isLastItem) bottomBorder = 'border-bottom: 2px solid black;';
+            let bottomBorder = isLastItem ? 'border-bottom: 1px solid black;' : 'border-bottom: 1px dotted #888;';
+            if (isLastGrp && isLastItem) bottomBorder = 'border-bottom: 1.5px solid black;';
             
             html += `<tr>`;
             if (iIdx === 0) {
-                let cellStyle = `border-left: 2px solid black; border-bottom: 1px solid black; border-right: 1px solid black; vertical-align: middle;`;
-                if (isLastGrp) cellStyle += ` border-bottom: 2px solid black;`;
-                if (grp.name === 'Down Payment') {
-                    // Span 2 columns, no inner text for second col
+                let cellStyle = `border-left: 1.5px solid black; border-bottom: 1px solid black; border-right: 1px solid black; vertical-align: middle; padding: ${cellPadding};`;
+                if (isLastGrp) cellStyle += ` border-bottom: 1.5px solid black;`;
+                if (grp.name === 'Down Payment' && grp.items.length === 1) {
                     html += `<td rowspan="${grp.items.length}" colspan="2" class="export-bold" style="${cellStyle} text-align: center;">${grp.name}</td>`;
                 } else {
                     html += `<td rowspan="${grp.items.length}" class="export-bold" style="${cellStyle} text-align: center;">${grp.name}</td>`;
                 }
             }
-            if (grp.name !== 'Down Payment') {
-                html += `<td style="${bottomBorder} border-right: 1px dotted black; text-align: center;">${item.label}</td>`;
+            if (grp.name !== 'Down Payment' || grp.items.length > 1) {
+                html += `<td style="${bottomBorder} border-right: 1px dotted #888; text-align: center; padding: ${cellPadding};">${item.label}</td>`;
             }
-            html += `<td style="${bottomBorder} border-right: 1px dotted black;">${item.displayPct}%</td>`;
-            html += `<td style="${bottomBorder} border-right: 1px dotted black;">${formatNum(item.amount)}</td>`;
-            html += `<td class="export-bold" style="border-right: 2px solid black; ${bottomBorder}">${formatDateExport(item.date)}</td>`;
+            html += `<td style="${bottomBorder} border-right: 1px dotted #888; padding: ${cellPadding};">${item.displayPct}%</td>`;
+            html += `<td style="${bottomBorder} border-right: 1px dotted #888; padding: ${cellPadding};">${formatNum(item.amount)}</td>`;
+            html += `<td style="border-right: 1.5px solid black; ${bottomBorder} padding: ${cellPadding};">${formatDateExport(item.date)}</td>`;
             html += `</tr>`;
         });
     });
     
     html += `<tr>
-        <td colspan="2" class="export-header-blue" style="border-left: 2px solid black; border-bottom: 2px solid black; text-align: center;">Total Amount</td>
-        <td class="export-header-blue" style="border-bottom: 2px solid black;">100.00%</td>
-        <td class="export-header-blue" style="border-bottom: 2px solid black;">${formatNum(offerPrice)}</td>
-        <td class="export-header-blue" style="border-bottom: 2px solid black; border-right: 2px solid black;"></td>
+        <td colspan="2" class="export-header-blue" style="border-left: 1.5px solid black; border-bottom: 1.5px solid black; text-align: center; padding: ${cellPadding};">Total Amount</td>
+        <td class="export-header-blue" style="border-bottom: 1.5px solid black; padding: ${cellPadding};">100.00%</td>
+        <td class="export-header-blue" style="border-bottom: 1.5px solid black; padding: ${cellPadding};">${formatNum(offerPrice)}</td>
+        <td class="export-header-blue" style="border-bottom: 1.5px solid black; border-right: 1.5px solid black; padding: ${cellPadding};"></td>
     </tr>`;
     
-    html += `<tr><td colspan="5" style="height: 10px; border: none;"></td></tr>`;
+    html += `<tr><td colspan="5" style="height: 4px; border: none; padding: 0;"></td></tr>`;
     
-    html += `<tr><th colspan="2" class="export-header-blue" style="border-left: 2px solid black; border-top: 2px solid black; border-bottom: 2px solid black;">Maintenance Payments</th><th colspan="3" style="border-right: 2px solid black; border-top: 2px solid black; border-bottom: 2px solid black;"></th></tr>`;
-    let mntFlows = globalCustomFlows.filter(f => f.isMnt);
+    html += `<tr><th colspan="2" class="export-header-blue" style="border-left: 1.5px solid black; border-top: 1.5px solid black; border-bottom: 1.5px solid black; padding: ${cellPadding}; font-size: ${subHeaderFontSize};">Maintenance Payments</th><th colspan="3" style="border-right: 1.5px solid black; border-top: 1.5px solid black; border-bottom: 1.5px solid black; padding: ${cellPadding};"></th></tr>`;
+    
     let totalMntAmt = 0;
     mntFlows.forEach((m, i) => {
         totalMntAmt += m.amount;
         let isLastMnt = i === mntFlows.length - 1;
-        let bottomBorder = isLastMnt ? 'border-bottom: 2px solid black;' : 'border-bottom: 1px dotted black;';
+        let bottomBorder = isLastMnt ? 'border-bottom: 1.5px solid black;' : 'border-bottom: 1px dotted #888;';
         html += `<tr>
-            <td colspan="2" style="border-left: 2px solid black; border-right: 1px dotted black; $bottomBorder">Maintenance 0${i+1}</td>
-            <td style="$bottomBorder border-right: 1px dotted black;">${parseFloat(m.displayPct).toFixed(2)}%</td>
-            <td style="$bottomBorder border-right: 1px dotted black;">${formatNum(m.amount)}</td>
-            <td style="border-right: 2px solid black; $bottomBorder">${formatDateExport(m.date)}</td>
+            <td colspan="2" style="border-left: 1.5px solid black; border-right: 1px dotted #888; ${bottomBorder} padding: ${cellPadding};">Maintenance 0${i+1}</td>
+            <td style="${bottomBorder} border-right: 1px dotted #888; padding: ${cellPadding};">${parseFloat(m.displayPct).toFixed(2)}%</td>
+            <td style="${bottomBorder} border-right: 1px dotted #888; padding: ${cellPadding};">${formatNum(m.amount)}</td>
+            <td style="border-right: 1.5px solid black; ${bottomBorder} padding: ${cellPadding};">${formatDateExport(m.date)}</td>
         </tr>`;
     });
     
     html += `<tr>
-        <td colspan="2" class="export-header-blue" style="border-left: 2px solid black; border-bottom: 2px solid black; text-align: center;">Total Maintenance</td>
-        <td class="export-header-blue" style="border-bottom: 2px solid black;">8.00%</td>
-        <td class="export-header-blue" style="border-bottom: 2px solid black;">${formatNum(totalMntAmt)}</td>
-        <td class="export-header-blue" style="border-bottom: 2px solid black; border-right: 2px solid black;"></td>
+        <td colspan="2" class="export-header-blue" style="border-left: 1.5px solid black; border-bottom: 1.5px solid black; text-align: center; padding: ${cellPadding};">Total Maintenance</td>
+        <td class="export-header-blue" style="border-bottom: 1.5px solid black; padding: ${cellPadding};">8.00%</td>
+        <td class="export-header-blue" style="border-bottom: 1.5px solid black; padding: ${cellPadding};">${formatNum(totalMntAmt)}</td>
+        <td class="export-header-blue" style="border-bottom: 1.5px solid black; border-right: 1.5px solid black; padding: ${cellPadding};"></td>
     </tr>`;
     
-    document.getElementById('export-table').innerHTML = html;
+    let exportTable = document.getElementById('export-table');
+    if (exportTable) {
+        exportTable.style.fontSize = fontSize;
+        exportTable.style.width = '520px';
+        exportTable.innerHTML = html;
+    }
 }
 
 // --- Export ---
+let isExportingPDF = false;
 function exportPDF() {
+    if (isExportingPDF) return;
+    let exportBtn = document.querySelector('button[onclick="exportPDF()"]');
+    let origBtnHtml = exportBtn ? exportBtn.innerHTML : null;
+    
     try {
         let element = document.getElementById('export-wrapper');
-        element.style.left = '0';
+        if (!element) {
+            alert('عفواً، قالب الطباعة غير جاهز.');
+            return;
+        }
+        isExportingPDF = true;
+
+        if (exportBtn) {
+            exportBtn.disabled = true;
+            exportBtn.innerHTML = '⏳ جاري استخراج الـ PDF...';
+        }
+
+        // Re-generate export template right before export to guarantee fresh data
+        let actualPrice = window.lastCalculatedPrice || parseFloat(document.getElementById('offer-total-amt')?.innerText.replace(/[^\d.]/g, '')) || basePriceCache || 0;
+        let offerPreDelivPct = parseFloat((document.getElementById('offer-pre-delivery') ? document.getElementById('offer-pre-delivery').innerText : '0').replace('%', '')) || 0;
+        generateExportTemplate(actualPrice, offerPreDelivPct);
+
+        // Save original inline styles, scroll position, and body padding
+        let oldScrollY = window.scrollY || window.pageYOffset || 0;
+        let oldScrollX = window.scrollX || window.pageXOffset || 0;
+        let origBodyPad = document.body.style.padding;
+        let originalLeft = element.style.left;
+        let originalPosition = element.style.position;
+        let originalTop = element.style.top;
+        let originalZIndex = element.style.zIndex;
+        let originalVisibility = element.style.visibility;
+        let originalDisplay = element.style.display;
+        let origWidth = element.style.width;
+        let origPadding = element.style.padding;
+        let origMargin = element.style.margin;
+        let origBoxSizing = element.style.boxSizing;
+        let prevGold = getComputedStyle(document.documentElement).getPropertyValue('--gold') || '#c5a059';
+
+        // Temporarily reset window scroll and body padding so html2canvas never suffers from scroll offset or padding shift
+        window.scrollTo(0, 0);
+        document.body.style.padding = '0px';
+
+        // Set clean relative layout with 100% natural height, 550px width, padding 5px 15px, and left: 0 (margin: 0)
         element.style.position = 'relative';
-        
-        let widthIn = element.offsetWidth / 96;
-        let heightIn = element.offsetHeight / 96;
-        
-        let opt = {
-            margin:       0.2, 
-            filename:     `Payment_Plan_${currentProject}.pdf`,
-            image:        { type: 'jpeg', quality: 0.8 },
-            html2canvas:  { scale: 1.5 },
-            jsPDF:        { unit: 'in', format: [widthIn + 0.5, heightIn + 0.5], orientation: 'portrait' }
-        };
-        
-        // Force all gold to black for the PDF
+        element.style.top = '0px';
+        element.style.left = '0px';
+        element.style.margin = '0';
+        element.style.width = '550px';
+        element.style.padding = '5px 15px';
+        element.style.boxSizing = 'border-box';
+        element.style.zIndex = '999999';
+        element.style.visibility = 'visible';
+        element.style.display = 'block';
+        element.style.background = '#ffffff';
+
         document.documentElement.style.setProperty('--gold', '#000000');
-        
+
+        let yearsVal = document.getElementById('duration-years') ? document.getElementById('duration-years').value : 'Plan';
+        let projName = (currentProject || 'Nations_of_Sky').replace(/\s+/g, '_');
+        let pdfFileName = `Payment_Plan_${projName}_${yearsVal}Y.pdf`;
+
+        let opt = {
+            margin:       [8, 32, 8, 32], // symmetric 32mm margins for slender, compact Excel layout on A4
+            filename:     pdfFileName,
+            image:        { type: 'jpeg', quality: 0.98 },
+            html2canvas:  { 
+                scale: 2, 
+                useCORS: true, 
+                logging: false
+            },
+            jsPDF: { 
+                unit: 'mm', 
+                format: 'a4', 
+                orientation: 'portrait' 
+            },
+            pagebreak: { mode: 'avoid-all' }
+        };
+
+        function restoreStyles() {
+            try {
+                element.style.position = originalPosition || 'absolute';
+                element.style.left = originalLeft || '-9999px';
+                element.style.top = originalTop || '0px';
+                element.style.margin = origMargin || '';
+                element.style.width = origWidth || '550px';
+                element.style.padding = origPadding || '5px 15px';
+                element.style.boxSizing = origBoxSizing || 'border-box';
+                element.style.zIndex = originalZIndex || '';
+                element.style.visibility = originalVisibility || 'visible';
+                element.style.display = originalDisplay || 'block';
+                document.body.style.padding = origBodyPad;
+                window.scrollTo(oldScrollX, oldScrollY);
+                document.documentElement.style.setProperty('--gold', prevGold.trim() || '#c5a059');
+            } finally {
+                if (exportBtn) {
+                    exportBtn.disabled = false;
+                    if (origBtnHtml) exportBtn.innerHTML = origBtnHtml;
+                }
+                isExportingPDF = false;
+            }
+        }
+
         html2pdf().set(opt).from(element).save().then(function() {
-            element.style.left = '-9999px';
-            element.style.position = 'absolute';
+            restoreStyles();
+        }).catch(function(err) {
+            console.error('PDF Export Error:', err);
+            restoreStyles();
+            alert('حدث خطأ أثناء استخراج ملف الـ PDF.');
         });
     } catch (e) {
         console.error('SafeGuard: PDF Export Error prevented crash', e);
+        if (exportBtn) {
+            exportBtn.disabled = false;
+            if (origBtnHtml) exportBtn.innerHTML = origBtnHtml;
+        }
+        isExportingPDF = false;
         alert('حدث خطأ أثناء استخراج الـ PDF. تأكد من تحميل الصفحة بالكامل.');
     }
 }
 
 function exportExcel() {
-    let maxMonths = Math.max(...globalCustomFlows.map(f => f.months));
-    let actualYears = Math.ceil(maxMonths / 12);
-    if(actualYears < 1) actualYears = 1;
-    
-    let bestPrice = parseFloat(document.getElementById('offer-total-amt').innerText.replace(/,/g, '')) || 0;
-    let mntTotal = basePriceCache * 0.08;
-    let incAmt = bestPrice - basePriceCache;
-    let incPct = basePriceCache > 0 ? (incAmt / basePriceCache) : 0;
-    
-    let ws_data = [
-        ["Payment Plan", "", "", "", ""],
-        ["Unit No :", "", "", "", ""],
-        ["Unit Base Price :", basePriceCache, "", "", ""],
-        ["Maintenance :", mntTotal, "", "", ""],
-        ["Increase Amount :", Math.abs(incAmt), "", "", ""],
-        ["Increase % :", Math.abs(incPct), "", "", ""],
-        ["Price After Increase :", bestPrice, "", "", ""],
-        ["", "", "", "", ""],
-        ["Payment Terms & Types", "", "Payment Plan", "", ""],
-        ["Type", "Description", "%", "Amount", "Date"]
-    ];
-    
-    let nonMntFlows = globalCustomFlows.filter(f => !f.isMnt);
-    let totalAmtSum = 0;
-    let totalPctSum = 0;
-    
-    nonMntFlows.forEach(f => {
-        let grpName = '';
-        if (f.isInst || f.id.startsWith('inst')) grpName = 'Installments';
-        else if (f.isDP) grpName = 'Down Payments';
-        else if (f.isMerged) grpName = 'Mixed Payments';
-        else grpName = 'Other';
-        
-        let row = [
-            grpName, // Fills column A in every row so there are no empty cells on the left
-            f.label,
-            f.exactPct,
-            f.amount,
-            f.date
-        ];
-        ws_data.push(row);
-        
-        if (!f.isMnt) {
-            totalAmtSum += f.amount;
-            totalPctSum += f.exactPct;
+    try {
+        if (!window.XLSX) {
+            alert('مكتبة تصدير الإكسيل غير متوفرة حالياً.');
+            return;
         }
-    });
-    
-    ws_data.push(["Total Payments:", "", totalPctSum, totalAmtSum, ""]);
-    
-    let mnts = globalCustomFlows.filter(f => f.isMnt);
-    if (mnts.length > 0) {
-        ws_data.push(["", "", "", "", ""]);
-        ws_data.push(["Maintenance Schedule", "", "8% of Base Price", "", ""]);
-        ws_data.push(["Type", "Description", "%", "Amount", "Date"]);
-        let mntSum = 0;
-        let mntPctSum = 0;
-        mnts.forEach(m => {
-            ws_data.push([
-                "Maintenance",
-                m.label,
-                (m.displayPct / 100),
-                m.amount,
-                m.date
-            ]);
-            mntSum += m.amount;
-            mntPctSum += (m.displayPct / 100);
+        if (!globalCustomFlows || globalCustomFlows.length === 0) {
+            alert('لا توجد بيانات متاحة للتصدير.');
+            return;
+        }
+
+        let flowMonths = globalCustomFlows.map(f => f.months || 0);
+        let maxMonths = flowMonths.length > 0 ? Math.max(...flowMonths) : 12;
+        let actualYears = Math.max(1, Math.ceil(maxMonths / 12));
+        
+        let bestPrice = window.lastCalculatedPrice || parseFloat(document.getElementById('offer-total-amt')?.innerText.replace(/[^\d.]/g, '')) || basePriceCache || 0;
+        let mntTotal = (basePriceCache || 0) * 0.08;
+        let incAmt = bestPrice - (basePriceCache || 0);
+        let incPct = basePriceCache > 0 ? (incAmt / basePriceCache) : 0;
+        
+        let ws_data = [
+            ["Payment Plan", "", "", "", ""],
+            ["Unit No :", "", "", "", ""],
+            ["Unit Base Price :", basePriceCache, "", "", ""],
+            ["Maintenance :", mntTotal, "", "", ""],
+            ["Increase Amount :", Math.abs(incAmt), "", "", ""],
+            ["Increase % :", Math.abs(incPct), "", "", ""],
+            ["Price After Increase :", bestPrice, "", "", ""],
+            ["", "", "", "", ""],
+            ["Payment Terms & Types", "", "Payment Plan", "", ""],
+            ["Type", "Description", "%", "Amount", "Date"]
+        ];
+        
+        let nonMntFlows = globalCustomFlows.filter(f => !f.isMnt);
+        let totalAmtSum = 0;
+        let totalPctSum = 0;
+        
+        nonMntFlows.forEach(f => {
+            let grpName = '';
+            if (f.isInst || (f.id && f.id.startsWith('inst'))) grpName = 'Installments';
+            else if (f.isDP) grpName = 'Down Payments';
+            else if (f.isMerged) grpName = 'Mixed Payments';
+            else grpName = 'Other';
+            
+            let row = [
+                grpName,
+                f.label,
+                f.exactPct || 0,
+                f.amount || 0,
+                f.date || ''
+            ];
+            ws_data.push(row);
+            
+            totalAmtSum += (f.amount || 0);
+            totalPctSum += (f.exactPct || 0);
         });
-        ws_data.push(["Total Maintenance:", "", mntPctSum, mntSum, ""]);
+        
+        ws_data.push(["Total Payments:", "", totalPctSum, totalAmtSum, ""]);
+        
+        let mnts = globalCustomFlows.filter(f => f.isMnt);
+        if (mnts.length > 0) {
+            ws_data.push(["", "", "", "", ""]);
+            ws_data.push(["Maintenance Schedule", "", "8% of Base Price", "", ""]);
+            ws_data.push(["Type", "Description", "%", "Amount", "Date"]);
+            let mntSum = 0;
+            let mntPctSum = 0;
+            mnts.forEach(m => {
+                let mPct = (parseFloat(m.displayPct) || 0) / 100;
+                ws_data.push([
+                    "Maintenance",
+                    m.label,
+                    mPct,
+                    m.amount || 0,
+                    m.date || ''
+                ]);
+                mntSum += (m.amount || 0);
+                mntPctSum += mPct;
+            });
+            ws_data.push(["Total Maintenance:", "", mntPctSum, mntSum, ""]);
+        }
+        
+        let ws = XLSX.utils.aoa_to_sheet(ws_data);
+        let wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, "Payment Plan");
+        XLSX.writeFile(wb, `Payment_Plan_${currentProject}.xlsx`);
+    } catch(err) {
+        console.error('Excel Export Error:', err);
+        alert('حدث خطأ أثناء تصدير ملف الإكسيل.');
     }
-    
-    let ws = XLSX.utils.aoa_to_sheet(ws_data);
-    let wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "Payment Plan");
-    XLSX.writeFile(wb, `Payment_Plan_${currentProject}.xlsx`);
 }
 
 // --- Rates Modal ---
@@ -1456,12 +2243,23 @@ function saveRates() {
 }
 
 // Init
-(function() {
-    document.getElementById('contract-date').value = formatDate(new Date());
+function initSystem() {
+    let dateEl = document.getElementById('contract-date');
+    if (dateEl && !dateEl.value) {
+        dateEl.value = formatDate(new Date());
+    }
     renderBaseInputs();
     renderCustomInputs();
     calculate();
-})();
+}
+
+if (typeof document !== 'undefined') {
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', initSystem);
+    } else {
+        initSystem();
+    }
+}
 
 async function handleTemplateUpload(event) {
     try {
@@ -1606,20 +2404,17 @@ async function handleTemplateUpload(event) {
                 window.URL.revokeObjectURL(url);
                 event.target.value = '';
             } catch(err) {
-                console.error(err);
-                alert("??? ??? ????? ?????? ??? ???????. ????? ???????? ??? ????.");
+                console.error('Template upload processing error:', err);
+                alert("حدث خطأ أثناء معالجة ملف الإكسيل. يرجى التأكد من رفع شيت مطابق وصالح.");
                 event.target.value = '';
             }
         };
         reader.readAsArrayBuffer(file);
     } catch (e) {
-        console.error(e);
-        alert("??? ??? ??? ?????.");
+        console.error('Template upload file reading error:', e);
+        alert("حدث خطأ أثناء قراءة الملف.");
     }
 }
-
-
-
 
 
 
