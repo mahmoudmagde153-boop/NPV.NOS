@@ -55,9 +55,21 @@
                         <option value="2">Semi-Annual (6 Months)</option>
                     </select>
                 </div>
+                <div class="input-group">
+                    <label>Client Name (Optional)</label>
+                    <input type="text" id="client-name" placeholder="اسم العميل (اختياري)" oninput="updateExportHeaderInfo()">
+                </div>
+                <div class="input-group">
+                    <label>Unit No (Optional)</label>
+                    <input type="text" id="unit-number" placeholder="رقم الوحدة (اختياري)" oninput="updateExportHeaderInfo()">
+                </div>
             </div>
             
             <div class="header-actions">
+                <label style="display: flex; align-items: center; gap: 6px; font-size: 0.82rem; cursor: pointer; color: var(--gold); font-weight: bold; padding: 6px 10px; border-radius: 6px; background: rgba(212, 175, 55, 0.1); border: 1px solid rgba(212, 175, 55, 0.3); white-space: nowrap;">
+                    <input type="checkbox" id="compare-base-export-toggle" onchange="delayedCalculate()" style="cursor: pointer; width: 16px; height: 16px; accent-color: var(--gold);">
+                    📑 مقارنة بالأساسية (صفحة منفصلة)
+                </label>
                 <button class="btn btn-outline" onclick="openRatesModal()">⚙️ Discount Rates</button>
                 <button class="btn btn-primary" onclick="exportPDF()">📄 Export PDF</button>
                 <button class="btn btn-primary" onclick="exportExcel()" style="background-color: #217346; color: white; border-color: #217346;">📊 Export Excel</button>
@@ -120,6 +132,9 @@
                                 </select>
                             </div>
                         </div>
+
+                        <!-- Real-time Monthly Equivalent Hint -->
+                        <div id="fixed-inst-monthly-hint" style="margin-top: 6px; font-size: 0.84rem; color: #2ecc71; font-weight: bold; background: rgba(46, 204, 113, 0.1); padding: 4px 10px; border-radius: 6px; border: 1px solid rgba(46, 204, 113, 0.25); display: none;"></div>
 
                         <!-- Calculated Counterpart Info -->
                         <div id="fixed-inst-counterpart-info" style="margin-top: 8px; font-size: 0.85rem; padding: 6px 10px; border-radius: 6px; background: rgba(255, 255, 255, 0.05); display: none;">
@@ -186,6 +201,30 @@
                         <input type="checkbox" id="merge-delivery-toggle" onchange="calculate()" checked>
                         دمج القسط مع دفعة الاستلام (Merge Installment with Delivery)
                     </label>
+                </div>
+
+                <!-- Melt Milestone Payments Card -->
+                <div class="custom-controls" style="margin-top: 15px; grid-template-columns: 1fr; background: rgba(56, 189, 248, 0.05); border: 1.5px solid rgba(56, 189, 248, 0.35); border-radius: 8px; padding: 14px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; flex-wrap: wrap; gap: 8px;">
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <span style="font-size: 1.2rem;">🌊</span>
+                            <span style="font-weight: bold; color: var(--accent-blue); font-size: 0.98rem;">تسييح الدفعات على الأقساط (Melt Milestone Payments)</span>
+                        </div>
+                        <button type="button" class="btn btn-outline" onclick="resetMeltPayments()" style="padding: 3px 10px; font-size: 0.78rem; border-color: rgba(255,255,255,0.25);">↩️ إلغاء التسييح واستعادة الدفعات</button>
+                    </div>
+
+                    <div style="font-size: 0.82rem; color: var(--text-muted); margin-bottom: 10px; line-height: 1.4;">
+                        اختر أي دفعة لإلغائها وتسييح قيمتها إما على <strong>أقساط ما قبل الاستلام فقط</strong> للحفاظ على نسبة الاعتماد والتحصيل، أو على <strong>جميع الأقساط بالتساوي</strong> لتخفيف العبء المالي.
+                    </div>
+
+                    <!-- Milestone melt rows container -->
+                    <div id="melt-controls-container" style="display: flex; flex-direction: column; gap: 8px;">
+                        <!-- Injected dynamically via renderMeltControls() -->
+                    </div>
+
+                    <div id="melt-impact-summary" style="margin-top: 10px; font-size: 0.83rem; padding: 8px 12px; border-radius: 6px; background: rgba(0,0,0,0.25); border-left: 3px solid var(--accent-blue); display: none; line-height: 1.5;">
+                        <!-- Impact text injected via JS -->
+                    </div>
                 </div>
 
                 <div class="custom-controls" style="margin-top: 15px; grid-template-columns: 1fr; background: rgba(212, 175, 55, 0.05); border: 1px solid rgba(212, 175, 55, 0.3); border-radius: 8px; padding: 12px;">
@@ -256,6 +295,38 @@
                     <div id="target-price-guidance-box" style="margin-top: 10px; padding: 10px 14px; border-radius: 6px; font-size: 0.88rem; display: none; line-height: 1.5;"></div>
                 </div>
 
+                <!-- Financial Approval Status Card -->
+                <div id="approval-status-card" class="custom-controls" style="margin-top: 15px; grid-template-columns: 1fr; padding: 14px 16px; border-radius: 8px; border: 1.5px solid var(--border); background: rgba(255, 255, 255, 0.03); transition: all 0.3s ease;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <span style="font-size: 1.25rem;">🛡️</span>
+                            <span style="font-weight: bold; font-size: 0.98rem; color: var(--gold);">موقف الاعتماد المالي (Approval Status)</span>
+                        </div>
+                        
+                        <!-- Benchmark Selector Option Group -->
+                        <div style="display: flex; gap: 6px; align-items: center; flex-wrap: wrap;">
+                            <span style="font-size: 0.82rem; color: var(--text-muted); margin-left: 4px;">معيار الفحص:</span>
+                            <button type="button" class="approval-bench-btn active" id="bench-btn-8y" onclick="setApprovalBenchmark('8y')" style="padding: 5px 12px; font-size: 0.82rem; border-radius: 6px; border: 1px solid var(--accent-blue); background: var(--accent-blue); color: white; cursor: pointer; font-weight: bold; transition: all 0.2s;">
+                                🔘 سياسة 8 سنوات
+                            </button>
+                            <button type="button" class="approval-bench-btn" id="bench-btn-10y" onclick="setApprovalBenchmark('10y')" style="padding: 5px 12px; font-size: 0.82rem; border-radius: 6px; border: 1px solid var(--border); background: transparent; color: var(--text); cursor: pointer; transition: all 0.2s;">
+                                ⚪ سياسة 10 سنوات
+                            </button>
+                            <button type="button" class="approval-bench-btn" id="bench-btn-auto" onclick="setApprovalBenchmark('auto')" style="padding: 5px 12px; font-size: 0.82rem; border-radius: 6px; border: 1px solid var(--border); background: transparent; color: var(--text); cursor: pointer; transition: all 0.2s;">
+                                ⚪ حسب مدة الخطة
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Main Dynamic Status Banner -->
+                    <div id="approval-badge-container" style="margin-top: 10px;">
+                        <!-- Injected dynamically via renderApprovalStatus -->
+                    </div>
+
+                    <!-- Collapsible Audit Breakdown -->
+                    <div id="approval-audit-details" style="display: none; margin-top: 12px; padding: 12px 14px; border-radius: 6px; font-size: 0.85rem; line-height: 1.5;"></div>
+                </div>
+
                 <div class="summary-box" style="margin-top: 15px;">
                     <div class="summary-item">
                         <span class="summary-label">Total Amount</span>
@@ -265,9 +336,16 @@
                         <span class="summary-label">Total PV</span>
                         <span class="summary-value" id="offer-total-pv" style="color:var(--gold)">0</span>
                     </div>
-                    <div class="summary-item" style="grid-column: 1 / -1; padding-top: 10px; border-top: 1px solid var(--border);">
+                    <div class="summary-item" style="grid-column: 1 / -1; padding-top: 10px; border-top: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center;">
                         <span class="summary-label">Collected Pre-Delivery</span>
-                        <span class="summary-value" id="offer-pre-delivery" style="color:var(--accent-blue)">0%</span>
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <span class="summary-value" id="offer-pre-delivery" style="color:var(--accent-blue)">0%</span>
+                            <span id="offer-pre-deliv-approval-badge" style="font-size: 0.78rem; font-weight: bold; padding: 2px 8px; border-radius: 12px;"></span>
+                        </div>
+                    </div>
+                    <div class="summary-item" style="grid-column: 1 / -1; padding-top: 8px; border-top: 1px dashed var(--border); display: flex; justify-content: space-between; align-items: center;">
+                        <span class="summary-label">Average Monthly Eq. (ما يعادل القسط شهرياً)</span>
+                        <span class="summary-value" id="offer-monthly-avg" style="color:#2ecc71; font-weight: bold; font-size: 0.95rem;">0 ج.م / شهر</span>
                     </div>
                 </div>
                 
@@ -319,6 +397,10 @@
                         <span class="summary-label">Collected Pre-Delivery</span>
                         <span class="summary-value" id="base-pre-delivery" style="color:var(--accent-blue)">0%</span>
                     </div>
+                    <div class="summary-item" style="grid-column: 1 / -1; padding-top: 8px; border-top: 1px dashed var(--border); display: flex; justify-content: space-between; align-items: center;">
+                        <span class="summary-label">Average Monthly Eq. (ما يعادل القسط شهرياً)</span>
+                        <span class="summary-value" id="base-monthly-avg" style="color:#2ecc71; font-weight: bold; font-size: 0.95rem;">0 ج.م / شهر</span>
+                    </div>
                 </div>
 
                 <div class="table-container" style="margin-top:15px; max-height: 520px; overflow-y:auto;">
@@ -358,18 +440,29 @@
     <!-- Hidden Export Template -->
     <div id="export-wrapper" style="position: absolute; left: -9999px; top: 0; background: #ffffff; padding: 5px 15px; width: 550px; box-sizing: border-box; color: #000000; font-family: Calibri, 'Segoe UI', Arial, sans-serif; direction: ltr;">
         <style>
-            #export-table { width: 520px; margin: 0 auto; border-collapse: collapse; text-align: center; border: 1.5px solid #000000; line-height: 1.15; box-sizing: border-box; }
-            #export-table th, #export-table td { border: 1px solid #000000; font-weight: normal; }
+            .export-table-cls, #export-table, #export-table-base { width: 520px; margin: 0 auto; border-collapse: collapse; text-align: center; border: 1.5px solid #000000; line-height: 1.15; box-sizing: border-box; }
+            .export-table-cls th, .export-table-cls td, #export-table th, #export-table td, #export-table-base th, #export-table-base td { border: 1px solid #000000; font-weight: normal; }
             .export-header-blue { background-color: #b8d5f0 !important; font-weight: 600 !important; color: #000000 !important; }
             .export-sub-blue { background-color: #b8d5f0 !important; font-weight: 600 !important; color: #000000 !important; }
             .export-bold { font-weight: 600 !important; }
+            .html2pdf__page-break { page-break-before: always !important; break-before: page !important; }
         </style>
-        <table id="export-table">
-            <!-- Generated via JS -->
-        </table>
+        <div id="export-container">
+            <div id="export-offer-page">
+                <table id="export-table" class="export-table-cls">
+                    <!-- Generated via JS for offer plan -->
+                </table>
+            </div>
+            <div id="export-base-page" style="display: none;">
+                <div class="html2pdf__page-break" style="page-break-before: always; break-before: page; height: 10px; margin: 0; padding: 0;"></div>
+                <table id="export-table-base" class="export-table-cls" style="margin-top: 15px;">
+                    <!-- Generated via JS for base plan -->
+                </table>
+            </div>
+        </div>
     </div>
 
-    <script src="app.js?v=20261019_v8"></script>
+    <script src="app.js?v=20261022_v2"></script>
 </body>
 </html>
 

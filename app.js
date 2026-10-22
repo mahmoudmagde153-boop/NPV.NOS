@@ -2,13 +2,19 @@ let currentProject = 'Zomra';
 let typingTimer;
 
 let discountRates = {
-    0: 19, 1: 18, 2: 15, 3: 15, 4: 10,
+    0: 19, 1: 18, 2: 15, 3: 13, 4: 10,
     5: 10, 6: 9, 7: 9, 8: 9, 9: 9, 10: 9, 11: 9, 12: 9, 13: 9, 14: 9, 15: 9
 };
 
 let globalCustomFlows = [];
+let globalBaseFlows = [];
 let basePvCache = 0;
 let basePriceCache = 0;
+
+function escapeHtml(str) {
+    if (!str) return '';
+    return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
 
 // --- Installment Distribution State & Handlers ---
 window.globalDistState = {
@@ -50,6 +56,42 @@ window.setDistPreset = function(preset) {
     window.globalDistState.typedPrePct = null;
     window.globalDistState.typedPostPct = null;
     calculate();
+};
+
+window.updateExportHeaderInfo = function() {
+    let actualPrice = window.lastCalculatedPrice || parseFloat(document.getElementById('offer-total-amt')?.innerText.replace(/[^\d.]/g, '')) || basePriceCache || 0;
+    let offerPreDelivPct = parseFloat((document.getElementById('offer-pre-delivery') ? document.getElementById('offer-pre-delivery').innerText : '0').replace('%', '')) || 0;
+    generateExportTemplate(actualPrice, offerPreDelivPct);
+};
+
+window.updateFixedInstMonthlyHint = function() {
+    let hintEl = document.getElementById('fixed-inst-monthly-hint');
+    if (!hintEl) return;
+    let toggle = document.getElementById('fixed-inst-toggle');
+    if (!toggle || !toggle.checked) {
+        hintEl.style.display = 'none';
+        return;
+    }
+    let val = parseFloat(document.getElementById('fixed-inst-val')?.value) || 0;
+    let type = document.getElementById('fixed-inst-type')?.value || 'amt';
+    let freqMonths = parseInt(document.getElementById('payment-frequency')?.value) === 2 ? 6 : 3;
+    let basePrice = basePriceCache || 5000000;
+
+    if (val <= 0) {
+        hintEl.style.display = 'none';
+        return;
+    }
+
+    if (type === 'amt') {
+        let monthly = val / freqMonths;
+        hintEl.innerHTML = `💡 القسط المُدخل يعادل: <span style="color: #fff; font-weight: bold;">${formatCurr(monthly)} / شهر</span>`;
+        hintEl.style.display = 'block';
+    } else {
+        let amt = (basePrice * (val / 100));
+        let monthly = amt / freqMonths;
+        hintEl.innerHTML = `💡 القسط المُدخل (${val}% = ${formatCurr(amt)}) يعادل: <span style="color: #fff; font-weight: bold;">${formatCurr(monthly)} / شهر</span>`;
+        hintEl.style.display = 'block';
+    }
 };
 
 window.resetDistPreset = function() {
@@ -154,6 +196,7 @@ function setProject(proj) {
     if (typeof event !== 'undefined' && event && event.target && event.target.classList) {
         event.target.classList.add('active');
     }
+    window.meltState = {};
     resetDistPresetInternal();
     renderBaseInputs();
     renderCustomInputs();
@@ -237,7 +280,7 @@ window.applyRecDP = function(pct) {
     let dp1Type = document.getElementById('dp1-type');
     if (dp1Val && dp1Type) {
         dp1Type.value = 'pct';
-        dp1Val.value = parseFloat(Number(pct).toFixed(2));
+        dp1Val.value = parseFloat(Number(pct).toFixed(4));
     }
     let toggle = document.getElementById('fixed-inst-toggle');
     if (toggle) toggle.checked = true;
@@ -258,7 +301,7 @@ window.applyRecDeliv = function(pct) {
     let delivType = document.getElementById('deliv-type');
     if (delivVal && delivType) {
         delivType.value = 'pct';
-        delivVal.value = parseFloat(Number(pct).toFixed(2));
+        delivVal.value = parseFloat(Number(pct).toFixed(4));
     }
     let toggle = document.getElementById('fixed-inst-toggle');
     if (toggle) toggle.checked = true;
@@ -279,7 +322,7 @@ window.applyRecDP2 = function(pct) {
     let dp2Type = document.getElementById('dp2-type');
     if (dp2Val && dp2Type) {
         dp2Type.value = 'pct';
-        dp2Val.value = parseFloat(Number(pct).toFixed(2));
+        dp2Val.value = parseFloat(Number(pct).toFixed(4));
     }
     let toggle = document.getElementById('fixed-inst-toggle');
     if (toggle) toggle.checked = true;
@@ -478,6 +521,7 @@ function resetCustomInputs() {
     let firstInstDateEl = document.getElementById('first-inst-date');
     if (firstInstDateEl) firstInstDateEl.value = '';
     window.globalTableOverrides = {};
+    window.meltState = {};
     
     resetDistPresetInternal();
     calculate();
@@ -553,26 +597,14 @@ function getPeriod(months) {
 
 function getFlexiblePvFactor(diffDays) {
     if (diffDays <= 0) return 1.0;
-    const brackets = [
-        { maxDays: 54, r: 0.19 },
-        { maxDays: 419, r: 0.18 },
-        { maxDays: 784, r: 0.15 },
-        { maxDays: 1149, r: 0.13 },
-        { maxDays: 1879, r: 0.10 },
-        { maxDays: Infinity, r: 0.09 }
-    ];
-    let factor = 1.0;
-    let prevLimit = 0;
-    for (let b of brackets) {
-        if (diffDays > prevLimit) {
-            let daysInBracket = Math.min(diffDays, b.maxDays) - prevLimit;
-            factor *= Math.pow(1 + b.r / 365.0, daysInBracket);
-            prevLimit = b.maxDays;
-        } else {
-            break;
-        }
-    }
-    return 1.0 / factor;
+    let r;
+    if (diffDays < 54) r = (discountRates[0] !== undefined ? discountRates[0] : 19) / 100;
+    else if (diffDays < 419) r = (discountRates[1] !== undefined ? discountRates[1] : 18) / 100;
+    else if (diffDays < 784) r = (discountRates[2] !== undefined ? discountRates[2] : 15) / 100;
+    else if (diffDays < 1149) r = (discountRates[3] !== undefined ? discountRates[3] : 13) / 100;
+    else if (diffDays < 1879) r = (discountRates[4] !== undefined ? discountRates[4] : 10) / 100;
+    else r = (discountRates[6] !== undefined ? discountRates[6] : 9) / 100;
+    return 1.0 / Math.pow(1.0 + r / 365.0, diffDays);
 }
 
 function applyDiscountLogic(f, contractDateStr) {
@@ -598,7 +630,17 @@ function applyDiscountLogic(f, contractDateStr) {
     months = Math.max(0, months);
     
     let ratesMap = {
-        0: 0.18, 1: 0.15, 2: 0.13, 3: 0.10, 4: 0.10, 5: 0.09, 6: 0.09, 7: 0.09, 8: 0.09, 9: 0.09, 10: 0.09
+        0: (discountRates[1] !== undefined ? discountRates[1] : 18) / 100,
+        1: (discountRates[2] !== undefined ? discountRates[2] : 15) / 100,
+        2: (discountRates[3] !== undefined ? discountRates[3] : 13) / 100,
+        3: (discountRates[4] !== undefined ? discountRates[4] : 10) / 100,
+        4: (discountRates[5] !== undefined ? discountRates[5] : 10) / 100,
+        5: (discountRates[6] !== undefined ? discountRates[6] : 9) / 100,
+        6: (discountRates[7] !== undefined ? discountRates[7] : 9) / 100,
+        7: (discountRates[8] !== undefined ? discountRates[8] : 9) / 100,
+        8: (discountRates[9] !== undefined ? discountRates[9] : 9) / 100,
+        9: (discountRates[10] !== undefined ? discountRates[10] : 9) / 100,
+        10: (discountRates[11] !== undefined ? discountRates[11] : 9) / 100
     };
     let flexibleToggle = document.getElementById('flexible-toggle');
     let isFlexible = flexibleToggle ? (flexibleToggle.value === 'yes') : false;
@@ -616,18 +658,18 @@ function applyDiscountLogic(f, contractDateStr) {
         
         // Zomra October 2026 Update: Payments in 2026 for normal mode get 19%
         if (!isFlexible && yearIndex === 0 && pDate.getFullYear() === 2026) {
-            rate = 0.19;
+            rate = (discountRates[0] !== undefined ? discountRates[0] : 19) / 100;
         }
         
         if (isFlexible) {
             let diffDays = Math.max(0, Math.round((pDate - cDate) / (1000 * 60 * 60 * 24)));
             let r;
-            if (diffDays < 54) r = 0.19;
-            else if (diffDays < 419) r = 0.18;
-            else if (diffDays < 784) r = 0.15;
-            else if (diffDays < 1149) r = 0.13;
-            else if (diffDays < 1879) r = 0.10;
-            else r = 0.09;
+            if (diffDays < 54) r = (discountRates[0] !== undefined ? discountRates[0] : 19) / 100;
+            else if (diffDays < 419) r = (discountRates[1] !== undefined ? discountRates[1] : 18) / 100;
+            else if (diffDays < 784) r = (discountRates[2] !== undefined ? discountRates[2] : 15) / 100;
+            else if (diffDays < 1149) r = (discountRates[3] !== undefined ? discountRates[3] : 13) / 100;
+            else if (diffDays < 1879) r = (discountRates[4] !== undefined ? discountRates[4] : 10) / 100;
+            else r = (discountRates[6] !== undefined ? discountRates[6] : 9) / 100;
             f.rate = r;
             f.pvFactor = getFlexiblePvFactor(diffDays);
             f.pv = (f.amount || 0) * f.pvFactor;
@@ -661,7 +703,7 @@ function applyDiscountLogic(f, contractDateStr) {
             f.period = pmt;
             
             if (pmt === 1) {
-                f.rate = 0.19; // DP2 in Excel gets 19%
+                f.rate = (discountRates[0] !== undefined ? discountRates[0] : 19) / 100; // DP2 in Excel gets 19%
             } else {
                 let yearIndex = Math.max(0, Math.floor((pmt - 2) / 4));
                 f.rate = ratesMap[yearIndex] !== undefined ? ratesMap[yearIndex] : 0.09;
@@ -670,12 +712,12 @@ function applyDiscountLogic(f, contractDateStr) {
             if (isFlexible) {
                 let diffDays = Math.max(0, Math.round((pDate - cDate) / (1000 * 60 * 60 * 24)));
                 let r;
-                if (diffDays < 54) r = 0.19;
-                else if (diffDays < 419) r = 0.18;
-                else if (diffDays < 784) r = 0.15;
-                else if (diffDays < 1149) r = 0.13;
-                else if (diffDays < 1879) r = 0.10;
-                else r = 0.09;
+                if (diffDays < 54) r = (discountRates[0] !== undefined ? discountRates[0] : 19) / 100;
+                else if (diffDays < 419) r = (discountRates[1] !== undefined ? discountRates[1] : 18) / 100;
+                else if (diffDays < 784) r = (discountRates[2] !== undefined ? discountRates[2] : 15) / 100;
+                else if (diffDays < 1149) r = (discountRates[3] !== undefined ? discountRates[3] : 13) / 100;
+                else if (diffDays < 1879) r = (discountRates[4] !== undefined ? discountRates[4] : 10) / 100;
+                else r = (discountRates[6] !== undefined ? discountRates[6] : 9) / 100;
                 f.rate = r;
                 f.pvFactor = getFlexiblePvFactor(diffDays);
             } else {
@@ -1220,12 +1262,16 @@ function applyPerfectPercentages(flows, totalAmt) {
             let pct = validTotal > 0 ? ((f.amount || 0) / validTotal) : 0;
             f.exactPct = pct;
             let pctVal = pct * 100;
-            if (Math.abs(pctVal - Math.round(pctVal)) < 1e-5) {
+            if (Math.abs(pctVal - Math.round(pctVal)) < 1e-4) {
                 f.displayPct = Math.round(pctVal).toString();
-            } else if (Math.abs(pctVal - (Math.round(pctVal * 100) / 100)) < 1e-5) {
+            } else if (Math.abs(pctVal - (Math.round(pctVal * 100) / 100)) < 1e-4) {
                 f.displayPct = (Math.round(pctVal * 100) / 100).toFixed(2);
+            } else if (Math.abs(pctVal - (Math.round(pctVal * 1000) / 1000)) < 1e-4) {
+                f.displayPct = (Math.round(pctVal * 1000) / 1000).toFixed(3);
+            } else if (Math.abs(pctVal - (Math.round(pctVal * 10000) / 10000)) < 1e-4) {
+                f.displayPct = (Math.round(pctVal * 10000) / 10000).toFixed(4);
             } else {
-                f.displayPct = parseFloat(pctVal.toFixed(6)).toString();
+                f.displayPct = parseFloat(pctVal.toFixed(5)).toString();
             }
         } else {
             f.exactPct = 0.04;
@@ -1236,17 +1282,278 @@ function applyPerfectPercentages(flows, totalAmt) {
 }
 
 function updatePreDeliveryTracker(flows, elementId) {
-    if (!flows || !Array.isArray(flows)) return;
+    if (!flows || !Array.isArray(flows)) return 0;
     let delivMonth = currentProject === 'Zomra' ? 37 : 48; // Zomra delivery is month 37
-    let pct = 0;
+    let totAmt = flows.filter(f => !f.isMnt).reduce((s, f) => s + (f.amount || 0), 0);
+    let preAmt = 0;
     flows.forEach(f => {
         if (!f.isMnt && f.months <= delivMonth) {
-            pct += parseFloat(f.displayPct) || 0;
+            preAmt += (f.amount || 0);
         }
     });
-    
+    let pct = totAmt > 0 ? (preAmt / totAmt * 100) : 0;
     let el = document.getElementById(elementId);
     if (el) el.innerText = pct.toFixed(2) + '%';
+    return pct;
+}
+
+// --- Financial Approval & Risk Assessment Functions ---
+window.approvalBenchmarkMode = '8y';
+
+function getProjectBenchmarks() {
+    if (currentProject === 'Zomra') {
+        return {
+            y8: 46.88,
+            y10: 40.50,
+            delivMonth: 37,
+            fixedDP: 15.0
+        };
+    } else { // Perla
+        return {
+            y8: 53.55,
+            y10: 44.62,
+            delivMonth: 48,
+            fixedDP: 10.0
+        };
+    }
+}
+
+window.setApprovalBenchmark = function(mode) {
+    window.approvalBenchmarkMode = mode;
+    ['8y', '10y', 'auto'].forEach(m => {
+        let btn = document.getElementById('bench-btn-' + m);
+        if (btn) {
+            if (m === mode) {
+                btn.classList.add('active');
+                btn.style.background = 'var(--accent-blue)';
+                btn.style.color = 'white';
+                btn.style.borderColor = 'var(--accent-blue)';
+                btn.style.fontWeight = 'bold';
+            } else {
+                btn.classList.remove('active');
+                btn.style.background = 'transparent';
+                btn.style.color = 'var(--text)';
+                btn.style.borderColor = 'var(--border)';
+                btn.style.fontWeight = 'normal';
+            }
+        }
+    });
+    calculate();
+};
+
+function getActiveBenchmark(benchmarks) {
+    let mode = window.approvalBenchmarkMode || '8y';
+    if (mode === '8y') {
+        return { pct: benchmarks.y8, label: 'سياسة 8 سنوات الطبيعية' };
+    }
+    if (mode === '10y') {
+        return { pct: benchmarks.y10, label: 'سياسة 10 سنوات الطبيعية' };
+    }
+    let yrs = parseInt(document.getElementById('duration-years')?.value) || 8;
+    let autoPct = benchmarks.y8;
+    if (yrs === 8) autoPct = benchmarks.y8;
+    else if (yrs === 10) autoPct = benchmarks.y10;
+    else {
+        if (currentProject === 'Zomra') {
+            autoPct = 15.0 + (255.0 / yrs);
+        } else {
+            let totalInst = (yrs * 12 - 6) / 3 + 1;
+            autoPct = 10.0 + (15 * (90.0 / totalInst));
+        }
+    }
+    return { pct: autoPct, label: `طبيعي مدة الخطة (${yrs} سنوات)` };
+}
+
+function updateBenchmarkButtonLabels() {
+    let benchmarks = getProjectBenchmarks();
+    let b8 = document.getElementById('bench-btn-8y');
+    let b10 = document.getElementById('bench-btn-10y');
+    let bAuto = document.getElementById('bench-btn-auto');
+    let mode = window.approvalBenchmarkMode || '8y';
+
+    if (b8) {
+        b8.innerText = (mode === '8y' ? '🔘 ' : '⚪ ') + `سياسة 8 سنوات (${benchmarks.y8.toFixed(2)}%)`;
+    }
+    if (b10) {
+        b10.innerText = (mode === '10y' ? '🔘 ' : '⚪ ') + `سياسة 10 سنوات (${benchmarks.y10.toFixed(2)}%)`;
+    }
+    if (bAuto) {
+        let yrs = parseInt(document.getElementById('duration-years')?.value) || 8;
+        bAuto.innerText = (mode === 'auto' ? '🔘 ' : '⚪ ') + `حسب مدة الخطة (${yrs} سنوات)`;
+    }
+}
+
+window.toggleApprovalAudit = function() {
+    let el = document.getElementById('approval-audit-details');
+    if (!el) return;
+    if (el.style.display === 'none' || !el.style.display) {
+        el.style.display = 'block';
+    } else {
+        el.style.display = 'none';
+    }
+};
+
+window.autoFixPreDeliveryApproval = function(targetPct) {
+    let benchmarks = getProjectBenchmarks();
+    if (!targetPct) {
+        let active = getActiveBenchmark(benchmarks);
+        targetPct = active.pct;
+    }
+    
+    let fixedDP = benchmarks.fixedDP;
+    let pool = 100.0 - fixedDP;
+    let reqPre = Math.max(0, targetPct - fixedDP);
+    let reqPost = Math.max(0, pool - reqPre);
+
+    if (!window.globalDistState) window.globalDistState = {};
+    window.globalDistState.mode = 'custom';
+    window.globalDistState.typedPrePct = reqPre;
+    window.globalDistState.typedPostPct = reqPost;
+
+    let modeSelect = document.getElementById('dist-mode-select');
+    let preInput = document.getElementById('pre-deliv-inst-pct');
+    let postInput = document.getElementById('post-deliv-inst-pct');
+
+    if (modeSelect) modeSelect.value = 'custom';
+    if (preInput) preInput.value = reqPre.toFixed(2);
+    if (postInput) postInput.value = reqPost.toFixed(2);
+
+    calculate();
+};
+
+function renderApprovalStatus(price, offerPreDelivPct) {
+    let card = document.getElementById('approval-status-card');
+    let badgeContainer = document.getElementById('approval-badge-container');
+    let auditBox = document.getElementById('approval-audit-details');
+    let miniBadge = document.getElementById('offer-pre-deliv-approval-badge');
+    if (!card || !badgeContainer) return;
+
+    updateBenchmarkButtonLabels();
+
+    let benchmarks = getProjectBenchmarks();
+    let activeBenchmark = getActiveBenchmark(benchmarks);
+    let targetPct = activeBenchmark.pct;
+    let label = activeBenchmark.label;
+    
+    let diff = offerPreDelivPct - targetPct;
+    let isApproved = diff >= -0.05; // floating point tolerance
+
+    let unitPrice = price || basePriceCache || 0;
+    let deficitAmt = Math.abs(diff) * unitPrice / 100;
+
+    // Mini badge in summary box
+    if (miniBadge) {
+        if (isApproved) {
+            miniBadge.style.background = 'rgba(39, 174, 96, 0.2)';
+            miniBadge.style.color = '#2ecc71';
+            miniBadge.style.border = '1px solid #27ae60';
+            miniBadge.innerHTML = 'معتمد ✅';
+        } else {
+            miniBadge.style.background = 'rgba(231, 76, 60, 0.2)';
+            miniBadge.style.color = '#e74c3c';
+            miniBadge.style.border = '1px solid #e74c3c';
+            miniBadge.innerHTML = 'غير معتمد ❌';
+        }
+    }
+
+    if (isApproved) {
+        card.style.background = 'rgba(46, 204, 113, 0.06)';
+        card.style.border = '1.5px solid #2ecc71';
+        
+        badgeContainer.innerHTML = `
+            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+                <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+                    <span style="background: #27ae60; color: white; padding: 5px 14px; border-radius: 20px; font-weight: bold; font-size: 0.92rem; display: inline-flex; align-items: center; gap: 6px; box-shadow: 0 2px 5px rgba(39,174,96,0.3);">
+                        ✅ APPROVED / معتمد
+                    </span>
+                    <span style="font-size: 0.9rem; color: #2ecc71; font-weight: bold;">
+                        خطة سداد معتمدة: المحصل قبل الاستلام (${offerPreDelivPct.toFixed(2)}%) مستوفٍ لمعيار ${label} (${targetPct.toFixed(2)}%).
+                    </span>
+                </div>
+                <button type="button" onclick="toggleApprovalAudit()" style="background: transparent; border: 1px solid #2ecc71; color: #2ecc71; font-size: 0.8rem; padding: 4px 10px; border-radius: 4px; cursor: pointer;">
+                    🔍 تفاصيل السياسة الائتمانية
+                </button>
+            </div>
+            <div style="margin-top: 6px; font-size: 0.83rem; color: var(--text-muted);">
+                الفارق الإيجابي: <strong style="color: #2ecc71;">+${Math.max(0, diff).toFixed(2)}%</strong> عن الحد الأدنى المطلوب (${targetPct.toFixed(2)}%).
+            </div>
+        `;
+    } else {
+        card.style.background = 'rgba(231, 76, 60, 0.08)';
+        card.style.border = '1.5px solid #e74c3c';
+
+        let severity = (offerPreDelivPct < benchmarks.y10 - 0.05) ? 'حرج' : 'متوسط';
+        let approvalEntity = (severity === 'حرج') 
+            ? 'مجلس الإدارة / الرئيس التنفيذي (CFO / CEO)' 
+            : 'رئيس قطاع المبيعات (Sales Director)';
+
+        badgeContainer.innerHTML = `
+            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+                <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+                    <button type="button" onclick="toggleApprovalAudit()" style="background: #e74c3c; color: white; border: none; padding: 5px 14px; border-radius: 20px; font-weight: bold; font-size: 0.92rem; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; box-shadow: 0 2px 6px rgba(231,76,60,0.35);">
+                        ❌ NOT APPROVED / غير معتمد (استثناء)
+                    </button>
+                    <span style="font-size: 0.92rem; color: #e74c3c; font-weight: bold;">
+                        عجز بالتحصيل: -${Math.abs(diff).toFixed(2)}% (${formatCurr(deficitAmt)})
+                    </span>
+                </div>
+                <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+                    <button type="button" onclick="autoFixPreDeliveryApproval(${targetPct})" style="background: #e67e22; color: white; border: none; font-size: 0.82rem; padding: 5px 12px; border-radius: 4px; cursor: pointer; font-weight: bold; box-shadow: 0 2px 4px rgba(230,126,34,0.3);">
+                        ⚡ رفع التحصيل للاعتماد (${targetPct.toFixed(2)}%)
+                    </button>
+                    <button type="button" onclick="toggleApprovalAudit()" style="background: transparent; border: 1px solid #e74c3c; color: #e74c3c; font-size: 0.8rem; padding: 4px 10px; border-radius: 4px; cursor: pointer;">
+                        ⚠️ تقرير الاستثناء
+                    </button>
+                </div>
+            </div>
+            <div style="margin-top: 6px; font-size: 0.83rem; color: #f87171; line-height: 1.4;">
+                ⚠️ <strong>تنبيه ائتماني:</strong> المحصل قبل الاستلام (<strong>${offerPreDelivPct.toFixed(2)}%</strong>) أقل من النسبة الطبيعية المعتمدة لـ${label} (<strong>${targetPct.toFixed(2)}%</strong>). مطلوب اعتماد: <span style="text-decoration: underline; font-weight: bold; color: white;">${approvalEntity}</span>.
+            </div>
+        `;
+    }
+
+    if (auditBox) {
+        let is8yMet = (offerPreDelivPct >= benchmarks.y8 - 0.05);
+        let is10yMet = (offerPreDelivPct >= benchmarks.y10 - 0.05);
+        
+        auditBox.style.background = 'rgba(0,0,0,0.25)';
+        auditBox.style.border = '1px solid var(--border)';
+        auditBox.innerHTML = `
+            <div style="font-weight: bold; color: var(--gold); margin-bottom: 8px; font-size: 0.9rem; display: flex; justify-content: space-between;">
+                <span>📋 تفاصيل معايير التحصيل والاعتماد المالي (${currentProject})</span>
+                <span style="font-size: 0.8rem; color: var(--text-muted); cursor: pointer;" onclick="toggleApprovalAudit()">✖ إغلاق</span>
+            </div>
+            <table style="width: 100%; border-collapse: collapse; font-size: 0.82rem; margin-bottom: 8px;">
+                <tr style="border-bottom: 1px solid rgba(255,255,255,0.1);">
+                    <th style="text-align: right; padding: 4px; color: var(--text-muted);">المعيار</th>
+                    <th style="text-align: center; padding: 4px; color: var(--text-muted);">النسبة المطلوبة</th>
+                    <th style="text-align: center; padding: 4px; color: var(--text-muted);">المحصل الفعلي</th>
+                    <th style="text-align: center; padding: 4px; color: var(--text-muted);">الفارق</th>
+                    <th style="text-align: center; padding: 4px; color: var(--text-muted);">الحالة</th>
+                </tr>
+                <tr style="border-bottom: 1px solid rgba(255,255,255,0.05);">
+                    <td style="padding: 4px; font-weight: bold;">سياسة الـ 8 سنوات (القياسية)</td>
+                    <td style="padding: 4px; text-align: center;">${benchmarks.y8.toFixed(2)}%</td>
+                    <td style="padding: 4px; text-align: center;">${offerPreDelivPct.toFixed(2)}%</td>
+                    <td style="padding: 4px; text-align: center; color: ${is8yMet ? '#2ecc71' : '#e74c3c'}; font-weight: bold;">${(offerPreDelivPct - benchmarks.y8) >= 0 ? '+' : ''}${(offerPreDelivPct - benchmarks.y8).toFixed(2)}%</td>
+                    <td style="padding: 4px; text-align: center;">${is8yMet ? '<span style="color:#2ecc71; font-weight:bold;">✅ مستوفٍ</span>' : '<span style="color:#e74c3c; font-weight:bold;">❌ غير مستوفٍ</span>'}</td>
+                </tr>
+                <tr style="border-bottom: 1px solid rgba(255,255,255,0.05);">
+                    <td style="padding: 4px; font-weight: bold;">سياسة الـ 10 سنوات (الحد الأدنى)</td>
+                    <td style="padding: 4px; text-align: center;">${benchmarks.y10.toFixed(2)}%</td>
+                    <td style="padding: 4px; text-align: center;">${offerPreDelivPct.toFixed(2)}%</td>
+                    <td style="padding: 4px; text-align: center; color: ${is10yMet ? '#2ecc71' : '#e74c3c'}; font-weight: bold;">${(offerPreDelivPct - benchmarks.y10) >= 0 ? '+' : ''}${(offerPreDelivPct - benchmarks.y10).toFixed(2)}%</td>
+                    <td style="padding: 4px; text-align: center;">${is10yMet ? '<span style="color:#2ecc71; font-weight:bold;">✅ مستوفٍ</span>' : '<span style="color:#e74c3c; font-weight:bold;">❌ غير مستوفٍ</span>'}</td>
+                </tr>
+            </table>
+            <div style="font-size: 0.8rem; color: var(--text-muted); line-height: 1.4;">
+                📌 <strong>صلاحيات الاعتماد والاستثناء:</strong><br>
+                • إذا كان المحصل أقل من ${benchmarks.y10.toFixed(2)}%: يتطلب اعتماد استثنائي من رئيس مجلس الإدارة / الرئيس التنفيذي.<br>
+                • إذا كان المحصل بين ${benchmarks.y10.toFixed(2)}% و ${benchmarks.y8.toFixed(2)}%: يتطلب اعتماد رئيس قطاع المبيعات CCO.<br>
+                • إذا كان المحصل ≥ ${benchmarks.y8.toFixed(2)}%: معتمد تلقائياً بدون حاجة لأي موافقات خاصة.
+            </div>
+        `;
+    }
 }
 
 function updateDistUI(distInfo) {
@@ -1315,6 +1622,242 @@ function updateDistUI(distInfo) {
     }
 }
 
+// --- Melt Milestone Payments Functions ---
+window.meltState = window.meltState || {};
+
+function getMilestoneDefs() {
+    if (currentProject === 'Zomra') {
+        return [
+            { id: 'deliv', label: 'دفعة الاستلام (Delivery Payment)', defaultPct: 5.0, month: 37 },
+            { id: 'addl', label: 'دفعة الـ 6 شهور (6-Months Payment)', defaultPct: 5.0, month: 6 },
+            { id: 'dp2', label: 'الدفعة الثانية (2nd Payment)', defaultPct: 2.5, month: 1 }
+        ];
+    } else { // Perla
+        return [
+            { id: 'dp2', label: 'الدفعة الثانية (2nd Payment)', defaultPct: 5.0, month: 3 }
+        ];
+    }
+}
+
+function renderMeltControls() {
+    let container = document.getElementById('melt-controls-container');
+    if (!container) return;
+    
+    let milestones = getMilestoneDefs();
+    let html = '';
+    
+    milestones.forEach(m => {
+        let activeScope = window.meltState ? window.meltState[m.id] : null;
+        let isPre = activeScope === 'pre';
+        let isAll = activeScope === 'all';
+        let isMelted = isPre || isAll;
+        
+        let badgeStyle = isMelted 
+            ? (isPre ? 'background: rgba(56, 189, 248, 0.2); color: #38bdf8; border: 1px solid #38bdf8;' : 'background: rgba(251, 191, 36, 0.2); color: #fbbf24; border: 1px solid #fbbf24;')
+            : 'background: rgba(255, 255, 255, 0.08); color: var(--text-muted); border: 1px solid var(--border);';
+        let badgeText = isPre ? '🌊 مسيّحة قبل الاستلام' : (isAll ? '🔄 مسيّحة على كل الأقساط' : `قائمة (${m.defaultPct}%)`);
+        
+        let preBtnStyle = isPre 
+            ? 'background: var(--accent-blue); color: white; border-color: var(--accent-blue); font-weight: bold;' 
+            : 'border-color: rgba(56, 189, 248, 0.4); color: var(--accent-blue);';
+        let allBtnStyle = isAll 
+            ? 'background: var(--gold); color: black; border-color: var(--gold); font-weight: bold;' 
+            : 'border-color: rgba(251, 191, 36, 0.4); color: var(--gold);';
+        let restoreStyle = isMelted 
+            ? 'border-color: #ef4444; color: #ef4444;' 
+            : 'display: none;';
+            
+        html += `
+        <div style="display: flex; justify-content: space-between; align-items: center; background: rgba(255,255,255,0.03); padding: 8px 12px; border-radius: 6px; border: 1px solid var(--border); flex-wrap: wrap; gap: 8px;">
+            <div style="display: flex; align-items: center; gap: 8px;">
+                <span style="font-weight: bold; font-size: 0.88rem; color: var(--text);">${m.label}</span>
+                <span style="font-size: 0.75rem; padding: 2px 8px; border-radius: 12px; ${badgeStyle}">${badgeText}</span>
+            </div>
+            <div style="display: flex; gap: 6px; align-items: center; flex-wrap: wrap;">
+                <button type="button" class="btn btn-outline" id="melt-btn-${m.id}-pre" onclick="applyMelt('${m.id}', 'pre')" style="padding: 4px 10px; font-size: 0.78rem; border-radius: 4px; cursor: pointer; ${preBtnStyle}">
+                    🌊 قبل الاستلام فقط
+                </button>
+                <button type="button" class="btn btn-outline" id="melt-btn-${m.id}-all" onclick="applyMelt('${m.id}', 'all')" style="padding: 4px 10px; font-size: 0.78rem; border-radius: 4px; cursor: pointer; ${allBtnStyle}">
+                    🔄 على كل الأقساط بالتساوي
+                </button>
+                <button type="button" class="btn btn-outline" id="melt-btn-${m.id}-restore" onclick="restoreMelt('${m.id}')" style="padding: 4px 10px; font-size: 0.78rem; border-radius: 4px; cursor: pointer; ${restoreStyle}">
+                    ↩️ استعادة الدفعة
+                </button>
+            </div>
+        </div>
+        `;
+    });
+    
+    container.innerHTML = html;
+}
+
+window.applyMelt = function(milestoneId, targetScope) {
+    if (!window.meltState) window.meltState = {};
+    window.meltState[milestoneId] = targetScope;
+    
+    let el = document.getElementById(milestoneId + '-val');
+    let typeEl = document.getElementById(milestoneId + '-type');
+    if (el) el.value = '0';
+    if (typeEl) typeEl.value = 'pct';
+    
+    recalcMeltDistribution();
+};
+
+window.restoreMelt = function(milestoneId) {
+    if (window.meltState) {
+        delete window.meltState[milestoneId];
+    }
+    let el = document.getElementById(milestoneId + '-val');
+    if (el) el.value = '';
+    
+    recalcMeltDistribution();
+};
+
+window.resetMeltPayments = function() {
+    window.meltState = {};
+    ['dp1', 'dp2', 'addl', 'deliv'].forEach(id => {
+        let el = document.getElementById(id + '-val');
+        if (el && el.value === '0') el.value = '';
+    });
+    resetDistPresetInternal();
+    calculate();
+};
+
+function recalcMeltDistribution() {
+    let years = parseInt(document.getElementById('duration-years')?.value) || 8;
+    let freqMonths = parseInt(document.getElementById('payment-frequency')?.value) === 2 ? 6 : 3;
+    let delivMonth = currentProject === 'Zomra' ? 37 : 48;
+    
+    let tpl = generateFlowsTemplate(formatDate(new Date()), years, freqMonths, false);
+    let dynamicInsts = tpl.filter(f => (f.isInst || f.isMerged));
+    let nPre = dynamicInsts.filter(f => f.months <= delivMonth).length;
+    let nPost = dynamicInsts.filter(f => f.months > delivMonth).length;
+    let nTotal = nPre + nPost;
+    
+    let standardMilestonesPct = (currentProject === 'Zomra') ? 15.0 : 10.0;
+    let standardBaselinePool = 100.0 - standardMilestonesPct;
+    let basePrePct = nTotal > 0 ? standardBaselinePool * (nPre / nTotal) : 0;
+    let basePostPct = nTotal > 0 ? standardBaselinePool * (nPost / nTotal) : 0;
+    
+    let getPct = (id, def) => {
+        let el = document.getElementById(id + '-val');
+        if (el && el.value !== '') {
+            let v = parseFloat(el.value);
+            return isNaN(v) ? def : v;
+        }
+        return def;
+    };
+    
+    let currentFixedPct = 0;
+    if (currentProject === 'Zomra') {
+        currentFixedPct += getPct('dp1', 2.5);
+        currentFixedPct += getPct('dp2', 2.5);
+        currentFixedPct += getPct('addl', 5.0);
+        currentFixedPct += getPct('deliv', 5.0);
+    } else {
+        currentFixedPct += getPct('dp1', 5.0);
+        currentFixedPct += getPct('dp2', 5.0);
+    }
+    
+    let remPct = Math.max(0, 100.0 - currentFixedPct);
+    
+    let meltedPrePct = 0;
+    let meltedAllPct = 0;
+    let hasAnyMelt = false;
+    
+    if (window.meltState) {
+        for (let [mId, scope] of Object.entries(window.meltState)) {
+            let defVal = (mId === 'dp1' || mId === 'dp2') ? (currentProject === 'Zomra' ? 2.5 : 5.0) : 5.0;
+            hasAnyMelt = true;
+            if (scope === 'pre') {
+                meltedPrePct += defVal;
+            } else if (scope === 'all') {
+                meltedAllPct += defVal;
+            }
+        }
+    }
+    
+    if (!hasAnyMelt) {
+        resetDistPresetInternal();
+        calculate();
+        return;
+    }
+    
+    let targetPrePct = basePrePct;
+    let targetPostPct = basePostPct;
+    
+    if (meltedPrePct > 0 && meltedAllPct === 0) {
+        targetPostPct = basePostPct;
+        targetPrePct = remPct - targetPostPct;
+    } else if (meltedAllPct > 0 && meltedPrePct === 0) {
+        targetPrePct = nTotal > 0 ? remPct * (nPre / nTotal) : 0;
+        targetPostPct = nTotal > 0 ? remPct * (nPost / nTotal) : 0;
+    } else if (meltedPrePct > 0 && meltedAllPct > 0) {
+        let poolForRest = remPct - meltedPrePct;
+        let restPre = nTotal > 0 ? poolForRest * (nPre / nTotal) : 0;
+        targetPrePct = restPre + meltedPrePct;
+        targetPostPct = nTotal > 0 ? poolForRest * (nPost / nTotal) : 0;
+    }
+    
+    if (!window.globalDistState) window.globalDistState = {};
+    window.globalDistState.mode = 'custom';
+    window.globalDistState.typedPrePct = targetPrePct;
+    window.globalDistState.typedPostPct = targetPostPct;
+    
+    let preInput = document.getElementById('pre-deliv-inst-pct');
+    let postInput = document.getElementById('post-deliv-inst-pct');
+    if (preInput) preInput.value = targetPrePct.toFixed(2);
+    if (postInput) postInput.value = targetPostPct.toFixed(2);
+    
+    calculate();
+}
+
+function renderMeltImpactSummary(flows) {
+    let summaryBox = document.getElementById('melt-impact-summary');
+    if (!summaryBox) return;
+    
+    let hasMelt = window.meltState && Object.keys(window.meltState).length > 0;
+    if (!hasMelt) {
+        summaryBox.style.display = 'none';
+        summaryBox.innerHTML = '';
+        return;
+    }
+    
+    let delivMonth = currentProject === 'Zomra' ? 37 : 48;
+    let preInsts = (flows || []).filter(f => (f.isInst || f.isMerged) && !f.isMnt && f.months <= delivMonth);
+    let postInsts = (flows || []).filter(f => (f.isInst || f.isMerged) && !f.isMnt && f.months > delivMonth);
+    
+    let preAmt = preInsts.length > 0 ? preInsts[0].amount : 0;
+    let postAmt = postInsts.length > 0 ? postInsts[0].amount : 0;
+    let prePct = preInsts.length > 0 ? preInsts[0].displayPct : 0;
+    let postPct = postInsts.length > 0 ? postInsts[0].displayPct : 0;
+    
+    let listItems = [];
+    let milestoneDefs = getMilestoneDefs();
+    for (let [mId, scope] of Object.entries(window.meltState)) {
+        let mDef = milestoneDefs.find(m => m.id === mId);
+        let mName = mDef ? mDef.label : mId;
+        let scopeName = scope === 'pre' 
+            ? '<strong style="color:var(--accent-blue);">أقساط ما قبل الاستلام فقط (للحفاظ على نسبة التحصيل والاعتماد)</strong>' 
+            : '<strong style="color:var(--gold);">جميع الأقساط بالتساوي على مدار المدة</strong>';
+        listItems.push(`• تم تسييح <strong>${mName}</strong> على ${scopeName}.`);
+    }
+    
+    summaryBox.style.display = 'block';
+    summaryBox.innerHTML = `
+        <div style="color: var(--text); font-weight: bold; margin-bottom: 4px;">
+            💡 أثر تسييح الدفعات على قيمة الأقساط:
+        </div>
+        <div style="font-size: 0.82rem; color: var(--text-muted); margin-bottom: 6px;">
+            ${listItems.join('<br>')}
+        </div>
+        <div style="display: flex; gap: 15px; flex-wrap: wrap; font-size: 0.85rem; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 6px;">
+            <span style="color: var(--accent-blue);">قسط ما قبل الاستلام: <strong>${formatCurr(preAmt)}</strong> (${prePct}%) [عدد: ${preInsts.length}]</span>
+            <span style="color: var(--gold);">قسط ما بعد الاستلام: <strong>${formatCurr(postAmt)}</strong> (${postPct}%) [عدد: ${postInsts.length}]</span>
+        </div>
+    `;
+}
+
 function renderFixedGuidanceBox(g) {
     let counterpartEl = document.getElementById('fixed-inst-counterpart-info');
     let guidanceBox = document.getElementById('fixed-inst-guidance-box');
@@ -1370,27 +1913,33 @@ function renderFixedGuidanceBox(g) {
     if (counterpartEl) {
         counterpartEl.style.display = 'block';
         if (g.scope === 'pre') {
+            let monthlyPost = (g.instAmtPost || 0) / freqMonths;
             counterpartEl.innerHTML = `
                 <div style="color: var(--accent-blue); font-weight: bold; font-size: 0.9rem;">
                     ➡️ الأقساط بعد الاستلام (محسوبة بالـ NPV بالتساوي): 
                     <span style="color: #fff;">${formatCurr(g.instAmtPost)}</span> 
+                    <span style="color: #2ecc71; font-size: 0.82rem; margin-right: 4px;">(💡 يعادل ${formatCurr(monthlyPost)} / شهر)</span>
                     (${g.actualPostPct.toFixed(2)}% إجمالي / ${(g.nPost > 0 ? g.actualPostPct / g.nPost : 0).toFixed(2)}% لكل قسط) 
                     | عدد: ${g.nPost} قسطاً
                 </div>`;
         } else if (g.scope === 'post') {
+            let monthlyPre = (g.instAmtPre || 0) / freqMonths;
             counterpartEl.innerHTML = `
                 <div style="color: var(--accent-blue); font-weight: bold; font-size: 0.9rem;">
                     ➡️ الأقساط قبل الاستلام (محسوبة بالـ NPV بالتساوي): 
                     <span style="color: #fff;">${formatCurr(g.instAmtPre)}</span> 
+                    <span style="color: #2ecc71; font-size: 0.82rem; margin-right: 4px;">(💡 يعادل ${formatCurr(monthlyPre)} / شهر)</span>
                     (${g.actualPrePct.toFixed(2)}% إجمالي / ${(g.nPre > 0 ? g.actualPrePct / g.nPre : 0).toFixed(2)}% لكل قسط) 
                     | عدد: ${g.nPre} قسطاً
                 </div>`;
         } else {
             let totalInst = nTotal * g.fixedAmt;
+            let monthlyAll = (g.fixedAmt || 0) / freqMonths;
             counterpartEl.innerHTML = `
                 <div style="color: var(--gold); font-weight: bold; font-size: 0.9rem;">
                     ➡️ إجمالي الأقساط على ${currentYears} سنوات (${nTotal} قسطاً): 
                     <span style="color: #fff;">${formatCurr(totalInst)}</span> 
+                    <span style="color: #2ecc71; font-size: 0.82rem; margin-right: 4px;">(💡 يعادل ${formatCurr(monthlyAll)} / شهر)</span>
                     (${(price > 0 ? (totalInst / price) * 100 : 0).toFixed(2)}% من السعر)
                 </div>`;
         }
@@ -1448,13 +1997,16 @@ function renderFixedGuidanceBox(g) {
         // Solution 2: Exact Down Payment 1 via NPV preserving other milestone percentages
         let W_dp1, P_dp1, neededDp1Amt, dp1PctOfPrice, dpPriceDiffPct;
         if (isZomra) {
-            W_dp1 = 0.875 + 0.025 * dfDp2 + 0.05 * dfAddl + 0.05 * dfDeliv;
+            let S_std_dp1 = 0.025 + 0.05 + 0.05; // 0.125
+            let W_std_dp1 = 0.025 * dfDp2 + 0.05 * dfAddl + 0.05 * dfDeliv;
+            W_dp1 = (1 - S_std_dp1) + W_std_dp1;
             P_dp1 = (targetPv + totalFixedInst - pvFixedInsts) / W_dp1;
-            neededDp1Amt = 0.875 * P_dp1 - totalFixedInst;
+            neededDp1Amt = (1 - S_std_dp1) * P_dp1 - totalFixedInst;
             dp1PctOfPrice = P_dp1 > 0 ? (neededDp1Amt / P_dp1) * 100 : 0;
             dpPriceDiffPct = ((P_dp1 - basePrice) / basePrice) * 100;
         } else {
-            W_dp1 = 0.95 + 0.05 * dfDp2;
+            let W_std_dp1 = 0.05 * dfDp2;
+            W_dp1 = 0.95 + W_std_dp1;
             P_dp1 = (targetPv + totalFixedInst - pvFixedInsts) / W_dp1;
             neededDp1Amt = 0.95 * P_dp1 - totalFixedInst;
             dp1PctOfPrice = P_dp1 > 0 ? (neededDp1Amt / P_dp1) * 100 : 0;
@@ -1464,24 +2016,28 @@ function renderFixedGuidanceBox(g) {
         // Solution 3: Exact Delivery Payment (Zomra) or DP2 (Perla) via NPV
         let sol3Desc, sol3BtnText, sol3ClickAction;
         if (isZomra) {
-            let W_deliv = 0.025 + 0.025 * dfDp2 + 0.05 * dfAddl + 0.90 * dfDeliv;
-            let P_deliv = (targetPv + totalFixedInst * dfDeliv - pvFixedInsts) / W_deliv;
-            let neededDelivAmt = 0.90 * P_deliv - totalFixedInst;
+            let S_nonDeliv = 0.10; // DP1 2.5% + DP2 2.5% + Addl 5%
+            let W_nonDeliv = 0.025 * dfDp1 + 0.025 * dfDp2 + 0.05 * dfAddl;
+            let W_deliv = W_nonDeliv + (1 - S_nonDeliv) * dfDeliv;
+            P_deliv = (targetPv + totalFixedInst * dfDeliv - pvFixedInsts) / W_deliv;
+            let neededDelivAmt = (1 - S_nonDeliv) * P_deliv - totalFixedInst;
             let delivPctOfPrice = P_deliv > 0 ? (neededDelivAmt / P_deliv) * 100 : 0;
             let delivPriceDiffPct = ((P_deliv - basePrice) / basePrice) * 100;
             
-            sol3BtnText = `تحميل ${delivPctOfPrice.toFixed(1)}% على الاستلام`;
-            sol3Desc = `📦 <strong>تحميل على الاستلام:</strong> سداد <strong>${delivPctOfPrice.toFixed(1)}%</strong> (${formatNum(neededDelivAmt)} ج.م) عند الاستلام لتثبيت القسط عند ${formatNum(fixedInst)} ج.م بسعر ${formatNum(P_deliv)} ج.م (${delivPriceDiffPct >= 0 ? '+' : ''}${delivPriceDiffPct.toFixed(2)}%).`;
+            let displayDelivPct = (Math.abs(delivPctOfPrice - Math.round(delivPctOfPrice * 100) / 100) < 0.005) ? (Math.round(delivPctOfPrice * 100) / 100).toFixed(2) : delivPctOfPrice.toFixed(4);
+            sol3BtnText = `تحميل ${displayDelivPct}% على الاستلام`;
+            sol3Desc = `📦 <strong>تحميل على الاستلام:</strong> سداد <strong>${displayDelivPct}%</strong> (${formatNum(Math.round(neededDelivAmt))} ج.م) عند الاستلام لتثبيت القسط عند ${formatNum(fixedInst)} ج.م بسعر ${formatNum(Math.round(P_deliv))} ج.م (${delivPriceDiffPct >= 0 ? '+' : ''}${delivPriceDiffPct.toFixed(2)}%).`;
             sol3ClickAction = `applyRecDeliv(${delivPctOfPrice.toFixed(4)})`;
         } else {
-            let W_dp2 = 0.05 + 0.95 * dfDp2;
+            let W_dp2 = 0.05 * dfDp1 + 0.95 * dfDp2;
             let P_dp2 = (targetPv + totalFixedInst * dfDp2 - pvFixedInsts) / W_dp2;
             let neededDp2Amt = 0.95 * P_dp2 - totalFixedInst;
             let dp2PctOfPrice = P_dp2 > 0 ? (neededDp2Amt / P_dp2) * 100 : 0;
             let dp2PriceDiffPct = ((P_dp2 - basePrice) / basePrice) * 100;
             
-            sol3BtnText = `تعديل الدفعة 2 إلى ${dp2PctOfPrice.toFixed(1)}%`;
-            sol3Desc = `💰 <strong>تعديل الدفعة الثانية:</strong> سداد <strong>${dp2PctOfPrice.toFixed(1)}%</strong> (${formatNum(neededDp2Amt)} ج.م) بعد 3 شهور لتثبيت القسط عند ${formatNum(fixedInst)} ج.م بسعر ${formatNum(P_dp2)} ج.م (${dp2PriceDiffPct >= 0 ? '+' : ''}${dp2PriceDiffPct.toFixed(2)}%).`;
+            let displayDp2Pct = (Math.abs(dp2PctOfPrice - Math.round(dp2PctOfPrice * 100) / 100) < 0.005) ? (Math.round(dp2PctOfPrice * 100) / 100).toFixed(2) : dp2PctOfPrice.toFixed(4);
+            sol3BtnText = `تعديل الدفعة 2 إلى ${displayDp2Pct}%`;
+            sol3Desc = `💰 <strong>تعديل الدفعة الثانية:</strong> سداد <strong>${displayDp2Pct}%</strong> (${formatNum(Math.round(neededDp2Amt))} ج.م) بعد 3 شهور لتثبيت القسط عند ${formatNum(fixedInst)} ج.م بسعر ${formatNum(Math.round(P_dp2))} ج.م (${dp2PriceDiffPct >= 0 ? '+' : ''}${dp2PriceDiffPct.toFixed(2)}%).`;
             sol3ClickAction = `applyRecDP2(${dp2PctOfPrice.toFixed(4)})`;
         }
         
@@ -1506,13 +2062,14 @@ function renderFixedGuidanceBox(g) {
             : `ℹ️ ملاحظة: القسط (${formatCurr(fixedInst)}) أكبر من القسط الطبيعي (${formatCurr(naturalInst)}). لمطابقة شيت الإكسيل (NPV) بنسبة 100%، اختر أحد الحلول الآتية:`;
             
         let yearsBtnText = `تطبيق ${bestYear} سنوات`;
-        let yearsDesc = `🗓️ <strong>تعديل السنين (${bestYear} سنوات):</strong> القسط في الإكسيل يصبح <strong>${formatNum(bestYearInst)} ج.م</strong> بسعر إجمالي ${formatNum(bestYearPrice)} ج.م (${bestYearDiffPct >= 0 ? '+' : ''}${bestYearDiffPct.toFixed(2)}%).`;
+        let yearsDesc = `🗓️ <strong>تعديل السنين (${bestYear} سنوات):</strong> القسط في الإكسيل يصبح <strong>${formatNum(Math.round(bestYearInst))} ج.م</strong> بسعر إجمالي ${formatNum(Math.round(bestYearPrice))} ج.م (${bestYearDiffPct >= 0 ? '+' : ''}${bestYearDiffPct.toFixed(2)}%).`;
         
-        let dpBtnText = `تطبيق مقدم ${dp1PctOfPrice.toFixed(1)}%`;
-        let dpDesc = `💰 <strong>تعديل المقدم:</strong> سداد مقدم <strong>${dp1PctOfPrice.toFixed(1)}%</strong> (${formatNum(neededDp1Amt)} ج.م) لتثبيت القسط عند ${formatNum(fixedInst)} ج.م بسعر ${formatNum(P_dp1)} ج.م (${dpPriceDiffPct >= 0 ? '+' : ''}${dpPriceDiffPct.toFixed(2)}%).`;
+        let displayDp1Pct = (Math.abs(dp1PctOfPrice - Math.round(dp1PctOfPrice * 100) / 100) < 0.005) ? (Math.round(dp1PctOfPrice * 100) / 100).toFixed(2) : dp1PctOfPrice.toFixed(4);
+        let dpBtnText = `تطبيق مقدم ${displayDp1Pct}%`;
+        let dpDesc = `💰 <strong>تعديل المقدم:</strong> سداد مقدم <strong>${displayDp1Pct}%</strong> (${formatNum(Math.round(neededDp1Amt))} ج.م) لتثبيت القسط عند ${formatNum(fixedInst)} ج.م بسعر ${formatNum(Math.round(P_dp1))} ج.م (${dpPriceDiffPct >= 0 ? '+' : ''}${dpPriceDiffPct.toFixed(2)}%).`;
         
         let preBtnText = `تثبيت قبل الاستلام فقط`;
-        let preDesc = `⚖️ <strong>تثبيت قبل الاستلام فقط:</strong> دفع <strong>${formatNum(fixedInst)} ج.م</strong> قبل الاستلام، ويكون قسط ما بعد الاستلام <strong>${formatNum(solvedPostInst)} ج.م</strong> بسعر ${formatNum(P_pre)} ج.م (${prePriceDiffPct >= 0 ? '+' : ''}${prePriceDiffPct.toFixed(2)}%).`;
+        let preDesc = `⚖️ <strong>تثبيت قبل الاستلام فقط:</strong> دفع <strong>${formatNum(fixedInst)} ج.م</strong> قبل الاستلام، ويكون قسط ما بعد الاستلام <strong>${formatNum(Math.round(solvedPostInst))} ج.م</strong> بسعر ${formatNum(Math.round(P_pre))} ج.م (${prePriceDiffPct >= 0 ? '+' : ''}${prePriceDiffPct.toFixed(2)}%).`;
 
         guidanceBox.innerHTML = `
             <div style="color: ${isDeficit ? '#f39c12' : '#3498db'}; font-weight: bold; margin-bottom: 8px;">
@@ -1625,10 +2182,11 @@ function renderTargetPriceGuidance(targetPrice, currentOfferPrice, targetPv) {
 
     let dpActionHtml = '';
     if (dpNeededPct > 0.5 && dpNeededPct < 85 && Math.abs(dpNeededPct - dpCurPct) > 0.2) {
+        let displayDpNeeded = (Math.abs(dpNeededPct - Math.round(dpNeededPct * 100) / 100) < 0.005) ? (Math.round(dpNeededPct * 100) / 100).toFixed(2) : dpNeededPct.toFixed(4);
         dpActionHtml = `
             <div style="display: flex; justify-content: space-between; align-items: center; background: rgba(0,0,0,0.25); padding: 6px 10px; border-radius: 4px; margin-bottom: 6px;">
-                <span>💰 <strong>تعديل المقدم:</strong> دفع مقدم <strong>${dpNeededPct.toFixed(1)}%</strong> (${formatNum(dpNeededAmt)} ج.م) للوصول للسعر المستهدف بالمليم على نفس السنين.</span>
-                <button class="btn btn-primary" onclick="applyTargetDP(${dpNeededPct.toFixed(2)})" style="padding: 3px 8px; font-size: 0.78rem; background: #217346; border-color: #217346;">تطبيق مقدم ${dpNeededPct.toFixed(1)}%</button>
+                <span>💰 <strong>تعديل المقدم:</strong> دفع مقدم <strong>${displayDpNeeded}%</strong> (${formatNum(Math.round(dpNeededAmt))} ج.م) للوصول للسعر المستهدف بالمليم على نفس السنين.</span>
+                <button class="btn btn-primary" onclick="applyTargetDP(${dpNeededPct.toFixed(4)})" style="padding: 3px 8px; font-size: 0.78rem; background: #217346; border-color: #217346;">تطبيق مقدم ${displayDpNeeded}%</button>
             </div>
         `;
     }
@@ -1785,6 +2343,14 @@ function calculate() {
         basePvCache = baseFlows.filter(f => !f.isMnt).reduce((sum, f) => sum + (f.pv || 0), 0); // Exclude Mnt from NPV
         
         baseFlows = applyPerfectPercentages(baseFlows, basePrice);
+        globalBaseFlows = baseFlows;
+        window.globalBaseFlows = baseFlows;
+        
+        let baseInstFlows = baseFlows.filter(f => (f.isInst || f.isMerged) && !f.isMnt);
+        let baseInstAmt = baseInstFlows.reduce((sum, f) => sum + (f.amount || 0), 0);
+        let baseMonthlyAvg = baseInstFlows.length > 0 ? (baseInstAmt / (baseInstFlows.length * baseFreq)) : 0;
+        let baseMonthlyEl = document.getElementById('base-monthly-avg');
+        if (baseMonthlyEl) baseMonthlyEl.innerText = formatCurr(baseMonthlyAvg) + ' / شهر';
         
         let baseTotAmtEl = document.getElementById('base-total-amt');
         if (baseTotAmtEl) baseTotAmtEl.innerText = formatCurr(basePrice);
@@ -1885,17 +2451,32 @@ function calculate() {
         
         let offerPreDelivPct = 0;
         let delivMonth = currentProject === 'Zomra' ? 37 : 48;
+        let offerNonMntTot = globalCustomFlows.filter(f => !f.isMnt).reduce((s, f) => s + (f.amount || 0), 0);
+        let offerPreAmt = 0;
         globalCustomFlows.forEach(f => {
             if (!f.isMnt && f.months <= delivMonth) {
-                offerPreDelivPct += parseFloat(f.displayPct) || 0;
+                offerPreAmt += (f.amount || 0);
             }
         });
+        offerPreDelivPct = offerNonMntTot > 0 ? (offerPreAmt / offerNonMntTot * 100) : 0;
         let offerPreDelivEl = document.getElementById('offer-pre-delivery');
         if (offerPreDelivEl) offerPreDelivEl.innerText = offerPreDelivPct.toFixed(2) + '%';
+        window.lastOfferPreDelivPct = offerPreDelivPct;
+        renderApprovalStatus(actualPrice, offerPreDelivPct);
+
+        let offerInstFlows = globalCustomFlows.filter(f => (f.isInst || f.isMerged) && !f.isMnt);
+        let offerInstAmt = offerInstFlows.reduce((sum, f) => sum + (f.amount || 0), 0);
+        let offerMonthlyAvg = offerInstFlows.length > 0 ? (offerInstAmt / (offerInstFlows.length * freqMonths)) : 0;
+        let offerMonthlyEl = document.getElementById('offer-monthly-avg');
+        if (offerMonthlyEl) offerMonthlyEl.innerText = formatCurr(offerMonthlyAvg) + ' / شهر';
+
+        updateFixedInstMonthlyHint();
 
         renderTable(globalCustomFlows, 'offer-tbody');
         updatePreDeliveryTracker(globalCustomFlows, 'offer-pre-delivery');
         updateDistUI(globalCustomFlows._distInfo);
+        renderMeltControls();
+        renderMeltImpactSummary(globalCustomFlows);
         renderFixedGuidanceBox(globalCustomFlows._fixedGuidance);
         renderIntraGuidanceBox(globalCustomFlows._intraGuidance);
         renderTargetPriceGuidance(targetPrice, actualPrice, targetPv);
@@ -1958,19 +2539,26 @@ function renderTable(flows, tbodyId) {
     let totalAmt = 0;
     let totalPv = 0;
     
+    let rowFreq = (tbodyId === 'base-tbody') ? 
+        (document.getElementById('base-payment-frequency')?.value === '2' ? 6 : 3) : 
+        (document.getElementById('payment-frequency')?.value === '2' ? 6 : 3);
+
     let nonMntFlows = (flows || []).filter(f => !f.isMnt);
     nonMntFlows.forEach((cf) => {
         let idx = flows.indexOf(cf);
         let tr = document.createElement('tr');
         
         let displayPct = cf.displayPct;
+        let isInstRow = cf.isInst || cf.isMerged;
+        let monthlyBadgeHtml = isInstRow ? 
+            `<div style="font-size: 0.72rem; color: #2ecc71; font-weight: normal; margin-top: 1px;">💡 ${formatCurr((cf.amount || 0) / rowFreq)} / شهر</div>` : '';
         
         if (tbodyId === 'base-tbody') {
             tr.innerHTML = `
                 <td style="text-align:left">${cf.label}</td>
                 <td>${cf.date}</td>
                 <td>${displayPct}%</td>
-                <td style="color:var(--accent-blue); font-weight:bold;">${formatCurr(cf.amount)}</td>
+                <td style="color:var(--accent-blue); font-weight:bold;">${formatCurr(cf.amount)}${monthlyBadgeHtml}</td>
                 <td style="color:var(--gold); font-weight:bold;">${formatCurr(cf.pv)}</td>
             `;
             tbody.appendChild(tr);
@@ -1982,7 +2570,10 @@ function renderTable(flows, tbodyId) {
                 <td style="text-align:left">${cf.label}</td>
                 <td><input type="date" style="width:125px; padding: 2px 4px; font-size: 0.85rem;" class="tbl-input tbl-date" value="${cf.date}" onchange="applyTableEdits()"></td>
                 <td><input type="number" step="0.01" style="width:60px;" class="tbl-input tbl-pct" value="${displayPct}" onchange="applyTableEdits()">%</td>
-                <td><input type="number" style="width:90px; color:var(--accent-blue); font-weight:bold;" class="tbl-input tbl-amt" value="${Math.round(cf.amount || 0)}" onchange="applyTableEdits()"></td>
+                <td>
+                    <input type="number" style="width:90px; color:var(--accent-blue); font-weight:bold;" class="tbl-input tbl-amt" value="${Math.round(cf.amount || 0)}" onchange="applyTableEdits()">
+                    ${monthlyBadgeHtml}
+                </td>
                 <td style="color:var(--gold); font-weight:bold;" class="tbl-pv">${formatCurr(cf.pv)}</td>
             `;
             tbody.appendChild(tr);
@@ -2105,19 +2696,21 @@ window.resetTableEdits = function() {
 };
 
 // --- PDF & Excel Export Template Generator ---
-function generateExportTemplate(offerPrice, offerPreDelivPct) {
-    let dateEl = document.getElementById('contract-date');
-    let contractDateStr = (dateEl && dateEl.value) ? dateEl.value : formatDate(new Date());
-    let years = parseInt(document.getElementById('duration-years').value) || 0;
-    let mntTotal = offerPrice * 0.08;
-    let incPct = (offerPrice - basePriceCache) / basePriceCache;
-    
-    let label1 = incPct < 0 ? 'Discount % :' : 'Increase % :';
-    let label2 = incPct < 0 ? 'Price After Discount :' : 'Price After Increase :';
-    let displayIncPct = Math.abs(incPct);
-    
-    let nonMntFlows = globalCustomFlows.filter(f => !f.isMnt);
-    let mntFlows = globalCustomFlows.filter(f => f.isMnt);
+function buildExportPlanHtml(opts) {
+    let {
+        title,
+        flows,
+        price,
+        preDelivPct,
+        isBase,
+        years,
+        contractDateStr,
+        clientName,
+        unitNo
+    } = opts;
+
+    let nonMntFlows = (flows || []).filter(f => !f.isMnt);
+    let mntFlows = (flows || []).filter(f => f.isMnt);
     let totalItems = nonMntFlows.length + mntFlows.length;
 
     // Adaptive sizing based on total items to guarantee 100% fit on a single A4 page
@@ -2143,7 +2736,34 @@ function generateExportTemplate(offerPrice, offerPreDelivPct) {
         subHeaderFontSize = '8px';
     }
 
-    let projectTitle = `NATIONS OF SKY \u2014 ${currentProject.toUpperCase()} \u2014 PAYMENT PLAN (${years} YEARS)`;
+    let mntTotal = price * 0.08;
+    let incPct = (price - basePriceCache) / basePriceCache;
+    let isDiscount = incPct < 0;
+    let label1 = isDiscount ? 'Discount % :' : 'Increase % :';
+    let label2 = isDiscount ? 'Price After Discount :' : 'Price After Increase :';
+    let displayIncPct = Math.abs(incPct);
+
+    let benchmarks = getProjectBenchmarks();
+    let activeBench = getActiveBenchmark(benchmarks);
+    let isApproved = isBase ? true : ((preDelivPct || 0) >= (activeBench.pct - 0.05));
+    let approvalText = isBase ? 'APPROVED (Standard Baseline)' : (isApproved ? 'APPROVED' : `NOT APPROVED (Shortfall ${(activeBench.pct - preDelivPct).toFixed(2)}%)`);
+    let approvalColor = isApproved ? '#27ae60' : '#c0392b';
+
+    let metaRows = '';
+    if (clientName) {
+        metaRows += `<tr><td colspan="2" class="export-bold" style="text-align: left; border-left: 1.5px solid black; padding: ${cellPadding};">Client Name :</td><td colspan="3" class="export-bold" style="border-right: 1.5px solid black; padding: ${cellPadding};">${escapeHtml(clientName)}</td></tr>`;
+    }
+    if (unitNo) {
+        metaRows += `<tr><td colspan="2" class="export-bold" style="text-align: left; border-left: 1.5px solid black; padding: ${cellPadding};">Unit No :</td><td colspan="3" class="export-bold" style="border-right: 1.5px solid black; padding: ${cellPadding};">${escapeHtml(unitNo)}</td></tr>`;
+    }
+
+    let priceRows = isBase ? `
+        <tr><td colspan="2" class="export-bold" style="text-align: left; border-left: 1.5px solid black; padding: ${cellPadding};">Increase % :</td><td colspan="3" style="border-right: 1.5px solid black; padding: ${cellPadding};">0.00%</td></tr>
+        <tr><td colspan="2" class="export-bold" style="text-align: left; border-left: 1.5px solid black; padding: ${cellPadding};">Unit Price :</td><td colspan="3" class="export-bold" style="border-right: 1.5px solid black; padding: ${cellPadding};">${formatNum(price)}</td></tr>
+    ` : `
+        <tr><td colspan="2" class="export-bold" style="text-align: left; border-left: 1.5px solid black; padding: ${cellPadding};">${label1}</td><td colspan="3" style="border-right: 1.5px solid black; padding: ${cellPadding};">${formatPct(displayIncPct)}</td></tr>
+        <tr><td colspan="2" class="export-bold" style="text-align: left; border-left: 1.5px solid black; padding: ${cellPadding};">${label2}</td><td colspan="3" class="export-bold" style="border-right: 1.5px solid black; padding: ${cellPadding};">${formatNum(price)}</td></tr>
+    `;
 
     let html = `
         <colgroup>
@@ -2153,14 +2773,14 @@ function generateExportTemplate(offerPrice, offerPreDelivPct) {
             <col style="width: 26%;">
             <col style="width: 19%;">
         </colgroup>
-        <tr><th colspan="5" class="export-header-blue" style="font-size: ${titleFontSize}; border: 1.5px solid black; padding: 3px; letter-spacing: 0.3px;">${projectTitle}</th></tr>
-        <tr><td colspan="2" class="export-bold" style="text-align: left; border-left: 1.5px solid black; padding: ${cellPadding};">Unit No :</td><td colspan="3" style="border-right: 1.5px solid black; padding: ${cellPadding};"></td></tr>
+        <tr><th colspan="5" class="export-header-blue" style="font-size: ${titleFontSize}; border: 1.5px solid black; padding: 3px; letter-spacing: 0.3px;">${title}</th></tr>
+        ${metaRows}
         <tr><td colspan="2" class="export-bold" style="text-align: left; border-left: 1.5px solid black; padding: ${cellPadding};">Date :</td><td colspan="3" style="border-right: 1.5px solid black; padding: ${cellPadding};">${formatDateExport(contractDateStr || new Date())}</td></tr>
         <tr><td colspan="2" class="export-bold" style="text-align: left; border-left: 1.5px solid black; padding: ${cellPadding};">Unit Base Price :</td><td colspan="3" style="border-right: 1.5px solid black; padding: ${cellPadding};">${formatNum(basePriceCache)}</td></tr>
         <tr><td colspan="2" class="export-bold" style="text-align: left; border-left: 1.5px solid black; padding: ${cellPadding};">Maintenance (8%) :</td><td colspan="3" style="border-right: 1.5px solid black; padding: ${cellPadding};">${formatNum(mntTotal)}</td></tr>
-        <tr><td colspan="2" class="export-bold" style="text-align: left; border-left: 1.5px solid black; padding: ${cellPadding};">${label1}</td><td colspan="3" style="border-right: 1.5px solid black; padding: ${cellPadding};">${formatPct(displayIncPct)}</td></tr>
-        <tr><td colspan="2" class="export-bold" style="text-align: left; border-left: 1.5px solid black; padding: ${cellPadding};">${label2}</td><td colspan="3" class="export-bold" style="border-right: 1.5px solid black; padding: ${cellPadding};">${formatNum(offerPrice)}</td></tr>
-        <tr><td colspan="2" class="export-bold" style="text-align: left; border-left: 1.5px solid black; border-bottom: 1.5px solid black; padding: ${cellPadding};">Collected Till Delivery:</td><td colspan="3" style="border-right: 1.5px solid black; border-bottom: 1.5px solid black; padding: ${cellPadding};">${(offerPreDelivPct || 0).toFixed(2)}%</td></tr>
+        ${priceRows}
+        <tr><td colspan="2" class="export-bold" style="text-align: left; border-left: 1.5px solid black; padding: ${cellPadding};">Collected Till Delivery:</td><td colspan="3" style="border-right: 1.5px solid black; padding: ${cellPadding};">${(preDelivPct || 0).toFixed(2)}%</td></tr>
+        <tr><td colspan="2" class="export-bold" style="text-align: left; border-left: 1.5px solid black; border-bottom: 1.5px solid black; padding: ${cellPadding};">Approval Status:</td><td colspan="3" class="export-bold" style="border-right: 1.5px solid black; border-bottom: 1.5px solid black; padding: ${cellPadding}; color: ${approvalColor};">${approvalText}</td></tr>
         <tr><td colspan="5" style="height: 4px; border: none; padding: 0;"></td></tr>
         
         <tr>
@@ -2174,7 +2794,7 @@ function generateExportTemplate(offerPrice, offerPreDelivPct) {
             <th class="export-header-blue" style="border-right: 1.5px solid black; border-bottom: 1.5px solid black; padding: ${cellPadding};">Date</th>
         </tr>
     `;
-    
+
     let grouped = [];
     nonMntFlows.forEach(f => {
         let grpName = '';
@@ -2190,7 +2810,7 @@ function generateExportTemplate(offerPrice, offerPreDelivPct) {
             grouped.push({ name: grpName, items: [f] });
         }
     });
-    
+
     grouped.forEach((grp, gIdx) => {
         let isLastGrp = gIdx === grouped.length - 1;
         grp.items.forEach((item, iIdx) => {
@@ -2217,18 +2837,18 @@ function generateExportTemplate(offerPrice, offerPreDelivPct) {
             html += `</tr>`;
         });
     });
-    
+
     html += `<tr>
         <td colspan="2" class="export-header-blue" style="border-left: 1.5px solid black; border-bottom: 1.5px solid black; text-align: center; padding: ${cellPadding};">Total Amount</td>
         <td class="export-header-blue" style="border-bottom: 1.5px solid black; padding: ${cellPadding};">100.00%</td>
-        <td class="export-header-blue" style="border-bottom: 1.5px solid black; padding: ${cellPadding};">${formatNum(offerPrice)}</td>
+        <td class="export-header-blue" style="border-bottom: 1.5px solid black; padding: ${cellPadding};">${formatNum(price)}</td>
         <td class="export-header-blue" style="border-bottom: 1.5px solid black; border-right: 1.5px solid black; padding: ${cellPadding};"></td>
     </tr>`;
-    
+
     html += `<tr><td colspan="5" style="height: 4px; border: none; padding: 0;"></td></tr>`;
-    
+
     html += `<tr><th colspan="2" class="export-header-blue" style="border-left: 1.5px solid black; border-top: 1.5px solid black; border-bottom: 1.5px solid black; padding: ${cellPadding}; font-size: ${subHeaderFontSize};">Maintenance Payments</th><th colspan="3" style="border-right: 1.5px solid black; border-top: 1.5px solid black; border-bottom: 1.5px solid black; padding: ${cellPadding};"></th></tr>`;
-    
+
     let totalMntAmt = 0;
     mntFlows.forEach((m, i) => {
         totalMntAmt += m.amount;
@@ -2241,19 +2861,78 @@ function generateExportTemplate(offerPrice, offerPreDelivPct) {
             <td style="border-right: 1.5px solid black; ${bottomBorder} padding: ${cellPadding};">${formatDateExport(m.date)}</td>
         </tr>`;
     });
-    
+
     html += `<tr>
         <td colspan="2" class="export-header-blue" style="border-left: 1.5px solid black; border-bottom: 1.5px solid black; text-align: center; padding: ${cellPadding};">Total Maintenance</td>
         <td class="export-header-blue" style="border-bottom: 1.5px solid black; padding: ${cellPadding};">8.00%</td>
         <td class="export-header-blue" style="border-bottom: 1.5px solid black; padding: ${cellPadding};">${formatNum(totalMntAmt)}</td>
         <td class="export-header-blue" style="border-bottom: 1.5px solid black; border-right: 1.5px solid black; padding: ${cellPadding};"></td>
     </tr>`;
-    
+
+    return { html, fontSize };
+}
+
+function generateExportTemplate(offerPrice, offerPreDelivPct) {
+    let dateEl = document.getElementById('contract-date');
+    let contractDateStr = (dateEl && dateEl.value) ? dateEl.value : formatDate(new Date());
+    let years = parseInt(document.getElementById('duration-years')?.value) || 8;
+    let clientName = (document.getElementById('client-name')?.value || '').trim();
+    let unitNo = (document.getElementById('unit-number')?.value || '').trim();
+    let isComparing = document.getElementById('compare-base-export-toggle')?.checked;
+
+    // 1. Offer Plan Page
+    let offerTitle = `NATIONS OF SKY \u2014 ${currentProject.toUpperCase()} \u2014 PAYMENT PLAN (${years} YEARS)`;
+    let offerPlan = buildExportPlanHtml({
+        title: offerTitle,
+        flows: globalCustomFlows,
+        price: offerPrice,
+        preDelivPct: offerPreDelivPct,
+        isBase: false,
+        years: years,
+        contractDateStr: contractDateStr,
+        clientName: clientName,
+        unitNo: unitNo
+    });
+
     let exportTable = document.getElementById('export-table');
     if (exportTable) {
-        exportTable.style.fontSize = fontSize;
+        exportTable.style.fontSize = offerPlan.fontSize;
         exportTable.style.width = '520px';
-        exportTable.innerHTML = html;
+        exportTable.innerHTML = offerPlan.html;
+    }
+
+    // 2. Base Plan Page (if comparison is selected)
+    let basePageEl = document.getElementById('export-base-page');
+    let exportTableBase = document.getElementById('export-table-base');
+    if (isComparing && globalBaseFlows && globalBaseFlows.length > 0) {
+        if (basePageEl) basePageEl.style.display = 'block';
+        let baseYearsEl = document.getElementById('base-duration-years');
+        let baseYears = parseInt(baseYearsEl ? baseYearsEl.value : 8) || 8;
+        let baseTitle = `NATIONS OF SKY \u2014 ${currentProject.toUpperCase()} \u2014 BASE PAYMENT PLAN (${baseYears} YEARS)`;
+        
+        let benchmarks = getProjectBenchmarks();
+        let basePrePct = benchmarks['8y'] ? benchmarks['8y'].pct : (currentProject === 'Zomra' ? 46.88 : 53.55);
+
+        let basePlan = buildExportPlanHtml({
+            title: baseTitle,
+            flows: globalBaseFlows,
+            price: basePriceCache,
+            preDelivPct: basePrePct,
+            isBase: true,
+            years: baseYears,
+            contractDateStr: contractDateStr,
+            clientName: clientName,
+            unitNo: unitNo
+        });
+
+        if (exportTableBase) {
+            exportTableBase.style.fontSize = basePlan.fontSize;
+            exportTableBase.style.width = '520px';
+            exportTableBase.innerHTML = basePlan.html;
+        }
+    } else {
+        if (basePageEl) basePageEl.style.display = 'none';
+        if (exportTableBase) exportTableBase.innerHTML = '';
     }
 }
 
@@ -2319,7 +2998,14 @@ function exportPDF() {
 
         let yearsVal = document.getElementById('duration-years') ? document.getElementById('duration-years').value : 'Plan';
         let projName = (currentProject || 'Nations_of_Sky').replace(/\s+/g, '_');
-        let pdfFileName = `Payment_Plan_${projName}_${yearsVal}Y.pdf`;
+        let clientName = (document.getElementById('client-name')?.value || '').trim();
+        let unitNo = (document.getElementById('unit-number')?.value || '').trim();
+        let isComparing = document.getElementById('compare-base-export-toggle')?.checked;
+
+        let clientPart = clientName ? `_${clientName.replace(/\s+/g, '_')}` : '';
+        let unitPart = unitNo ? `_Unit_${unitNo.replace(/\s+/g, '_')}` : '';
+        let compPart = isComparing ? '_With_Base_Comparison' : '';
+        let pdfFileName = `Payment_Plan_${projName}_${yearsVal}Y${unitPart}${clientPart}${compPart}.pdf`;
 
         let opt = {
             margin:       [8, 32, 8, 32], // symmetric 32mm margins for slender, compact Excel layout on A4
@@ -2328,14 +3014,16 @@ function exportPDF() {
             html2canvas:  { 
                 scale: 2, 
                 useCORS: true, 
-                logging: false
+                logging: false 
             },
             jsPDF: { 
                 unit: 'mm', 
                 format: 'a4', 
                 orientation: 'portrait' 
             },
-            pagebreak: { mode: 'avoid-all' }
+            pagebreak: isComparing 
+                ? { mode: ['css', 'legacy'], before: '.html2pdf__page-break' } 
+                : { mode: 'avoid-all' }
         };
 
         function restoreStyles() {
@@ -2396,6 +3084,14 @@ async function populateTemplateWorkbook(workbook, offerPrice) {
     let projectTitle = 'NATIONS OF SKY — ' + currentProject.toUpperCase() + ' — PAYMENT PLAN (' + years + ' YEARS)';
     ws.getCell('D2').value = projectTitle;
     ws.getCell('F2').value = projectTitle;
+
+    let clientName = (document.getElementById('client-name')?.value || '').trim();
+    let unitNo = (document.getElementById('unit-number')?.value || '').trim();
+    if (unitNo) {
+        ws.getCell('F3').value = unitNo;
+    } else {
+        ws.getCell('F3').value = '';
+    }
 
     ws.getCell('F4').value = basePrice;
     ws.getCell('F4').numFmt = '#,##0.00';
@@ -2578,18 +3274,32 @@ function exportExcelFallback(offerPrice) {
     let incPct = basePrice > 0 ? (incAmt / basePrice) : 0;
     let isDiscount = incPct < 0;
 
+    let clientName = (document.getElementById('client-name')?.value || '').trim();
+    let unitNo = (document.getElementById('unit-number')?.value || '').trim();
+    let isComparing = document.getElementById('compare-base-export-toggle')?.checked;
+
+    let benchmarks = getProjectBenchmarks();
+    let activeBench = getActiveBenchmark(benchmarks);
+    let isApproved = (window.lastOfferPreDelivPct || 0) >= (activeBench.pct - 0.05);
+    let approvalText = isApproved ? 'APPROVED' : `NOT APPROVED (Shortfall ${(activeBench.pct - (window.lastOfferPreDelivPct || 0)).toFixed(2)}%)`;
+
     let ws_data = [
-        ['Payment Plan', '', '', '', ''],
-        ['Unit No :', '', '', '', ''],
+        ['Payment Plan', '', '', '', '']
+    ];
+    if (clientName) ws_data.push(['Client Name :', clientName, '', '', '']);
+    if (unitNo) ws_data.push(['Unit No :', unitNo, '', '', '']);
+    ws_data.push(
         ['Unit Base Price :', basePrice, '', '', ''],
         ['Maintenance (8%) :', mntTotal, '', '', ''],
         [isDiscount ? 'Discount Amount :' : 'Increase Amount :', Math.abs(incAmt), '', '', ''],
         [isDiscount ? 'Discount % :' : 'Increase % :', Math.abs(incPct), '', '', ''],
         [isDiscount ? 'Price After Discount :' : 'Price After Increase :', offerPrice, '', '', ''],
+        ['Collected Till Delivery :', (window.lastOfferPreDelivPct || 0) / 100, '', '', ''],
+        ['Approval Status :', approvalText, '', '', ''],
         ['', '', '', '', ''],
         ['Payment Terms & Types', '', 'Payment Plan', '', ''],
         ['Type', 'Description', '%', 'Amount', 'Date']
-    ];
+    );
 
     let nonMntFlows = globalCustomFlows.filter(f => !f.isMnt);
     let totalAmtSum = 0;
@@ -2634,10 +3344,74 @@ function exportExcelFallback(offerPrice) {
         ws_data.push(['Total Maintenance:', '', mntPctSum, mntSum, '']);
     }
 
-    let ws = XLSX.utils.aoa_to_sheet(ws_data);
     let wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Payment Plan');
-    XLSX.writeFile(wb, 'Payment_Plan_' + currentProject + '.xlsx');
+    let ws = XLSX.utils.aoa_to_sheet(ws_data);
+    XLSX.utils.book_append_sheet(wb, ws, isComparing ? 'Offer Plan' : 'Payment Plan');
+
+    if (isComparing && globalBaseFlows && globalBaseFlows.length > 0) {
+        let basePrePct = benchmarks['8y'] ? benchmarks['8y'].pct : (currentProject === 'Zomra' ? 46.88 : 53.55);
+        let ws_data_base = [
+            ['Base Payment Plan', '', '', '', '']
+        ];
+        if (clientName) ws_data_base.push(['Client Name :', clientName, '', '', '']);
+        if (unitNo) ws_data_base.push(['Unit No :', unitNo, '', '', '']);
+        ws_data_base.push(
+            ['Unit Base Price :', basePrice, '', '', ''],
+            ['Maintenance (8%) :', basePrice * 0.08, '', '', ''],
+            ['Increase % :', 0, '', '', ''],
+            ['Unit Price :', basePrice, '', '', ''],
+            ['Collected Till Delivery :', basePrePct / 100, '', '', ''],
+            ['Approval Status :', 'APPROVED (Standard Baseline)', '', '', ''],
+            ['', '', '', '', ''],
+            ['Payment Terms & Types', '', 'Base Payment Plan', '', ''],
+            ['Type', 'Description', '%', 'Amount', 'Date']
+        );
+        let baseNonMnt = globalBaseFlows.filter(f => !f.isMnt);
+        let baseTotalAmt = 0;
+        let baseTotalPct = 0;
+        baseNonMnt.forEach(f => {
+            let grpName = '';
+            if (f.months <= 1 && f.isDP) grpName = 'Down Payment';
+            else {
+                let y = Math.ceil(f.months / 12);
+                if (y < 1) y = 1;
+                grpName = 'Year ' + y;
+            }
+            let itemPct = basePrice > 0 ? (f.amount / basePrice) : 0;
+            ws_data_base.push([
+                grpName,
+                f.label,
+                itemPct,
+                f.amount || 0,
+                formatDateExport(f.date)
+            ]);
+            baseTotalAmt += (f.amount || 0);
+            baseTotalPct += itemPct;
+        });
+        ws_data_base.push(['Total Payments:', '', baseTotalPct, baseTotalAmt, '']);
+        let baseMnt = globalBaseFlows.filter(f => f.isMnt);
+        if (baseMnt.length > 0) {
+            ws_data_base.push(['', '', '', '', '']);
+            ws_data_base.push(['Maintenance Schedule', '', '8% of Base Price', '', '']);
+            ws_data_base.push(['Type', 'Description', '%', 'Amount', 'Date']);
+            let mntSum = 0;
+            let mntPctSum = 0;
+            baseMnt.forEach(m => {
+                let mPct = basePrice > 0 ? (m.amount / basePrice) : 0;
+                ws_data_base.push(['Maintenance', m.label, mPct, m.amount || 0, formatDateExport(m.date)]);
+                mntSum += (m.amount || 0);
+                mntPctSum += mPct;
+            });
+            ws_data_base.push(['Total Maintenance:', '', mntPctSum, mntSum, '']);
+        }
+        let wsBase = XLSX.utils.aoa_to_sheet(ws_data_base);
+        XLSX.utils.book_append_sheet(wb, wsBase, 'Base Plan');
+    }
+
+    let clientPart = clientName ? `_${clientName.replace(/\s+/g, '_')}` : '';
+    let unitPart = unitNo ? `_Unit_${unitNo.replace(/\s+/g, '_')}` : '';
+    let compPart = isComparing ? '_With_Base_Comparison' : '';
+    XLSX.writeFile(wb, `Payment_Plan_${currentProject}${unitPart}${clientPart}${compPart}.xlsx`);
 }
 
 // --- Rates Modal ---
