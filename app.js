@@ -200,8 +200,8 @@ function setProject(proj) {
     window.meltState = {};
     resetDistPresetInternal();
     let flexToggle = document.getElementById('flexible-toggle');
-    if (flexToggle) {
-        flexToggle.value = (proj === 'Zomra') ? 'yes' : 'no';
+    if (flexToggle && !flexToggle.value) {
+        flexToggle.value = 'no';
     }
     renderBaseInputs();
     renderCustomInputs();
@@ -533,7 +533,7 @@ function resetCustomInputs() {
     document.getElementById('duration-years').value = 8;
     document.getElementById('payment-frequency').value = 4;
     let flexToggle = document.getElementById('flexible-toggle');
-    if (flexToggle) flexToggle.value = (currentProject === 'Zomra') ? 'yes' : 'no';
+    if (flexToggle) flexToggle.value = 'no';
     
     let fixToggle = document.getElementById('fixed-inst-toggle');
     if (fixToggle) fixToggle.checked = false;
@@ -3521,6 +3521,10 @@ function initSystem() {
     let dateEl = document.getElementById('contract-date');
     if (dateEl && !dateEl.value) {
         dateEl.value = formatDate(new Date());
+    }
+    let flexToggle = document.getElementById('flexible-toggle');
+    if (flexToggle) {
+        flexToggle.value = 'no';
     }
     renderBaseInputs();
     renderCustomInputs();
