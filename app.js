@@ -64,7 +64,7 @@ window.updateExportHeaderInfo = function() {
     generateExportTemplate(actualPrice, offerPreDelivPct);
 };
 
-window.updateFixedInstMonthlyHint = function() {
+function updateFixedInstMonthlyHint() {
     let hintEl = document.getElementById('fixed-inst-monthly-hint');
     if (!hintEl) return;
     let toggle = document.getElementById('fixed-inst-toggle');
@@ -92,7 +92,8 @@ window.updateFixedInstMonthlyHint = function() {
         hintEl.innerHTML = `💡 القسط المُدخل (${val}% = ${formatCurr(amt)}) يعادل: <span style="color: #fff; font-weight: bold;">${formatCurr(monthly)} / شهر</span>`;
         hintEl.style.display = 'block';
     }
-};
+}
+window.updateFixedInstMonthlyHint = updateFixedInstMonthlyHint;
 
 window.resetDistPreset = function() {
     resetDistPresetInternal();
@@ -198,6 +199,10 @@ function setProject(proj) {
     }
     window.meltState = {};
     resetDistPresetInternal();
+    let flexToggle = document.getElementById('flexible-toggle');
+    if (flexToggle) {
+        flexToggle.value = (proj === 'Zomra') ? 'yes' : 'no';
+    }
     renderBaseInputs();
     renderCustomInputs();
     calculate();
@@ -360,6 +365,45 @@ window.applyFixedVal = function(v) {
     calculate();
 };
 
+window.onPaymentFrequencyChange = function() {
+    let freqMonths = parseInt(document.getElementById('payment-frequency')?.value) === 2 ? 6 : 3;
+    let intraToggle = document.getElementById('toggle-intra-year');
+    let intraBadge = document.getElementById('intra-year-status-badge');
+    let wrapper = document.getElementById('intra-year-controls-wrapper');
+    let intraBox = intraToggle ? intraToggle.closest('.custom-controls') : null;
+    
+    if (freqMonths === 6) {
+        if (intraToggle) {
+            intraToggle.disabled = true;
+            intraToggle.checked = false;
+        }
+        if (wrapper) wrapper.style.display = 'none';
+        if (intraBadge) {
+            intraBadge.innerText = 'غير متاح (الأقساط النصف سنوية متساوية)';
+            intraBadge.style.color = 'var(--text-muted)';
+        }
+        if (intraBox) intraBox.style.opacity = '0.6';
+    } else {
+        if (intraToggle) intraToggle.disabled = false;
+        if (intraBox) intraBox.style.opacity = '1';
+        if (intraToggle && intraToggle.checked) {
+            if (wrapper) wrapper.style.display = 'block';
+            if (intraBadge) {
+                intraBadge.innerText = 'مفعّل';
+                intraBadge.style.color = 'var(--accent-blue)';
+            }
+        } else {
+            if (wrapper) wrapper.style.display = 'none';
+            if (intraBadge) {
+                intraBadge.innerText = 'غير مفعّل';
+                intraBadge.style.color = 'var(--text-muted)';
+            }
+        }
+    }
+    window.globalTableOverrides = {};
+    calculate();
+};
+
 window.onIntraYearToggle = function() {
     let chk = document.getElementById('toggle-intra-year') ? document.getElementById('toggle-intra-year').checked : false;
     let wrapper = document.getElementById('intra-year-controls-wrapper');
@@ -440,11 +484,16 @@ function renderIntraGuidanceBox(g) {
     
     let isToggled = document.getElementById('toggle-intra-year') && document.getElementById('toggle-intra-year').checked;
     
-    if (!g || !g.active || !isToggled) {
+    if (!g || !g.active || !isToggled || g.freqMonths === 6) {
         box.style.display = 'none';
-        if (badge && !isToggled) {
-            badge.innerText = 'غير مفعّل';
-            badge.style.color = 'var(--text-muted)';
+        if (badge) {
+            if (g && g.freqMonths === 6) {
+                badge.innerText = 'غير متاح (الأقساط متساوية)';
+                badge.style.color = 'var(--text-muted)';
+            } else if (!isToggled) {
+                badge.innerText = 'غير مفعّل';
+                badge.style.color = 'var(--text-muted)';
+            }
         }
         return;
     }
@@ -483,6 +532,8 @@ function renderIntraGuidanceBox(g) {
 function resetCustomInputs() {
     document.getElementById('duration-years').value = 8;
     document.getElementById('payment-frequency').value = 4;
+    let flexToggle = document.getElementById('flexible-toggle');
+    if (flexToggle) flexToggle.value = (currentProject === 'Zomra') ? 'yes' : 'no';
     
     let fixToggle = document.getElementById('fixed-inst-toggle');
     if (fixToggle) fixToggle.checked = false;
@@ -653,77 +704,106 @@ function applyDiscountLogic(f, contractDateStr) {
             f.pv = f.amount || 0;
             return;
         }
-        let yearIndex = Math.floor(months / 12);
-        let rate = ratesMap[yearIndex] !== undefined ? ratesMap[yearIndex] : 0.09;
+        let pmt = Math.max(0, Math.round(months / 3));
+        f.period = pmt;
+
+        let rate;
+        if (pmt === 0 || f.id === 'dp1' || f.id === 'dp2') {
+            rate = (discountRates[0] !== undefined ? discountRates[0] : 19) / 100;
+        } else if (pmt <= 3) {
+            rate = (discountRates[1] !== undefined ? discountRates[1] : 18) / 100;
+        } else if (pmt <= 7) {
+            rate = (discountRates[2] !== undefined ? discountRates[2] : 15) / 100;
+        } else if (pmt <= 11) {
+            rate = (discountRates[3] !== undefined ? discountRates[3] : 13) / 100;
+        } else if (pmt <= 19) {
+            rate = (discountRates[4] !== undefined ? discountRates[4] : 10) / 100;
+        } else {
+            rate = (discountRates[6] !== undefined ? discountRates[6] : 9) / 100;
+        }
         
         // Zomra October 2026 Update: Payments in 2026 for normal mode get 19%
-        if (!isFlexible && yearIndex === 0 && pDate.getFullYear() === 2026) {
+        if (!isFlexible && pmt <= 3 && pDate.getFullYear() === 2026) {
             rate = (discountRates[0] !== undefined ? discountRates[0] : 19) / 100;
         }
         
         if (isFlexible) {
-            let diffDays = Math.max(0, Math.round((pDate - cDate) / (1000 * 60 * 60 * 24)));
+            let baseDate = new Date('2025-12-29T00:00:00');
+            let diffDays = Math.round((pDate - baseDate) / (1000 * 60 * 60 * 24));
             let r;
             if (diffDays < 54) r = (discountRates[0] !== undefined ? discountRates[0] : 19) / 100;
             else if (diffDays < 419) r = (discountRates[1] !== undefined ? discountRates[1] : 18) / 100;
             else if (diffDays < 784) r = (discountRates[2] !== undefined ? discountRates[2] : 15) / 100;
-            else if (diffDays < 1149) r = (discountRates[3] !== undefined ? discountRates[3] : 13) / 100;
-            else if (diffDays < 1879) r = (discountRates[4] !== undefined ? discountRates[4] : 10) / 100;
+            else if (diffDays < 1150) r = (discountRates[3] !== undefined ? discountRates[3] : 13) / 100;
+            else if (diffDays < 1880) r = (discountRates[4] !== undefined ? discountRates[4] : 10) / 100;
             else r = (discountRates[6] !== undefined ? discountRates[6] : 9) / 100;
             f.rate = r;
-            f.pvFactor = getFlexiblePvFactor(diffDays);
+            f.pvFactor = 1.0 / Math.pow(1.0 + r / 365.0, diffDays);
             f.pv = (f.amount || 0) * f.pvFactor;
         } else {
+            f.rate = rate;
             if (f.id === 'dp1' || f.id === 'dp2') {
                 f.rate = 0;
                 f.period = 0;
                 f.pvFactor = 1;
                 f.pv = f.amount || 0;
             } else if (f.id === 'addl') {
-                f.rate = rate;
                 f.period = 2;
                 f.pvFactor = 1 / Math.pow(1 + rate / 4, 2);
                 f.pv = (f.amount || 0) * f.pvFactor;
             } else {
-                let pmt = Math.max(0, Math.round(months / 3));
-                f.rate = rate;
-                f.period = pmt;
                 f.pvFactor = 1 / Math.pow(1 + rate / 4, pmt);
                 f.pv = (f.amount || 0) * f.pvFactor;
             }
         }
     } else if (currentProject === 'Perla') {
-        if (f.id === 'dp1' || f.isMnt) {
+        if (f.isMnt) {
             f.rate = 0;
             f.period = 0;
             f.pvFactor = 1;
             f.pv = f.amount || 0;
-        } else {
-            let pmt = Math.max(0, Math.round(months / 3));
-            f.period = pmt;
-            
-            if (pmt === 1) {
-                f.rate = (discountRates[0] !== undefined ? discountRates[0] : 19) / 100; // DP2 in Excel gets 19%
-            } else {
-                let yearIndex = Math.max(0, Math.floor((pmt - 2) / 4));
-                f.rate = ratesMap[yearIndex] !== undefined ? ratesMap[yearIndex] : 0.09;
-            }
-            
-            if (isFlexible) {
-                let diffDays = Math.max(0, Math.round((pDate - cDate) / (1000 * 60 * 60 * 24)));
-                let r;
-                if (diffDays < 54) r = (discountRates[0] !== undefined ? discountRates[0] : 19) / 100;
-                else if (diffDays < 419) r = (discountRates[1] !== undefined ? discountRates[1] : 18) / 100;
-                else if (diffDays < 784) r = (discountRates[2] !== undefined ? discountRates[2] : 15) / 100;
-                else if (diffDays < 1149) r = (discountRates[3] !== undefined ? discountRates[3] : 13) / 100;
-                else if (diffDays < 1879) r = (discountRates[4] !== undefined ? discountRates[4] : 10) / 100;
-                else r = (discountRates[6] !== undefined ? discountRates[6] : 9) / 100;
-                f.rate = r;
-                f.pvFactor = getFlexiblePvFactor(diffDays);
-            } else {
-                f.pvFactor = 1 / Math.pow(1 + f.rate / 4, f.period);
-            }
+            return;
+        }
+        
+        let pmt = Math.max(0, Math.round(months / 3));
+        f.period = pmt;
+        
+        if (isFlexible) {
+            let baseDate = new Date('2026-08-01T00:00:00');
+            let diffDays = Math.round((pDate - baseDate) / (1000 * 60 * 60 * 24));
+            let r;
+            if (diffDays < 54) r = (discountRates[0] !== undefined ? discountRates[0] : 19) / 100;
+            else if (diffDays < 419) r = (discountRates[1] !== undefined ? discountRates[1] : 18) / 100;
+            else if (diffDays < 784) r = (discountRates[2] !== undefined ? discountRates[2] : 15) / 100;
+            else if (diffDays < 1150) r = (discountRates[3] !== undefined ? discountRates[3] : 13) / 100;
+            else if (diffDays < 1880) r = (discountRates[4] !== undefined ? discountRates[4] : 10) / 100;
+            else r = (discountRates[6] !== undefined ? discountRates[6] : 9) / 100;
+            f.rate = r;
+            f.pvFactor = 1.0 / Math.pow(1.0 + r / 365.0, diffDays);
             f.pv = (f.amount || 0) * f.pvFactor;
+        } else {
+            if (f.id === 'dp1') {
+                f.rate = 0;
+                f.period = 0;
+                f.pvFactor = 1;
+                f.pv = f.amount || 0;
+            } else {
+                if (pmt <= 1 || f.id === 'dp2') {
+                    f.rate = (discountRates[0] !== undefined ? discountRates[0] : 19) / 100;
+                } else if (pmt <= 5) {
+                    f.rate = (discountRates[1] !== undefined ? discountRates[1] : 18) / 100;
+                } else if (pmt <= 9) {
+                    f.rate = (discountRates[2] !== undefined ? discountRates[2] : 15) / 100;
+                } else if (pmt <= 13) {
+                    f.rate = (discountRates[3] !== undefined ? discountRates[3] : 13) / 100;
+                } else if (pmt <= 21) {
+                    f.rate = (discountRates[4] !== undefined ? discountRates[4] : 10) / 100;
+                } else {
+                    f.rate = (discountRates[6] !== undefined ? discountRates[6] : 9) / 100;
+                }
+                f.pvFactor = 1 / Math.pow(1 + f.rate / 4, f.period);
+                f.pv = (f.amount || 0) * f.pvFactor;
+            }
         }
     } else {
         f.period = getPeriod(f.months);
@@ -802,7 +882,7 @@ function generateFlowsTemplate(contractDateStr, years, freqMonths, isBase = fals
         
         let numInst = overrideInstCount !== null ? overrideInstCount : (years * (12 / freqMonths));
         
-        let startMonth = 1 + freqMonths;
+        let startMonth = (freqMonths === 6) ? 7 : 4;
         let firstDate = customFirstDateStr ? new Date(customFirstDateStr) : null;
         let diffMonths = firstDate ? Math.round((firstDate - cDate) / (1000 * 60 * 60 * 24 * 30.44)) : startMonth;
         if (diffMonths < 0) diffMonths = startMonth;
@@ -825,34 +905,18 @@ function generateFlowsTemplate(contractDateStr, years, freqMonths, isBase = fals
         flows.push({ id: 'mnt1', label: 'Maintenance 1', date: mnt1Date, months: 36, isMnt: true });
         flows.push({ id: 'mnt2', label: 'Maintenance 2', date: delivDate, months: 48, isMnt: true });
         
-        let numInst = overrideInstCount !== null ? overrideInstCount : null;
+        let numInst = overrideInstCount !== null ? overrideInstCount : (freqMonths === 6 ? (years * 2) : (years * 4 - 1));
         
-        let startMonth = 3 + freqMonths;
+        let startMonth = (freqMonths === 6) ? 9 : 6;
         let firstDate = customFirstDateStr ? new Date(customFirstDateStr) : null;
         let diffMonths = firstDate ? Math.round((firstDate - cDate) / (1000 * 60 * 60 * 24 * 30.44)) : startMonth;
         if (diffMonths < 0) diffMonths = startMonth;
         
-        let curMonth = diffMonths;
-        let instList = [];
-        
-        if (numInst !== null) {
-            for (let i=0; i<numInst; i++) {
-                instList.push(curMonth);
-                curMonth += freqMonths;
-            }
-        } else {
-            let loopSafety = 0;
-            while (curMonth <= totalMonths && loopSafety++ < 200) { 
-                instList.push(curMonth); 
-                curMonth += freqMonths; 
-            }
-            if (freqMonths === 6 && !customFirstDateStr && instList.length > 0 && instList[instList.length-1] > totalMonths - 3) instList.pop(); 
-        }
-        
-        instList.forEach((m, i) => {
+        for (let i = 0; i < numInst; i++) {
+            let m = diffMonths + i * freqMonths;
             let dStr = customFirstDateStr ? formatDate(addMonths(customFirstDateStr, i * freqMonths)) : formatDate(addMonths(contractDateStr, m));
             flows.push({ id: 'inst_' + i, label: 'Installment ' + (i+1), date: dStr, months: m, isInst: true });
-        });
+        }
     }
     
     let mergedFlows = [];
@@ -1173,7 +1237,8 @@ function calculateCustomFlows(price, template, options = {}) {
         intraScope = 'all';
     }
     
-    let hasIntraYearShift = isIntraYearActive && !isNaN(intraValRaw) && intraValRaw > 0;
+    // Semi-Annual installments (freqMonths === 6) are strictly equal regular payments; intra-year shift is quarterly only
+    let hasIntraYearShift = (freqMonths !== 6) && isIntraYearActive && !isNaN(intraValRaw) && intraValRaw > 0;
     
     let accumulatedWithheld = 0;
     let intraGuidanceInfo = {
@@ -1201,7 +1266,11 @@ function calculateCustomFlows(price, template, options = {}) {
             if (applyShift) {
                 let isBumpInst = false;
                 if (currentProject === 'Perla') {
-                    isBumpInst = (f.months % 12 === 0 && f.months > 0);
+                    if (freqMonths === 6) {
+                        isBumpInst = (instIndex % instsPerYear === instsPerYear - 1);
+                    } else {
+                        isBumpInst = (f.months % 12 === 0 && f.months > 0);
+                    }
                 } else {
                     isBumpInst = (instIndex % instsPerYear === instsPerYear - 1);
                 }
@@ -2396,7 +2465,7 @@ function calculate() {
             let hasTableOverrides = window.globalTableOverrides && Object.keys(window.globalTableOverrides).length > 0;
             let hasCustomInputs = hasCustomMilestones;
             let isDistCustomized = window.globalDistState && (window.globalDistState.mode !== 'auto' || window.globalDistState.typedPrePct !== null || window.globalDistState.typedPostPct !== null);
-            if (currentProject === 'Perla' && is7030 && !hasFixedInst && !hasTableOverrides && !hasCustomInputs && !isDistCustomized && years === 8) {
+            if (currentProject === 'Perla' && is7030 && freqMonths === 3 && !hasFixedInst && !hasTableOverrides && !hasCustomInputs && !isDistCustomized && years === 8) {
                 bestPrice = basePriceCache * 1.00863920294539959;
             }
         }
@@ -3087,10 +3156,22 @@ async function populateTemplateWorkbook(workbook, offerPrice) {
 
     let clientName = (document.getElementById('client-name')?.value || '').trim();
     let unitNo = (document.getElementById('unit-number')?.value || '').trim();
-    if (unitNo) {
+    if (unitNo && clientName) {
+        ws.getCell('D3').value = 'Unit / Client :';
+        ws.getCell('F3').value = `${unitNo} — ${clientName}`;
+        ws.getRow(3).hidden = false;
+    } else if (unitNo) {
+        ws.getCell('D3').value = 'Unit No :';
         ws.getCell('F3').value = unitNo;
+        ws.getRow(3).hidden = false;
+    } else if (clientName) {
+        ws.getCell('D3').value = 'Client Name :';
+        ws.getCell('F3').value = clientName;
+        ws.getRow(3).hidden = false;
     } else {
-        ws.getCell('F3').value = '';
+        ws.getCell('D3').value = null;
+        ws.getCell('F3').value = null;
+        ws.getRow(3).hidden = true;
     }
 
     ws.getCell('F4').value = basePrice;
