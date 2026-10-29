@@ -303,18 +303,14 @@
                             <span style="font-weight: bold; font-size: 0.98rem; color: var(--gold);">موقف الاعتماد المالي (Approval Status)</span>
                         </div>
                         
-                        <!-- Benchmark Selector Option Group -->
-                        <div style="display: flex; gap: 6px; align-items: center; flex-wrap: wrap;">
-                            <span style="font-size: 0.82rem; color: var(--text-muted); margin-left: 4px;">معيار الفحص:</span>
-                            <button type="button" class="approval-bench-btn active" id="bench-btn-8y" onclick="setApprovalBenchmark('8y')" style="padding: 5px 12px; font-size: 0.82rem; border-radius: 6px; border: 1px solid var(--accent-blue); background: var(--accent-blue); color: white; cursor: pointer; font-weight: bold; transition: all 0.2s;">
-                                🔘 سياسة 8 سنوات
-                            </button>
-                            <button type="button" class="approval-bench-btn" id="bench-btn-10y" onclick="setApprovalBenchmark('10y')" style="padding: 5px 12px; font-size: 0.82rem; border-radius: 6px; border: 1px solid var(--border); background: transparent; color: var(--text); cursor: pointer; transition: all 0.2s;">
-                                ⚪ سياسة 10 سنوات
-                            </button>
-                            <button type="button" class="approval-bench-btn" id="bench-btn-auto" onclick="setApprovalBenchmark('auto')" style="padding: 5px 12px; font-size: 0.82rem; border-radius: 6px; border: 1px solid var(--border); background: transparent; color: var(--text); cursor: pointer; transition: all 0.2s;">
-                                ⚪ حسب مدة الخطة
-                            </button>
+                        <!-- Manual Approval Decision Toggle -->
+                        <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+                            <label id="manual-approval-toggle-wrapper" style="display: inline-flex; align-items: center; gap: 8px; cursor: pointer; background: rgba(46, 204, 113, 0.12); padding: 5px 14px; border-radius: 20px; border: 1.5px solid #27ae60; user-select: none; transition: all 0.2s;">
+                                <input type="checkbox" id="manual-disapproval-toggle" onchange="toggleManualApproval()" style="width: 17px; height: 17px; cursor: pointer; accent-color: #e74c3c;">
+                                <span id="manual-disapproval-label" style="font-size: 0.88rem; font-weight: bold; color: #2ecc71;">
+                                    ✅ العرض موافق عليه (APPROVED) — انقر للتحديد كـ "غير موافق"
+                                </span>
+                            </label>
                         </div>
                     </div>
 
@@ -438,10 +434,10 @@
     </div>
 
     <!-- Hidden Export Template -->
-    <div id="export-wrapper" style="position: absolute; left: -9999px; top: 0; background: #ffffff; padding: 5px 15px; width: 550px; box-sizing: border-box; color: #000000; font-family: Calibri, 'Segoe UI', Arial, sans-serif; direction: ltr;">
+    <div id="export-wrapper" style="position: absolute; left: -9999px; top: 0; background: #ffffff; padding: 0; width: 680px; box-sizing: border-box; color: #000000; font-family: Calibri, 'Segoe UI', Arial, sans-serif; direction: ltr;">
         <style>
-            .export-table-cls, #export-table, #export-table-base { width: 520px; margin: 0 auto; border-collapse: collapse; text-align: center; border: 1.5px solid #000000; line-height: 1.15; box-sizing: border-box; }
-            .export-table-cls th, .export-table-cls td, #export-table th, #export-table td, #export-table-base th, #export-table-base td { border: 1px solid #000000; font-weight: normal; }
+            .export-table-cls, #export-table, #export-table-base { width: 100%; max-width: 100%; margin: 0 auto; border-collapse: collapse; text-align: center; border: 1.5px solid #000000; line-height: 1.25; box-sizing: border-box; table-layout: fixed; }
+            .export-table-cls th, .export-table-cls td, #export-table th, #export-table td, #export-table-base th, #export-table-base td { border: 1px solid #000000; font-weight: normal; word-wrap: break-word; overflow-wrap: break-word; }
             .export-header-blue { background-color: #b8d5f0 !important; font-weight: 600 !important; color: #000000 !important; }
             .export-sub-blue { background-color: #b8d5f0 !important; font-weight: 600 !important; color: #000000 !important; }
             .export-bold { font-weight: 600 !important; }

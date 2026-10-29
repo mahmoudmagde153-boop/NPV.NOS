@@ -573,6 +573,19 @@ function resetCustomInputs() {
     if (firstInstDateEl) firstInstDateEl.value = '';
     window.globalTableOverrides = {};
     window.meltState = {};
+    window.isManuallyDisapproved = false;
+    let disapproveToggle = document.getElementById('manual-disapproval-toggle');
+    if (disapproveToggle) disapproveToggle.checked = false;
+    let disapproveLabel = document.getElementById('manual-disapproval-label');
+    if (disapproveLabel) {
+        disapproveLabel.style.color = '#2ecc71';
+        disapproveLabel.innerHTML = '✅ العرض موافق عليه (APPROVED) — انقر للتحديد كـ "غير موافق"';
+    }
+    let disapproveWrap = document.getElementById('manual-approval-toggle-wrapper');
+    if (disapproveWrap) {
+        disapproveWrap.style.background = 'rgba(46, 204, 113, 0.12)';
+        disapproveWrap.style.borderColor = '#27ae60';
+    }
     
     resetDistPresetInternal();
     calculate();
@@ -658,7 +671,7 @@ function getFlexiblePvFactor(diffDays) {
     return 1.0 / Math.pow(1.0 + r / 365.0, diffDays);
 }
 
-function applyDiscountLogic(f, contractDateStr) {
+function applyDiscountLogic(f, contractDateStr, forceNormal = false) {
     if (!contractDateStr) {
         let dateEl = document.getElementById('contract-date');
         contractDateStr = dateEl ? dateEl.value : '';
@@ -694,7 +707,7 @@ function applyDiscountLogic(f, contractDateStr) {
         10: (discountRates[11] !== undefined ? discountRates[11] : 9) / 100
     };
     let flexibleToggle = document.getElementById('flexible-toggle');
-    let isFlexible = flexibleToggle ? (flexibleToggle.value === 'yes') : false;
+    let isFlexible = forceNormal ? false : (flexibleToggle ? (flexibleToggle.value === 'yes') : false);
     
     if (currentProject === 'Zomra') {
         if (f.isMnt) {
@@ -865,32 +878,60 @@ function generateFlowsTemplate(contractDateStr, years, freqMonths, isBase = fals
     let cDate = new Date(contractDateStr);
 
     if (currentProject === 'Zomra') {
-        flows.push({ id: 'dp1', label: 'Down Payment', date: contractDateStr, months: 0, isDP: true, defaultPct: getOverridePct('dp1', 0.025) });
-        
-        let dp2Date = formatDate(addMonths(contractDateStr, 1));
-        flows.push({ id: 'dp2', label: '2nd Payment', date: dp2Date, months: 1, isDP: true, defaultPct: getOverridePct('dp2', 0.025) });
-        
-        let addlDate = formatDate(addMonths(contractDateStr, 6));
-        flows.push({ id: 'addl', label: '6-Months Payment', date: addlDate, months: 6, isDP: true, defaultPct: getOverridePct('addl', 0.05) });
-        
-        let delivDate = formatDate(addMonths(contractDateStr, 37));
-        flows.push({ id: 'deliv', label: 'Delivery Payment', date: delivDate, months: 37, isDP: true, defaultPct: getOverridePct('deliv', 0.05) });
-        
-        let mnt1Date = formatDate(addMonths(contractDateStr, 25));
-        flows.push({ id: 'mnt1', label: 'Maintenance 1', date: mnt1Date, months: 25, isMnt: true });
-        flows.push({ id: 'mnt2', label: 'Maintenance 2', date: delivDate, months: 37, isMnt: true });
-        
-        let numInst = overrideInstCount !== null ? overrideInstCount : (years * (12 / freqMonths));
-        
-        let startMonth = (freqMonths === 6) ? 7 : 4;
-        let firstDate = customFirstDateStr ? new Date(customFirstDateStr) : null;
-        let diffMonths = firstDate ? Math.round((firstDate - cDate) / (1000 * 60 * 60 * 24 * 30.44)) : startMonth;
-        if (diffMonths < 0) diffMonths = startMonth;
-        
-        for (let i = 0; i < numInst; i++) {
-            let m = diffMonths + i * freqMonths;
-            let dStr = customFirstDateStr ? formatDate(addMonths(customFirstDateStr, i * freqMonths)) : formatDate(addMonths(contractDateStr, m));
-            flows.push({ id: 'inst_' + i, label: 'Installment ' + (i+1), date: dStr, months: m, isInst: true });
+        if (isBase) {
+            flows.push({ id: 'dp1', label: 'Down Payment', date: contractDateStr, months: 0, isDP: true, defaultPct: 0.025 });
+            
+            let dp2Date = formatDate(addMonths(contractDateStr, 1));
+            flows.push({ id: 'dp2', label: '2nd Payment', date: dp2Date, months: 1, isDP: true, defaultPct: 0.025 });
+            
+            let addlDate = formatDate(addMonths(contractDateStr, 6));
+            flows.push({ id: 'addl', label: '6-Months Payment', date: addlDate, months: 6, isDP: true, defaultPct: 0.05 });
+            
+            let mnt1Date = formatDate(addMonths(contractDateStr, 25));
+            let delivDate = formatDate(addMonths(contractDateStr, 37));
+            flows.push({ id: 'mnt1', label: 'Maintenance 1', date: mnt1Date, months: 25, isMnt: true });
+            flows.push({ id: 'mnt2', label: 'Maintenance 2', date: delivDate, months: 37, isMnt: true });
+            
+            // In Excel Zomra Base Plan (Calculator sheet D-J): 34 installments of 2.65625%
+            let baseInstCount = 34;
+            for (let i = 0; i < baseInstCount; i++) {
+                let m = (i === 0) ? 4 : (7 + (i - 1) * 3);
+                let dStr = formatDate(addMonths(contractDateStr, m));
+                flows.push({ id: 'inst_' + i, label: 'Installment ' + (i+1), date: dStr, months: m, isInst: true, defaultPct: 0.0265625 });
+            }
+        } else {
+            flows.push({ id: 'dp1', label: 'Down Payment', date: contractDateStr, months: 0, isDP: true, defaultPct: getOverridePct('dp1', 0.025) });
+            
+            let dp2Date = formatDate(addMonths(contractDateStr, 1));
+            flows.push({ id: 'dp2', label: '2nd Payment', date: dp2Date, months: 1, isDP: true, defaultPct: getOverridePct('dp2', 0.025) });
+            
+            let addlDate = formatDate(addMonths(contractDateStr, 6));
+            flows.push({ id: 'addl', label: '6-Months Payment', date: addlDate, months: 6, isDP: true, defaultPct: getOverridePct('addl', 0.05) });
+            
+            // Zomra Delivery Bulk rule: Excel M8: Delivery Bulk is 0% for years <= 2, and 5% for years >= 3
+            let hasDelivery = (years >= 3);
+            let delivPct = hasDelivery ? getOverridePct('deliv', 0.05) : 0;
+            let delivDate = formatDate(addMonths(contractDateStr, 37));
+            if (hasDelivery && delivPct > 0) {
+                flows.push({ id: 'deliv', label: 'Delivery Payment', date: delivDate, months: 37, isDP: true, defaultPct: delivPct });
+            }
+            
+            let mnt1Date = formatDate(addMonths(contractDateStr, 25));
+            flows.push({ id: 'mnt1', label: 'Maintenance 1', date: mnt1Date, months: 25, isMnt: true });
+            flows.push({ id: 'mnt2', label: 'Maintenance 2', date: delivDate, months: (hasDelivery ? 37 : years * 12), isMnt: true });
+            
+            let numInst = overrideInstCount !== null ? overrideInstCount : (years * (12 / freqMonths));
+            
+            let startMonth = (freqMonths === 6) ? 7 : 4;
+            let firstDate = customFirstDateStr ? new Date(customFirstDateStr) : null;
+            let diffMonths = firstDate ? Math.round((firstDate - cDate) / (1000 * 60 * 60 * 24 * 30.44)) : startMonth;
+            if (diffMonths < 0) diffMonths = startMonth;
+            
+            for (let i = 0; i < numInst; i++) {
+                let m = diffMonths + i * freqMonths;
+                let dStr = customFirstDateStr ? formatDate(addMonths(customFirstDateStr, i * freqMonths)) : formatDate(addMonths(contractDateStr, m));
+                flows.push({ id: 'inst_' + i, label: 'Installment ' + (i+1), date: dStr, months: m, isInst: true });
+            }
         }
         
     } else { // Perla
@@ -963,9 +1004,15 @@ function calculateBaseFlows(price, template) {
     
     let instAmt = instCount > 0 ? remaining / instCount : 0;
     flows.forEach(f => {
-        if (f.isInst || f.isMerged) f.amount = (f.amount || 0) + instAmt;
+        if (f.isInst || f.isMerged) {
+            if (currentProject === 'Zomra' && f.defaultPct !== undefined) {
+                f.amount = price * f.defaultPct;
+            } else {
+                f.amount = (f.amount || 0) + instAmt;
+            }
+        }
         
-        applyDiscountLogic(f);
+        applyDiscountLogic(f, null, true); // forceNormal = true: Base plan is ALWAYS normal compounding discount, matching Excel J13
     });
     
     return flows;
@@ -1115,7 +1162,7 @@ function calculateCustomFlows(price, template, options = {}) {
     let nTotal = nPre + nPost;
     
     let remPct = price > 0 ? (remAmt / price) * 100 : 0;
-    let standardMilestonesPct = (currentProject === 'Zomra') ? 15.0 : 10.0;
+    let standardMilestonesPct = (currentProject === 'Zomra') ? (template.some(t => t.id === 'deliv' || (t.mergedIds && t.mergedIds.includes('deliv'))) ? 15.0 : 10.0) : 10.0;
     let standardBaselinePool = 100.0 - standardMilestonesPct;
     let basePrePct = nTotal > 0 ? standardBaselinePool * (nPre / nTotal) : 0;
     let basePostPct = nTotal > 0 ? standardBaselinePool * (nPost / nTotal) : 0;
@@ -1490,25 +1537,47 @@ window.autoFixPreDeliveryApproval = function(targetPct) {
     calculate();
 };
 
+window.isManuallyDisapproved = false;
+
+window.toggleManualApproval = function(forcedState) {
+    let toggle = document.getElementById('manual-disapproval-toggle');
+    if (forcedState !== undefined) {
+        window.isManuallyDisapproved = Boolean(forcedState);
+        if (toggle) toggle.checked = window.isManuallyDisapproved;
+    } else {
+        window.isManuallyDisapproved = toggle ? toggle.checked : false;
+    }
+    
+    let wrapper = document.getElementById('manual-approval-toggle-wrapper');
+    let label = document.getElementById('manual-disapproval-label');
+    if (label && wrapper) {
+        if (window.isManuallyDisapproved) {
+            wrapper.style.background = 'rgba(231, 76, 60, 0.15)';
+            wrapper.style.borderColor = '#e74c3c';
+            label.style.color = '#e74c3c';
+            label.innerHTML = '🔴 غير موافق (NOT APPROVED) — تم الرفض (انقر للموافقة)';
+        } else {
+            wrapper.style.background = 'rgba(46, 204, 113, 0.12)';
+            wrapper.style.borderColor = '#27ae60';
+            label.style.color = '#2ecc71';
+            label.innerHTML = '✅ العرض موافق عليه (APPROVED) — انقر للتحديد كـ "غير موافق"';
+        }
+    }
+    
+    let actualPrice = window.lastCalculatedPrice || basePriceCache || 0;
+    let preDelivPct = window.lastOfferPreDelivPct || 0;
+    renderApprovalStatus(actualPrice, preDelivPct);
+    generateExportTemplate(actualPrice, preDelivPct);
+};
+
 function renderApprovalStatus(price, offerPreDelivPct) {
     let card = document.getElementById('approval-status-card');
     let badgeContainer = document.getElementById('approval-badge-container');
-    let auditBox = document.getElementById('approval-audit-details');
     let miniBadge = document.getElementById('offer-pre-deliv-approval-badge');
     if (!card || !badgeContainer) return;
 
-    updateBenchmarkButtonLabels();
-
-    let benchmarks = getProjectBenchmarks();
-    let activeBenchmark = getActiveBenchmark(benchmarks);
-    let targetPct = activeBenchmark.pct;
-    let label = activeBenchmark.label;
-    
-    let diff = offerPreDelivPct - targetPct;
-    let isApproved = diff >= -0.05; // floating point tolerance
-
-    let unitPrice = price || basePriceCache || 0;
-    let deficitAmt = Math.abs(diff) * unitPrice / 100;
+    let isDisapproved = Boolean(window.isManuallyDisapproved);
+    let isApproved = !isDisapproved;
 
     // Mini badge in summary box
     if (miniBadge) {
@@ -1533,93 +1602,40 @@ function renderApprovalStatus(price, offerPreDelivPct) {
             <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
                 <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
                     <span style="background: #27ae60; color: white; padding: 5px 14px; border-radius: 20px; font-weight: bold; font-size: 0.92rem; display: inline-flex; align-items: center; gap: 6px; box-shadow: 0 2px 5px rgba(39,174,96,0.3);">
-                        ✅ APPROVED / معتمد
+                        ✅ APPROVED / موافق ومعتمد
                     </span>
                     <span style="font-size: 0.9rem; color: #2ecc71; font-weight: bold;">
-                        خطة سداد معتمدة: المحصل قبل الاستلام (${offerPreDelivPct.toFixed(2)}%) مستوفٍ لمعيار ${label} (${targetPct.toFixed(2)}%).
+                        خطة سداد معتمدة وموافق عليها. نسبة المحصل قبل الاستلام: ${(offerPreDelivPct || 0).toFixed(2)}%.
                     </span>
                 </div>
-                <button type="button" onclick="toggleApprovalAudit()" style="background: transparent; border: 1px solid #2ecc71; color: #2ecc71; font-size: 0.8rem; padding: 4px 10px; border-radius: 4px; cursor: pointer;">
-                    🔍 تفاصيل السياسة الائتمانية
+                <button type="button" class="btn btn-outline" onclick="toggleManualApproval(true)" style="border-color: rgba(231, 76, 60, 0.4); color: #e74c3c; font-size: 0.8rem; padding: 4px 10px; cursor: pointer; border-radius: 4px;">
+                    ❌ تغيير لـ غير موافق (Mark Not Approved)
                 </button>
             </div>
             <div style="margin-top: 6px; font-size: 0.83rem; color: var(--text-muted);">
-                الفارق الإيجابي: <strong style="color: #2ecc71;">+${Math.max(0, diff).toFixed(2)}%</strong> عن الحد الأدنى المطلوب (${targetPct.toFixed(2)}%).
+                حالة الاعتماد في الـ PDF والإكسيل: <strong style="color: #2ecc71;">APPROVED (معتمد)</strong>
             </div>
         `;
     } else {
         card.style.background = 'rgba(231, 76, 60, 0.08)';
         card.style.border = '1.5px solid #e74c3c';
 
-        let severity = (offerPreDelivPct < benchmarks.y10 - 0.05) ? 'حرج' : 'متوسط';
-        let approvalEntity = (severity === 'حرج') 
-            ? 'مجلس الإدارة / الرئيس التنفيذي (CFO / CEO)' 
-            : 'رئيس قطاع المبيعات (Sales Director)';
-
         badgeContainer.innerHTML = `
             <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
                 <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
-                    <button type="button" onclick="toggleApprovalAudit()" style="background: #e74c3c; color: white; border: none; padding: 5px 14px; border-radius: 20px; font-weight: bold; font-size: 0.92rem; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; box-shadow: 0 2px 6px rgba(231,76,60,0.35);">
-                        ❌ NOT APPROVED / غير معتمد (استثناء)
-                    </button>
+                    <span style="background: #e74c3c; color: white; padding: 5px 14px; border-radius: 20px; font-weight: bold; font-size: 0.92rem; display: inline-flex; align-items: center; gap: 6px; box-shadow: 0 2px 6px rgba(231,76,60,0.35);">
+                        ❌ NOT APPROVED / غير موافق (مرفوض)
+                    </span>
                     <span style="font-size: 0.92rem; color: #e74c3c; font-weight: bold;">
-                        عجز بالتحصيل: -${Math.abs(diff).toFixed(2)}% (${formatCurr(deficitAmt)})
+                        تم تحديد الخطة كـ غير موافق عليها.
                     </span>
                 </div>
-                <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
-                    <button type="button" onclick="autoFixPreDeliveryApproval(${targetPct})" style="background: #e67e22; color: white; border: none; font-size: 0.82rem; padding: 5px 12px; border-radius: 4px; cursor: pointer; font-weight: bold; box-shadow: 0 2px 4px rgba(230,126,34,0.3);">
-                        ⚡ رفع التحصيل للاعتماد (${targetPct.toFixed(2)}%)
-                    </button>
-                    <button type="button" onclick="toggleApprovalAudit()" style="background: transparent; border: 1px solid #e74c3c; color: #e74c3c; font-size: 0.8rem; padding: 4px 10px; border-radius: 4px; cursor: pointer;">
-                        ⚠️ تقرير الاستثناء
-                    </button>
-                </div>
+                <button type="button" class="btn btn-outline" onclick="toggleManualApproval(false)" style="border-color: rgba(46, 204, 113, 0.4); color: #2ecc71; font-size: 0.8rem; padding: 4px 10px; cursor: pointer; border-radius: 4px;">
+                    ✅ استعادة الموافقة (Mark Approved)
+                </button>
             </div>
             <div style="margin-top: 6px; font-size: 0.83rem; color: #f87171; line-height: 1.4;">
-                ⚠️ <strong>تنبيه ائتماني:</strong> المحصل قبل الاستلام (<strong>${offerPreDelivPct.toFixed(2)}%</strong>) أقل من النسبة الطبيعية المعتمدة لـ${label} (<strong>${targetPct.toFixed(2)}%</strong>). مطلوب اعتماد: <span style="text-decoration: underline; font-weight: bold; color: white;">${approvalEntity}</span>.
-            </div>
-        `;
-    }
-
-    if (auditBox) {
-        let is8yMet = (offerPreDelivPct >= benchmarks.y8 - 0.05);
-        let is10yMet = (offerPreDelivPct >= benchmarks.y10 - 0.05);
-        
-        auditBox.style.background = 'rgba(0,0,0,0.25)';
-        auditBox.style.border = '1px solid var(--border)';
-        auditBox.innerHTML = `
-            <div style="font-weight: bold; color: var(--gold); margin-bottom: 8px; font-size: 0.9rem; display: flex; justify-content: space-between;">
-                <span>📋 تفاصيل معايير التحصيل والاعتماد المالي (${currentProject})</span>
-                <span style="font-size: 0.8rem; color: var(--text-muted); cursor: pointer;" onclick="toggleApprovalAudit()">✖ إغلاق</span>
-            </div>
-            <table style="width: 100%; border-collapse: collapse; font-size: 0.82rem; margin-bottom: 8px;">
-                <tr style="border-bottom: 1px solid rgba(255,255,255,0.1);">
-                    <th style="text-align: right; padding: 4px; color: var(--text-muted);">المعيار</th>
-                    <th style="text-align: center; padding: 4px; color: var(--text-muted);">النسبة المطلوبة</th>
-                    <th style="text-align: center; padding: 4px; color: var(--text-muted);">المحصل الفعلي</th>
-                    <th style="text-align: center; padding: 4px; color: var(--text-muted);">الفارق</th>
-                    <th style="text-align: center; padding: 4px; color: var(--text-muted);">الحالة</th>
-                </tr>
-                <tr style="border-bottom: 1px solid rgba(255,255,255,0.05);">
-                    <td style="padding: 4px; font-weight: bold;">سياسة الـ 8 سنوات (القياسية)</td>
-                    <td style="padding: 4px; text-align: center;">${benchmarks.y8.toFixed(2)}%</td>
-                    <td style="padding: 4px; text-align: center;">${offerPreDelivPct.toFixed(2)}%</td>
-                    <td style="padding: 4px; text-align: center; color: ${is8yMet ? '#2ecc71' : '#e74c3c'}; font-weight: bold;">${(offerPreDelivPct - benchmarks.y8) >= 0 ? '+' : ''}${(offerPreDelivPct - benchmarks.y8).toFixed(2)}%</td>
-                    <td style="padding: 4px; text-align: center;">${is8yMet ? '<span style="color:#2ecc71; font-weight:bold;">✅ مستوفٍ</span>' : '<span style="color:#e74c3c; font-weight:bold;">❌ غير مستوفٍ</span>'}</td>
-                </tr>
-                <tr style="border-bottom: 1px solid rgba(255,255,255,0.05);">
-                    <td style="padding: 4px; font-weight: bold;">سياسة الـ 10 سنوات (الحد الأدنى)</td>
-                    <td style="padding: 4px; text-align: center;">${benchmarks.y10.toFixed(2)}%</td>
-                    <td style="padding: 4px; text-align: center;">${offerPreDelivPct.toFixed(2)}%</td>
-                    <td style="padding: 4px; text-align: center; color: ${is10yMet ? '#2ecc71' : '#e74c3c'}; font-weight: bold;">${(offerPreDelivPct - benchmarks.y10) >= 0 ? '+' : ''}${(offerPreDelivPct - benchmarks.y10).toFixed(2)}%</td>
-                    <td style="padding: 4px; text-align: center;">${is10yMet ? '<span style="color:#2ecc71; font-weight:bold;">✅ مستوفٍ</span>' : '<span style="color:#e74c3c; font-weight:bold;">❌ غير مستوفٍ</span>'}</td>
-                </tr>
-            </table>
-            <div style="font-size: 0.8rem; color: var(--text-muted); line-height: 1.4;">
-                📌 <strong>صلاحيات الاعتماد والاستثناء:</strong><br>
-                • إذا كان المحصل أقل من ${benchmarks.y10.toFixed(2)}%: يتطلب اعتماد استثنائي من رئيس مجلس الإدارة / الرئيس التنفيذي.<br>
-                • إذا كان المحصل بين ${benchmarks.y10.toFixed(2)}% و ${benchmarks.y8.toFixed(2)}%: يتطلب اعتماد رئيس قطاع المبيعات CCO.<br>
-                • إذا كان المحصل ≥ ${benchmarks.y8.toFixed(2)}%: معتمد تلقائياً بدون حاجة لأي موافقات خاصة.
+                ⚠️ <strong>تنبيه:</strong> سيظهر موقف الاعتماد في الـ PDF والإكسيل كـ: <strong style="color: white; text-decoration: underline;">NOT APPROVED (غير معتمد)</strong>.
             </div>
         `;
     }
@@ -1695,12 +1711,15 @@ function updateDistUI(distInfo) {
 window.meltState = window.meltState || {};
 
 function getMilestoneDefs() {
+    let years = parseInt(document.getElementById('duration-years')?.value) || 8;
     if (currentProject === 'Zomra') {
-        return [
-            { id: 'deliv', label: 'دفعة الاستلام (Delivery Payment)', defaultPct: 5.0, month: 37 },
-            { id: 'addl', label: 'دفعة الـ 6 شهور (6-Months Payment)', defaultPct: 5.0, month: 6 },
-            { id: 'dp2', label: 'الدفعة الثانية (2nd Payment)', defaultPct: 2.5, month: 1 }
-        ];
+        let list = [];
+        if (years >= 3) {
+            list.push({ id: 'deliv', label: 'دفعة الاستلام (Delivery Payment)', defaultPct: 5.0, month: 37 });
+        }
+        list.push({ id: 'addl', label: 'دفعة الـ 6 شهور (6-Months Payment)', defaultPct: 5.0, month: 6 });
+        list.push({ id: 'dp2', label: 'الدفعة الثانية (2nd Payment)', defaultPct: 2.5, month: 1 });
+        return list;
     } else { // Perla
         return [
             { id: 'dp2', label: 'الدفعة الثانية (2nd Payment)', defaultPct: 5.0, month: 3 }
@@ -1803,7 +1822,7 @@ function recalcMeltDistribution() {
     let nPost = dynamicInsts.filter(f => f.months > delivMonth).length;
     let nTotal = nPre + nPost;
     
-    let standardMilestonesPct = (currentProject === 'Zomra') ? 15.0 : 10.0;
+    let standardMilestonesPct = (currentProject === 'Zomra') ? (years >= 3 ? 15.0 : 10.0) : 10.0;
     let standardBaselinePool = 100.0 - standardMilestonesPct;
     let basePrePct = nTotal > 0 ? standardBaselinePool * (nPre / nTotal) : 0;
     let basePostPct = nTotal > 0 ? standardBaselinePool * (nPost / nTotal) : 0;
@@ -1822,7 +1841,9 @@ function recalcMeltDistribution() {
         currentFixedPct += getPct('dp1', 2.5);
         currentFixedPct += getPct('dp2', 2.5);
         currentFixedPct += getPct('addl', 5.0);
-        currentFixedPct += getPct('deliv', 5.0);
+        if (years >= 3) {
+            currentFixedPct += getPct('deliv', 5.0);
+        }
     } else {
         currentFixedPct += getPct('dp1', 5.0);
         currentFixedPct += getPct('dp2', 5.0);
@@ -2782,27 +2803,32 @@ function buildExportPlanHtml(opts) {
     let mntFlows = (flows || []).filter(f => f.isMnt);
     let totalItems = nonMntFlows.length + mntFlows.length;
 
-    // Adaptive sizing based on total items to guarantee 100% fit on a single A4 page
-    let fontSize = '7.2px';
-    let cellPadding = '1.2px 3px';
-    let titleFontSize = '9px';
-    let subHeaderFontSize = '7.5px';
+    // Calibrated for full-page A4 printing (usable width 190mm, usable height ~280mm)
+    let fontSize = '10.5px';
+    let cellPadding = '3.5px 6px';
+    let titleFontSize = '14px';
+    let subHeaderFontSize = '11.5px';
 
-    if (totalItems >= 42) { // 9, 10 Years
-        fontSize = '6.5px';
-        cellPadding = '0.8px 2.5px';
-        titleFontSize = '8.5px';
-        subHeaderFontSize = '7px';
-    } else if (totalItems >= 34) { // 7, 8 Years
-        fontSize = '7.2px';
-        cellPadding = '1.2px 3px';
-        titleFontSize = '9px';
-        subHeaderFontSize = '7.5px';
-    } else { // 4, 5, 6 Years
-        fontSize = '7.8px';
-        cellPadding = '1.8px 3.5px';
-        titleFontSize = '9.5px';
-        subHeaderFontSize = '8px';
+    if (totalItems >= 42) { // 9, 10 Years (42+ rows)
+        fontSize = '9px';
+        cellPadding = '2px 4.5px';
+        titleFontSize = '12px';
+        subHeaderFontSize = '10px';
+    } else if (totalItems >= 32) { // 7, 8 Years (32-38 rows)
+        fontSize = '10px';
+        cellPadding = '2.8px 5.5px';
+        titleFontSize = '13.5px';
+        subHeaderFontSize = '11px';
+    } else if (totalItems >= 20) { // 4, 5, 6 Years (20-28 rows)
+        fontSize = '11px';
+        cellPadding = '4.5px 6.5px';
+        titleFontSize = '14.5px';
+        subHeaderFontSize = '12px';
+    } else { // 2, 3 Years (<20 rows)
+        fontSize = '12px';
+        cellPadding = '6.5px 8px';
+        titleFontSize = '15.5px';
+        subHeaderFontSize = '13px';
     }
 
     let mntTotal = price * 0.08;
@@ -2812,44 +2838,42 @@ function buildExportPlanHtml(opts) {
     let label2 = isDiscount ? 'Price After Discount :' : 'Price After Increase :';
     let displayIncPct = Math.abs(incPct);
 
-    let benchmarks = getProjectBenchmarks();
-    let activeBench = getActiveBenchmark(benchmarks);
-    let isApproved = isBase ? true : ((preDelivPct || 0) >= (activeBench.pct - 0.05));
-    let approvalText = isBase ? 'APPROVED (Standard Baseline)' : (isApproved ? 'APPROVED' : `NOT APPROVED (Shortfall ${(activeBench.pct - preDelivPct).toFixed(2)}%)`);
+    let isApproved = isBase ? true : (!window.isManuallyDisapproved);
+    let approvalText = isBase ? 'APPROVED (Standard Baseline)' : (isApproved ? 'APPROVED' : 'NOT APPROVED');
     let approvalColor = isApproved ? '#27ae60' : '#c0392b';
 
     let metaRows = '';
     if (clientName) {
-        metaRows += `<tr><td colspan="2" class="export-bold" style="text-align: left; border-left: 1.5px solid black; padding: ${cellPadding};">Client Name :</td><td colspan="3" class="export-bold" style="border-right: 1.5px solid black; padding: ${cellPadding};">${escapeHtml(clientName)}</td></tr>`;
+        metaRows += `<tr><td colspan="2" class="export-bold" style="text-align: left; border-left: 1.5px solid black; padding: ${cellPadding}; padding-left: 12px;">Client Name :</td><td colspan="3" class="export-bold" style="text-align: left; border-right: 1.5px solid black; padding: ${cellPadding}; padding-left: 14px;">${escapeHtml(clientName)}</td></tr>`;
     }
     if (unitNo) {
-        metaRows += `<tr><td colspan="2" class="export-bold" style="text-align: left; border-left: 1.5px solid black; padding: ${cellPadding};">Unit No :</td><td colspan="3" class="export-bold" style="border-right: 1.5px solid black; padding: ${cellPadding};">${escapeHtml(unitNo)}</td></tr>`;
+        metaRows += `<tr><td colspan="2" class="export-bold" style="text-align: left; border-left: 1.5px solid black; padding: ${cellPadding}; padding-left: 12px;">Unit No :</td><td colspan="3" class="export-bold" style="text-align: left; border-right: 1.5px solid black; padding: ${cellPadding}; padding-left: 14px;">${escapeHtml(unitNo)}</td></tr>`;
     }
 
     let priceRows = isBase ? `
-        <tr><td colspan="2" class="export-bold" style="text-align: left; border-left: 1.5px solid black; padding: ${cellPadding};">Increase % :</td><td colspan="3" style="border-right: 1.5px solid black; padding: ${cellPadding};">0.00%</td></tr>
-        <tr><td colspan="2" class="export-bold" style="text-align: left; border-left: 1.5px solid black; padding: ${cellPadding};">Unit Price :</td><td colspan="3" class="export-bold" style="border-right: 1.5px solid black; padding: ${cellPadding};">${formatNum(price)}</td></tr>
+        <tr><td colspan="2" class="export-bold" style="text-align: left; border-left: 1.5px solid black; padding: ${cellPadding}; padding-left: 12px;">Increase % :</td><td colspan="3" style="text-align: left; border-right: 1.5px solid black; padding: ${cellPadding}; padding-left: 14px;">0.00%</td></tr>
+        <tr><td colspan="2" class="export-bold" style="text-align: left; border-left: 1.5px solid black; padding: ${cellPadding}; padding-left: 12px;">Unit Price :</td><td colspan="3" class="export-bold" style="text-align: left; border-right: 1.5px solid black; padding: ${cellPadding}; padding-left: 14px;">${formatNum(price)}</td></tr>
     ` : `
-        <tr><td colspan="2" class="export-bold" style="text-align: left; border-left: 1.5px solid black; padding: ${cellPadding};">${label1}</td><td colspan="3" style="border-right: 1.5px solid black; padding: ${cellPadding};">${formatPct(displayIncPct)}</td></tr>
-        <tr><td colspan="2" class="export-bold" style="text-align: left; border-left: 1.5px solid black; padding: ${cellPadding};">${label2}</td><td colspan="3" class="export-bold" style="border-right: 1.5px solid black; padding: ${cellPadding};">${formatNum(price)}</td></tr>
+        <tr><td colspan="2" class="export-bold" style="text-align: left; border-left: 1.5px solid black; padding: ${cellPadding}; padding-left: 12px;">${label1}</td><td colspan="3" style="text-align: left; border-right: 1.5px solid black; padding: ${cellPadding}; padding-left: 14px;">${formatPct(displayIncPct)}</td></tr>
+        <tr><td colspan="2" class="export-bold" style="text-align: left; border-left: 1.5px solid black; padding: ${cellPadding}; padding-left: 12px;">${label2}</td><td colspan="3" class="export-bold" style="text-align: left; border-right: 1.5px solid black; padding: ${cellPadding}; padding-left: 14px;">${formatNum(price)}</td></tr>
     `;
 
     let html = `
         <colgroup>
-            <col style="width: 14.5%;">
-            <col style="width: 30%;">
-            <col style="width: 10.5%;">
-            <col style="width: 26%;">
-            <col style="width: 19%;">
+            <col style="width: 15%;">
+            <col style="width: 31%;">
+            <col style="width: 10%;">
+            <col style="width: 24%;">
+            <col style="width: 20%;">
         </colgroup>
-        <tr><th colspan="5" class="export-header-blue" style="font-size: ${titleFontSize}; border: 1.5px solid black; padding: 3px; letter-spacing: 0.3px;">${title}</th></tr>
+        <tr><th colspan="5" class="export-header-blue" style="font-size: ${titleFontSize}; border: 1.5px solid black; padding: 4px; letter-spacing: 0.3px;">${title}</th></tr>
         ${metaRows}
-        <tr><td colspan="2" class="export-bold" style="text-align: left; border-left: 1.5px solid black; padding: ${cellPadding};">Date :</td><td colspan="3" style="border-right: 1.5px solid black; padding: ${cellPadding};">${formatDateExport(contractDateStr || new Date())}</td></tr>
-        <tr><td colspan="2" class="export-bold" style="text-align: left; border-left: 1.5px solid black; padding: ${cellPadding};">Unit Base Price :</td><td colspan="3" style="border-right: 1.5px solid black; padding: ${cellPadding};">${formatNum(basePriceCache)}</td></tr>
-        <tr><td colspan="2" class="export-bold" style="text-align: left; border-left: 1.5px solid black; padding: ${cellPadding};">Maintenance (8%) :</td><td colspan="3" style="border-right: 1.5px solid black; padding: ${cellPadding};">${formatNum(mntTotal)}</td></tr>
+        <tr><td colspan="2" class="export-bold" style="text-align: left; border-left: 1.5px solid black; padding: ${cellPadding}; padding-left: 12px;">Date :</td><td colspan="3" style="text-align: left; border-right: 1.5px solid black; padding: ${cellPadding}; padding-left: 14px;">${formatDateExport(contractDateStr || new Date())}</td></tr>
+        <tr><td colspan="2" class="export-bold" style="text-align: left; border-left: 1.5px solid black; padding: ${cellPadding}; padding-left: 12px;">Unit Base Price :</td><td colspan="3" style="text-align: left; border-right: 1.5px solid black; padding: ${cellPadding}; padding-left: 14px;">${formatNum(basePriceCache)}</td></tr>
+        <tr><td colspan="2" class="export-bold" style="text-align: left; border-left: 1.5px solid black; padding: ${cellPadding}; padding-left: 12px;">Maintenance (8%) :</td><td colspan="3" style="text-align: left; border-right: 1.5px solid black; padding: ${cellPadding}; padding-left: 14px;">${formatNum(mntTotal)}</td></tr>
         ${priceRows}
-        <tr><td colspan="2" class="export-bold" style="text-align: left; border-left: 1.5px solid black; padding: ${cellPadding};">Collected Till Delivery:</td><td colspan="3" style="border-right: 1.5px solid black; padding: ${cellPadding};">${(preDelivPct || 0).toFixed(2)}%</td></tr>
-        <tr><td colspan="2" class="export-bold" style="text-align: left; border-left: 1.5px solid black; border-bottom: 1.5px solid black; padding: ${cellPadding};">Approval Status:</td><td colspan="3" class="export-bold" style="border-right: 1.5px solid black; border-bottom: 1.5px solid black; padding: ${cellPadding}; color: ${approvalColor};">${approvalText}</td></tr>
+        <tr><td colspan="2" class="export-bold" style="text-align: left; border-left: 1.5px solid black; padding: ${cellPadding}; padding-left: 12px;">Collected Till Delivery:</td><td colspan="3" style="text-align: left; border-right: 1.5px solid black; padding: ${cellPadding}; padding-left: 14px;">${(preDelivPct || 0).toFixed(2)}%</td></tr>
+        <tr><td colspan="2" class="export-bold" style="text-align: left; border-left: 1.5px solid black; border-bottom: 1.5px solid black; padding: ${cellPadding}; padding-left: 12px;">Approval Status:</td><td colspan="3" class="export-bold" style="text-align: left; border-right: 1.5px solid black; border-bottom: 1.5px solid black; padding: ${cellPadding}; padding-left: 14px; color: ${approvalColor};">${approvalText}</td></tr>
         <tr><td colspan="5" style="height: 4px; border: none; padding: 0;"></td></tr>
         
         <tr>
@@ -2966,7 +2990,7 @@ function generateExportTemplate(offerPrice, offerPreDelivPct) {
     let exportTable = document.getElementById('export-table');
     if (exportTable) {
         exportTable.style.fontSize = offerPlan.fontSize;
-        exportTable.style.width = '520px';
+        exportTable.style.width = '100%';
         exportTable.innerHTML = offerPlan.html;
     }
 
@@ -2996,7 +3020,7 @@ function generateExportTemplate(offerPrice, offerPreDelivPct) {
 
         if (exportTableBase) {
             exportTableBase.style.fontSize = basePlan.fontSize;
-            exportTableBase.style.width = '520px';
+            exportTableBase.style.width = '100%';
             exportTableBase.innerHTML = basePlan.html;
         }
     } else {
@@ -3050,13 +3074,13 @@ function exportPDF() {
         window.scrollTo(0, 0);
         document.body.style.padding = '0px';
 
-        // Set clean relative layout with 100% natural height, 550px width, padding 5px 15px, and left: 0 (margin: 0)
+        // Set clean relative layout with 100% natural height, 680px width, padding 0, and left: 0 (margin: 0 auto)
         element.style.position = 'relative';
         element.style.top = '0px';
         element.style.left = '0px';
-        element.style.margin = '0';
-        element.style.width = '550px';
-        element.style.padding = '5px 15px';
+        element.style.margin = '0 auto';
+        element.style.width = '680px';
+        element.style.padding = '0';
         element.style.boxSizing = 'border-box';
         element.style.zIndex = '999999';
         element.style.visibility = 'visible';
@@ -3071,19 +3095,21 @@ function exportPDF() {
         let unitNo = (document.getElementById('unit-number')?.value || '').trim();
         let isComparing = document.getElementById('compare-base-export-toggle')?.checked;
 
-        let clientPart = clientName ? `_${clientName.replace(/\s+/g, '_')}` : '';
-        let unitPart = unitNo ? `_Unit_${unitNo.replace(/\s+/g, '_')}` : '';
+        let clientPart = clientName ? `_${clientName.replace(/[\/\\:*?"<>|]/g, '-').replace(/\s+/g, '_')}` : '';
+        let unitPart = unitNo ? `_Unit_${unitNo.replace(/[\/\\:*?"<>|]/g, '-').replace(/\s+/g, '_')}` : '';
         let compPart = isComparing ? '_With_Base_Comparison' : '';
         let pdfFileName = `Payment_Plan_${projName}_${yearsVal}Y${unitPart}${clientPart}${compPart}.pdf`;
 
         let opt = {
-            margin:       [8, 32, 8, 32], // symmetric 32mm margins for slender, compact Excel layout on A4
+            margin:       [8, 8, 8, 8], // 8mm margins for full-width A4 print
             filename:     pdfFileName,
             image:        { type: 'jpeg', quality: 0.98 },
             html2canvas:  { 
                 scale: 2, 
                 useCORS: true, 
-                logging: false 
+                logging: false,
+                scrollX: 0,
+                scrollY: 0
             },
             jsPDF: { 
                 unit: 'mm', 
@@ -3101,8 +3127,8 @@ function exportPDF() {
                 element.style.left = originalLeft || '-9999px';
                 element.style.top = originalTop || '0px';
                 element.style.margin = origMargin || '';
-                element.style.width = origWidth || '550px';
-                element.style.padding = origPadding || '5px 15px';
+                element.style.width = origWidth || '680px';
+                element.style.padding = origPadding || '0';
                 element.style.boxSizing = origBoxSizing || 'border-box';
                 element.style.zIndex = originalZIndex || '';
                 element.style.visibility = originalVisibility || 'visible';
@@ -3189,6 +3215,17 @@ async function populateTemplateWorkbook(workbook, offerPrice) {
     ws.getCell('E7').value = isDiscount ? 'Price After Discount :' : 'Price After Increase :';
     ws.getCell('F7').value = offerPrice;
     ws.getCell('F7').numFmt = '#,##0.00';
+
+    let isApproved = !window.isManuallyDisapproved;
+    let approvalText = isApproved ? 'APPROVED' : 'NOT APPROVED';
+    ws.getCell('D8').value = 'Approval Status :';
+    ws.getCell('E8').value = 'Approval Status :';
+    ws.getCell('F8').value = approvalText;
+    if (!isApproved) {
+        ws.getCell('F8').font = { color: { argb: 'FFFF0000' }, bold: true };
+    } else {
+        ws.getCell('F8').font = { color: { argb: 'FF008000' }, bold: true };
+    }
 
     ws.getCell('G9').value = years + ' Years Payment Plan';
 
@@ -3359,10 +3396,8 @@ function exportExcelFallback(offerPrice) {
     let unitNo = (document.getElementById('unit-number')?.value || '').trim();
     let isComparing = document.getElementById('compare-base-export-toggle')?.checked;
 
-    let benchmarks = getProjectBenchmarks();
-    let activeBench = getActiveBenchmark(benchmarks);
-    let isApproved = (window.lastOfferPreDelivPct || 0) >= (activeBench.pct - 0.05);
-    let approvalText = isApproved ? 'APPROVED' : `NOT APPROVED (Shortfall ${(activeBench.pct - (window.lastOfferPreDelivPct || 0)).toFixed(2)}%)`;
+    let isApproved = !window.isManuallyDisapproved;
+    let approvalText = isApproved ? 'APPROVED' : 'NOT APPROVED';
 
     let ws_data = [
         ['Payment Plan', '', '', '', '']
