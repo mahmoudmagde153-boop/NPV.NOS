@@ -190,8 +190,10 @@ function setProject(proj) {
     if (typeof proj === 'string') {
         if (proj.toLowerCase().includes('perla')) currentProject = 'Perla';
         else if (proj.toLowerCase().includes('zomra')) currentProject = 'Zomra';
+        else if (proj.toLowerCase().includes('jirian')) currentProject = 'Jirian';
         else currentProject = proj;
     }
+    window.currentProject = currentProject;
     document.querySelectorAll('.tab-btn').forEach(b => {
         b.classList.remove('active');
         if (b.innerText && b.innerText.toLowerCase().includes(currentProject.toLowerCase())) {
@@ -845,8 +847,10 @@ function renderBaseInputs() {
 
 function renderCustomInputs() {
     let html = '';
-    html += createInputGroup('dp1', 'Down Payment 1');
-    html += createInputGroup('dp2', 'Down Payment 2');
+    let dp1Label = currentProject === 'Jirian' ? 'Down Payment (5%)' : 'Down Payment 1';
+    let dp2Label = currentProject === 'Jirian' ? '1st Dec Payment (5%)' : 'Down Payment 2';
+    html += createInputGroup('dp1', dp1Label);
+    html += createInputGroup('dp2', dp2Label);
     
     if (currentProject === 'Zomra') {
         html += createInputGroup('addl', '6-Months Payment');
@@ -967,6 +971,52 @@ function applyDiscountLogic(f, contractDateStr, forceNormal = false, forceFlex =
                 f.pv = (f.amount || 0) * f.pvFactor;
             } else {
                 f.pvFactor = 1 / Math.pow(1 + rate / 4, pmt);
+                f.pv = (f.amount || 0) * f.pvFactor;
+            }
+        }
+    } else if (currentProject === 'Jirian') {
+        if (f.isMnt) {
+            f.rate = 0;
+            f.period = 0;
+            f.pvFactor = 1;
+            f.pv = f.amount || 0;
+            return;
+        }
+        let pmt = Math.max(0, Math.round(months / 3));
+        f.period = pmt;
+        
+        if (isFlexible) {
+            let [fy, fm, fd] = f.date.split('-').map(Number);
+            let diffDays = Math.round((Date.UTC(fy, fm - 1, fd) - Date.UTC(2025, 11, 29)) / 86400000);
+            let r;
+            if (diffDays < 54) r = (discountRates[0] !== undefined ? discountRates[0] : 19) / 100;
+            else if (diffDays < 419) r = (discountRates[1] !== undefined ? discountRates[1] : 18) / 100;
+            else if (diffDays < 784) r = (discountRates[2] !== undefined ? discountRates[2] : 15) / 100;
+            else if (diffDays < 1150) r = (discountRates[3] !== undefined ? discountRates[3] : 13) / 100;
+            else if (diffDays < 1880) r = (discountRates[4] !== undefined ? discountRates[4] : 10) / 100;
+            else r = (discountRates[6] !== undefined ? discountRates[6] : 9) / 100;
+            f.rate = r;
+            f.pvFactor = 1.0 / Math.pow(1.0 + r / 365.0, diffDays);
+            f.pv = (f.amount || 0) * f.pvFactor;
+        } else {
+            if (f.id === 'dp1' || f.id === 'dp2') {
+                f.rate = (discountRates[0] !== undefined ? discountRates[0] : 19) / 100;
+                f.period = 0;
+                f.pvFactor = 1.0;
+                f.pv = f.amount || 0;
+            } else {
+                if (pmt <= 4) {
+                    f.rate = (discountRates[1] !== undefined ? discountRates[1] : 18) / 100;
+                } else if (pmt <= 8) {
+                    f.rate = (discountRates[2] !== undefined ? discountRates[2] : 15) / 100;
+                } else if (pmt <= 12) {
+                    f.rate = (discountRates[3] !== undefined ? discountRates[3] : 13) / 100;
+                } else if (pmt <= 20) {
+                    f.rate = (discountRates[4] !== undefined ? discountRates[4] : 10) / 100;
+                } else {
+                    f.rate = (discountRates[6] !== undefined ? discountRates[6] : 9) / 100;
+                }
+                f.pvFactor = 1 / Math.pow(1 + f.rate / 4, f.period);
                 f.pv = (f.amount || 0) * f.pvFactor;
             }
         }
@@ -1110,6 +1160,27 @@ function generateFlowsTemplate(contractDateStr, years, freqMonths, isBase = fals
             let dStr = customFirstDateStr ? formatDate(addMonths(customFirstDateStr, i * freqMonths)) : formatDate(addMonths(contractDateStr, m));
             flows.push({ id: 'inst_' + i, label: 'Installment ' + (i+1), date: dStr, months: m, isInst: true });
         }
+    } else if (currentProject === 'Jirian') {
+        flows.push({ id: 'dp1', label: 'Down Payment (5%)', date: contractDateStr, months: 0, isDP: true, defaultPct: getOverridePct('dp1', 0.05) });
+        
+        let cDateObj = new Date(contractDateStr);
+        let dp2Year = (cDateObj.getMonth() >= 11 && cDateObj.getDate() > 1) ? cDateObj.getFullYear() + 1 : cDateObj.getFullYear();
+        let dp2Date = formatDate(new Date(dp2Year, 11, 1));
+        let dp2Months = (dp2Year - cDateObj.getFullYear()) * 12 + 11 - cDateObj.getMonth();
+        if (dp2Months < 0) dp2Months = 1;
+        flows.push({ id: 'dp2', label: '1st Dec Payment (5%)', date: dp2Date, months: dp2Months, isDP: true, defaultPct: getOverridePct('dp2', 0.05) });
+        
+        let numInst = overrideInstCount !== null ? overrideInstCount : (years * (12 / freqMonths));
+        let startMonth = (freqMonths === 6) ? 6 : 3;
+        let firstDate = customFirstDateStr ? new Date(customFirstDateStr) : null;
+        let diffMonths = firstDate ? Math.round((firstDate - cDateObj) / (1000 * 60 * 60 * 24 * 30.44)) : startMonth;
+        if (diffMonths < 0) diffMonths = startMonth;
+        
+        for (let i = 0; i < numInst; i++) {
+            let m = diffMonths + i * freqMonths;
+            let dStr = customFirstDateStr ? formatDate(addMonths(customFirstDateStr, i * freqMonths)) : formatDate(addMonths(contractDateStr, m));
+            flows.push({ id: 'inst_' + i, label: 'Installment ' + (i+1), date: dStr, months: m, isInst: true });
+        }
     } else { // Perla
         flows.push({ id: 'dp1', label: 'Down Payment', date: contractDateStr, months: 0, isDP: true, defaultPct: getOverridePct('dp1', 0.05) });
         
@@ -1188,17 +1259,23 @@ function calculateBaseFlows(price, template, contractDateStr) {
     return flows;
 }
 
-function getCustomInputAmt(id, price) {
+function getCustomInputData(id, price) {
     let valEl = document.getElementById(id + '-val');
     let typeEl = document.getElementById(id + '-type');
     if (!valEl || valEl.value.trim() === '') return null;
     let v = parseFloat(valEl.value);
     if (isNaN(v) || v < 0) return null;
-    if (typeEl && typeEl.value === 'pct') return price * (v / 100);
-    let estP = price || basePriceCache || 1;
-    let pPct = Math.round((v / estP) * 1000000) / 1000000;
-    if (pPct > 0 && pPct < 1.0) return price * pPct;
-    return v;
+    let isPct = (!typeEl || typeEl.value === 'pct');
+    return {
+        isPct: isPct,
+        val: v,
+        amount: isPct ? price * (v / 100) : v
+    };
+}
+
+function getCustomInputAmt(id, price) {
+    let d = getCustomInputData(id, price);
+    return d ? d.amount : null;
 }
 
 function solveForPrice(basePv, template) {
@@ -1317,10 +1394,14 @@ window.onTargetPctChange = function() {
 
 function calculateCustomFlows(price, template, options = {}) {
     let isPure = options.isPureStandard === true;
-    let dp1 = isPure ? null : getCustomInputAmt('dp1', price);
-    let dp2 = isPure ? null : getCustomInputAmt('dp2', price);
-    let addl = isPure ? null : getCustomInputAmt('addl', price);
-    let deliv = isPure ? null : getCustomInputAmt('deliv', price);
+    let dp1Data = isPure ? null : getCustomInputData('dp1', price);
+    let dp2Data = isPure ? null : getCustomInputData('dp2', price);
+    let addlData = isPure ? null : getCustomInputData('addl', price);
+    let delivData = isPure ? null : getCustomInputData('deliv', price);
+    let dp1 = dp1Data ? dp1Data.amount : null;
+    let dp2 = dp2Data ? dp2Data.amount : null;
+    let addl = addlData ? addlData.amount : null;
+    let deliv = delivData ? delivData.amount : null;
     
     let flows = JSON.parse(JSON.stringify(template));
     let remAmt = price;
@@ -1343,18 +1424,64 @@ function calculateCustomFlows(price, template, options = {}) {
             // Priority 1: Table overrides
             if (overrides[f.id] && overrides[f.id].amount !== undefined) {
                 let ov = overrides[f.id];
-                f.amount = ov.isPct ? price * (ov.amount / 100) : ov.amount;
+                if (ov.isPct) {
+                    f.amount = price * (ov.amount / 100);
+                    f._exactFixedPct = ov.amount;
+                } else {
+                    f.amount = ov.amount;
+                    f._exactFixedVal = ov.amount;
+                }
                 f.isFixedOverride = true;
             } 
             // Priority 2: Input fields for DP/Addl/Deliv
-            else if (f.id === 'dp1') f.amount = dp1 !== null ? dp1 : price * (f.defaultPct||0);
-            else if (f.id === 'dp2') f.amount = dp2 !== null ? dp2 : price * (f.defaultPct||0);
-            else if (f.id === 'addl') f.amount = addl !== null ? addl : price * (f.defaultPct||0);
-            else if (f.id === 'deliv') f.amount = deliv !== null ? deliv : price * (f.defaultPct||0);
+            else if (f.id === 'dp1') {
+                if (dp1Data !== null) {
+                    f.amount = dp1Data.amount;
+                    if (dp1Data.isPct) f._exactFixedPct = dp1Data.val;
+                    else f._exactFixedVal = dp1Data.val;
+                } else {
+                    f.amount = price * (f.defaultPct || 0);
+                }
+            }
+            else if (f.id === 'dp2') {
+                if (dp2Data !== null) {
+                    f.amount = dp2Data.amount;
+                    if (dp2Data.isPct) f._exactFixedPct = dp2Data.val;
+                    else f._exactFixedVal = dp2Data.val;
+                } else {
+                    f.amount = price * (f.defaultPct || 0);
+                }
+            }
+            else if (f.id === 'addl') {
+                if (addlData !== null) {
+                    f.amount = addlData.amount;
+                    if (addlData.isPct) f._exactFixedPct = addlData.val;
+                    else f._exactFixedVal = addlData.val;
+                } else {
+                    f.amount = price * (f.defaultPct || 0);
+                }
+            }
+            else if (f.id === 'deliv') {
+                if (delivData !== null) {
+                    f.amount = delivData.amount;
+                    if (delivData.isPct) f._exactFixedPct = delivData.val;
+                    else f._exactFixedVal = delivData.val;
+                } else {
+                    f.amount = price * (f.defaultPct || 0);
+                }
+            }
             else if (f.isMerged) {
                 let m_amt = 0;
                 let delivPct = template.find(t => t.id === 'deliv')?.defaultPct || 0.05;
-                if (f.mergedIds.includes('deliv')) m_amt += deliv !== null ? deliv : price * delivPct;
+                if (f.mergedIds.includes('deliv')) {
+                    if (delivData !== null) {
+                        m_amt += delivData.amount;
+                        if (delivData.isPct) f._exactMergedDelivPct = delivData.val;
+                        else f._exactMergedDelivVal = delivData.val;
+                    } else {
+                        m_amt += price * delivPct;
+                    }
+                }
                 f.amount = m_amt; 
                 f._mergedDelivAmt = m_amt;
             }
@@ -1742,7 +1869,30 @@ function applyPerfectPercentages(flows, totalAmt) {
         let pctVal = pct * 100;
         let targetRoundAmt = Math.round(f.amount || 0);
         let bestPctStr = '';
-        if (targetRoundAmt === 0) {
+
+        if (f._exactFixedPct !== undefined && f._exactFixedPct > 0) {
+            bestPctStr = parseFloat(Number(f._exactFixedPct).toFixed(6)).toString();
+            f.amount = validTotal * (parseFloat(bestPctStr) / 100.0);
+        } else if (f._exactFixedVal !== undefined && f._exactFixedVal > 0) {
+            f.amount = f._exactFixedVal;
+            let bestDiff = Infinity;
+            for (let d = 2; d <= 7; d++) {
+                let s = pctVal.toFixed(d);
+                let testVal = (parseFloat(s) / 100.0) * validTotal;
+                let curDiff = Math.abs(testVal - f._exactFixedVal);
+                if (curDiff < 0.005) {
+                    bestPctStr = parseFloat(s).toString();
+                    break;
+                }
+                if (curDiff < bestDiff) {
+                    bestDiff = curDiff;
+                    bestPctStr = parseFloat(s).toString();
+                }
+            }
+            if (!bestPctStr) {
+                bestPctStr = parseFloat(pctVal.toFixed(6)).toString();
+            }
+        } else if (targetRoundAmt === 0) {
             bestPctStr = '0';
         } else {
             // Find optimal decimal representation (2 to 7 decimals) that minimizes piastre difference (< 0.005 EGP)
@@ -1771,7 +1921,7 @@ function applyPerfectPercentages(flows, totalAmt) {
     let sumDisplay = nonMnt.reduce((s, f) => s + (parseFloat(f.displayPct) || 0), 0);
     let diff = 100.0 - sumDisplay;
     if (Math.abs(diff) > 1e-7 && Math.abs(diff) < 0.1) {
-        let targetFlow = [...nonMnt].reverse().find(f => (f.isInst || f.isMerged) && !f.isFixedOverride && !f._isZeroShifted && !f._exactFixedVal);
+        let targetFlow = [...nonMnt].reverse().find(f => (f.isInst || f.isMerged) && !f.isFixedOverride && !f._isZeroShifted && !f._exactFixedVal && !f._exactFixedPct);
         if (targetFlow) {
             let cur = parseFloat(targetFlow.displayPct) || 0;
             let adjusted = cur + diff;
@@ -1784,7 +1934,7 @@ function applyPerfectPercentages(flows, totalAmt) {
         let sumAmt = nonMnt.reduce((s, f) => s + (f.amount || 0), 0);
         let amtDiff = validTotal - sumAmt;
         if (Math.abs(amtDiff) > 1e-4 && Math.abs(amtDiff) < 1000) {
-            let targetFlow = [...nonMnt].reverse().find(f => (f.isInst || f.isMerged) && !f.isFixedOverride && !f._isZeroShifted);
+            let targetFlow = [...nonMnt].reverse().find(f => (f.isInst || f.isMerged) && !f.isFixedOverride && !f._isZeroShifted && !f._exactFixedVal && !f._exactFixedPct);
             if (targetFlow) {
                 targetFlow.amount = (targetFlow.amount || 0) + amtDiff;
             }
@@ -1827,10 +1977,17 @@ function getProjectBenchmarks() {
             delivMonth: 37,
             fixedDP: 15.0
         };
+    } else if (currentProject === 'Jirian') {
+        return {
+            y8: 55.00,
+            y10: 46.00,
+            delivMonth: 48,
+            fixedDP: 10.0
+        };
     } else { // Perla
         return {
             y8: 53.55,
-            y10: 44.62,
+            y10: 47.78,
             delivMonth: 48,
             fixedDP: 10.0
         };
@@ -2904,7 +3061,7 @@ function calculate() {
             } else {
                 naturalOfferPrice = basePriceCache;
             }
-        } else if (currentProject === 'Zomra' && years === 8 && freqMonths === 3 && !hasFixedInst && !hasTableOverrides && !hasCustomInputs && !isDistCustomized && !is7030) {
+        } else if ((currentProject === 'Zomra' || currentProject === 'Jirian') && years === 8 && freqMonths === 3 && !hasFixedInst && !hasTableOverrides && !hasCustomInputs && !isDistCustomized && !is7030) {
             naturalOfferPrice = basePriceCache;
         } else {
             naturalOfferPrice = solveForPrice(targetPv, customTemplate);
@@ -2981,6 +3138,8 @@ function calculate() {
                     let targetAmt = effectivePrice * pctFrac;
                     if (f._exactFixedVal !== undefined && f._exactFixedVal > 0) {
                         targetAmt = f._exactFixedVal;
+                    } else if (f._exactFixedPct !== undefined && f._exactFixedPct > 0) {
+                        targetAmt = effectivePrice * (f._exactFixedPct / 100.0);
                     } else if (Math.abs(targetAmt - Math.round(targetAmt)) < 0.005) {
                         targetAmt = Math.round(targetAmt);
                     }
