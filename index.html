@@ -3,10 +3,13 @@
 <head>
 
     <meta charset="UTF-8">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Nations of Sky - NPV System</title>
     <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="index.css">
+    <link rel="stylesheet" href="index.css?v=20261101_v3">
     
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
@@ -17,6 +20,10 @@
     <header class="main-header">
         <h1 style="color:var(--gold); margin:0;">Nations of Sky</h1>
         <h2 style="margin:0; font-size:1.2rem; color:var(--text)">Advanced NPV System</h2>
+        <div style="margin-top: 8px; display: inline-flex; align-items: center; gap: 8px; background: rgba(30, 41, 59, 0.85); border: 1px solid #10b981; border-radius: 20px; padding: 4px 14px; font-size: 0.85rem; color: #10b981; font-weight: 600;">
+            <span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:#10b981; box-shadow: 0 0 8px #10b981;"></span>
+            v2026.11.01_v10 - Calibrated (Selective Year Shift | Zero & Defer Destinations | 100.00% Zero-Drift Precision)
+        </div>
     </header>
 
     <div class="project-selector">
@@ -174,10 +181,11 @@
                             </div>
                             <div class="input-group">
                                 <label style="font-size: 0.85rem;">نطاق التطبيق (Scope)</label>
-                                <select id="intra-year-scope" onchange="delayedCalculate()">
+                                <select id="intra-year-scope" onchange="if(window.onIntraYearScopeChange) window.onIntraYearScopeChange(); delayedCalculate();">
                                     <option value="all">كل السنين (All Years)</option>
                                     <option value="pre">قبل الاستلام فقط (Pre-Delivery)</option>
                                     <option value="post">بعد الاستلام فقط (Post-Delivery)</option>
+                                    <option value="custom">📅 سنين محددة فقط (Custom Selected Years)</option>
                                 </select>
                             </div>
                             <div style="display: flex; gap: 6px; flex-direction: column;">
@@ -187,6 +195,24 @@
                                     <button type="button" class="btn btn-outline" onclick="applyIntraPreset('amt_200k')" style="padding: 4px 8px; font-size: 0.78rem; border-color: rgba(33, 150, 243, 0.4);">200 ألف</button>
                                     <button type="button" class="btn btn-outline" onclick="applyIntraPreset('amt_100k')" style="padding: 4px 8px; font-size: 0.78rem; border-color: rgba(33, 150, 243, 0.4);">100 ألف</button>
                                 </div>
+                            </div>
+                        </div>
+
+                        <!-- Custom Selected Years Container for Balloon -->
+                        <div id="intra-custom-years-container" style="display: none; margin-top: 12px; padding: 10px 14px; background: rgba(0,0,0,0.25); border-radius: 6px; border: 1px solid rgba(33, 150, 243, 0.35);">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; flex-wrap: wrap; gap: 8px;">
+                                <label style="font-size: 0.85rem; font-weight: bold; color: var(--accent-blue);">📅 اختر السنين التي يُطبق عليها القسط الخفيف وترحيل الباقي لنهاية السنة (Balloon):</label>
+                                <div style="display: flex; gap: 6px;">
+                                    <button type="button" class="btn btn-outline" onclick="selectIntraYearsPreset('1_2')" style="padding: 2px 8px; font-size: 0.75rem; border-color: rgba(33, 150, 243, 0.4);">السنة 1 و 2 فقط</button>
+                                    <button type="button" class="btn btn-outline" onclick="selectIntraYearsPreset('1_2_3')" style="padding: 2px 8px; font-size: 0.75rem; border-color: rgba(33, 150, 243, 0.4);">أول 3 سنين</button>
+                                    <button type="button" class="btn btn-outline" onclick="selectIntraYearsPreset('all')" style="padding: 2px 8px; font-size: 0.75rem; border-color: rgba(255,255,255,0.2);">تحديد الكل</button>
+                                </div>
+                            </div>
+                            <div id="intra-custom-years-checkboxes" style="display: flex; gap: 12px; flex-wrap: wrap; padding: 4px 0;">
+                                <!-- Checkboxes populated by JS -->
+                            </div>
+                            <div style="font-size: 0.78rem; color: var(--text-muted); margin-top: 4px;">
+                                * السنين غير المحددة تستمر بأقساط متساوية منتظمة، ويتحمل آخر ربع في السنين المحددة فقط باقي رصيد السنة.
                             </div>
                         </div>
 
@@ -227,6 +253,50 @@
                     </div>
                 </div>
 
+                <!-- Custom Installment Shift / Zero Card -->
+                <div class="custom-controls" style="margin-top: 15px; grid-template-columns: 1fr; background: rgba(168, 85, 247, 0.05); border: 1.5px solid rgba(168, 85, 247, 0.35); border-radius: 8px; padding: 14px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; flex-wrap: wrap; gap: 8px;">
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <span style="font-size: 1.2rem;">🔀</span>
+                            <span style="font-weight: bold; color: #a855f7; font-size: 0.98rem;">تصفير وترحيل أقساط محددة (Zero & Shift Installments)</span>
+                        </div>
+                        <button type="button" class="btn btn-outline" onclick="resetInstallmentShifts()" style="padding: 3px 10px; font-size: 0.78rem; border-color: rgba(255,255,255,0.25);">↩️ إلغاء ترحيل الأقساط</button>
+                    </div>
+
+                    <div style="font-size: 0.82rem; color: var(--text-muted); margin-bottom: 10px; line-height: 1.4;">
+                        اختر أي قسط لتصفيره (0 ج.م)، وحدد وجهة الترحيل: إما <strong>تلقائياً على باقي الأقساط التالية لحد تحت</strong> دون المساس بالأقساط المثبتة أو أقساط السنين المخففة، أو <strong>تحديد أقساط بعينها بالرقم</strong> (مثل 12، 16).
+                    </div>
+
+                    <div style="display: grid; grid-template-columns: 1fr 1.3fr 1fr auto; gap: 10px; align-items: end;">
+                        <div class="input-group">
+                            <label style="font-size: 0.85rem; font-weight: bold; color: #a855f7;">الأقساط المراد تصفيرها</label>
+                            <input type="text" id="zero-inst-ids" placeholder="مثال: 4 أو 4, 8" oninput="delayedCalculate()">
+                            <span style="font-size: 0.72rem; color: var(--text-muted); margin-top: 3px;">اكتب رقم القسط (مثل: 4)</span>
+                        </div>
+                        <div class="input-group">
+                            <label style="font-size: 0.85rem; font-weight: bold; color: var(--accent-blue);">وجهة الترحيل (أين يذهب المبلغ؟)</label>
+                            <select id="inst-shift-dest-mode" onchange="onShiftDestModeChange(); delayedCalculate();" style="padding: 8px; font-weight: bold;">
+                                <option value="down" selected>⬇️ ترحيل على باقي الأقساط لحد تحت (تلقائي)</option>
+                                <option value="specific">🎯 ترحيل على أقساط محددة بالرقم (مثال: 12، 16)</option>
+                                <option value="balloon">🎈 ترحيل على بالون نهاية السنة (Balloon)</option>
+                            </select>
+                            <span id="dest-mode-desc" style="font-size: 0.72rem; color: var(--text-muted); margin-top: 3px;">يوزع المبلغ بالتساوي على الأقساط التالية له فقط</span>
+                        </div>
+                        <div class="input-group" id="target-inst-ids-wrapper" style="display: none;">
+                            <label style="font-size: 0.85rem; font-weight: bold; color: #2ecc71;">الأقساط المستهدفة بالرقم</label>
+                            <input type="text" id="target-inst-ids" placeholder="مثال: 12, 16" oninput="delayedCalculate()">
+                            <span style="font-size: 0.72rem; color: var(--text-muted); margin-top: 3px;">أرقام الأقساط مفصولة بفواصل</span>
+                        </div>
+                        <div>
+                            <button type="button" class="btn btn-primary" onclick="applyInstallmentShift(); calculate();" style="padding: 9px 16px; font-size: 0.85rem; background: #a855f7; border-color: #a855f7; font-weight: bold; cursor: pointer;">تطبيق الترحيل 🔀</button>
+                        </div>
+                    </div>
+
+                    <div id="inst-shift-status-box" style="margin-top: 10px; font-size: 0.85rem; padding: 8px 12px; border-radius: 6px; background: rgba(168, 85, 247, 0.12); border-left: 3px solid #a855f7; display: none; line-height: 1.5;">
+                        <!-- Injected via JS -->
+                    </div>
+                </div>
+
                 <div class="custom-controls" style="margin-top: 15px; grid-template-columns: 1fr; background: rgba(212, 175, 55, 0.05); border: 1px solid rgba(212, 175, 55, 0.3); border-radius: 8px; padding: 12px;">
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
                         <span style="font-weight: bold; color: var(--gold); font-size: 0.95rem;">⚖️ توزيع الأقساط (Installment Distribution)</span>
@@ -255,21 +325,28 @@
                     </div>
                 </div>
 
-                <!-- Manual Discount Card -->
-                <div class="custom-controls" style="margin-top: 15px; grid-template-columns: 1fr; background: rgba(46, 204, 113, 0.05); border-left: 4px solid #2ecc71; padding: 15px; border-radius: 8px;">
+                <!-- Manual Discount / Increase Card -->
+                <div id="manual-discount-card" class="custom-controls" style="margin-top: 15px; grid-template-columns: 1fr; background: rgba(46, 204, 113, 0.05); border-left: 4px solid #2ecc71; padding: 15px; border-radius: 8px; transition: all 0.3s ease;">
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-                        <h3 style="margin: 0; color: #2ecc71; font-size: 1.05rem; display: flex; align-items: center; gap: 6px;">
-                            <span>🏷️</span> خصم يدوي مباشر (Manual Discount)
+                        <h3 id="manual-discount-title" style="margin: 0; color: #2ecc71; font-size: 1.05rem; display: flex; align-items: center; gap: 6px;">
+                            <span id="manual-discount-icon">🏷️</span> <span id="manual-discount-header-text">تعديل يدوي مباشر (خصم / زيادة) (Manual Adjustment)</span>
                         </h3>
-                        <button type="button" class="btn btn-outline" onclick="clearManualDiscount()" style="padding: 2px 8px; font-size: 0.78rem; border-color: rgba(255,255,255,0.2);">إلغاء الخصم</button>
+                        <button type="button" class="btn btn-outline" onclick="clearManualDiscount()" style="padding: 2px 8px; font-size: 0.78rem; border-color: rgba(255,255,255,0.2);">إلغاء التعديل</button>
                     </div>
-                    <div style="display: grid; grid-template-columns: 1.2fr 0.8fr; gap: 10px; align-items: end;">
+                    <div style="display: grid; grid-template-columns: 1fr 1.2fr 0.8fr; gap: 10px; align-items: end;">
                         <div class="input-group">
-                            <label style="font-size: 0.85rem;">قيمة الخصم</label>
+                            <label style="font-size: 0.85rem;">نوع الإجراء</label>
+                            <select id="manual-discount-action" onchange="if(window.onManualActionChange) window.onManualActionChange(); delayedCalculate();" style="padding: 8px; font-weight: 500;">
+                                <option value="discount" selected>🏷️ خصم (Discount -)</option>
+                                <option value="increase">📈 زيادة / Overprice (+)</option>
+                            </select>
+                        </div>
+                        <div class="input-group">
+                            <label id="manual-discount-val-label" style="font-size: 0.85rem;">قيمة الخصم</label>
                             <input type="number" step="0.01" id="manual-discount-val" placeholder="مثال: 5 أو 500000" oninput="delayedCalculate()">
                         </div>
                         <div class="input-group">
-                            <label style="font-size: 0.85rem;">النوع</label>
+                            <label style="font-size: 0.85rem;">الوحدة</label>
                             <select id="manual-discount-type" onchange="delayedCalculate()" style="padding: 8px;">
                                 <option value="pct">% نسبة مئوية</option>
                                 <option value="amt">ج.م مبلغ مباشر</option>
@@ -280,7 +357,10 @@
                 </div>
 
                 <div class="custom-controls" style="margin-top: 15px; grid-template-columns: 1fr; background: rgba(33, 150, 243, 0.05); border-left: 4px solid var(--accent-blue); padding: 15px; border-radius: 8px;">
-                    <h3 style="margin-top: 0; margin-bottom: 10px; color: var(--accent-blue); font-size: 1.1rem;">🎯 Smart Solver (Target Price)</h3>
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                        <h3 style="margin: 0; color: var(--accent-blue); font-size: 1.1rem;">🎯 Smart Solver (Target Price)</h3>
+                        <button onclick="clearTargetPrice()" style="background: transparent; border: 1px solid var(--accent-blue); color: var(--accent-blue); border-radius: 4px; padding: 2px 8px; font-size: 0.8rem; cursor: pointer;">مسح السعر المستهدف</button>
+                    </div>
                     <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; align-items: end;">
                         <div class="input-group">
                             <label>Target Price</label>
@@ -349,7 +429,11 @@
                     <!-- Difference injected here -->
                 </div>
 
-                <div style="display: flex; gap: 10px; margin-top: 15px; justify-content: flex-end;">
+                <div style="display: flex; gap: 10px; margin-top: 15px; justify-content: flex-end; align-items: center; flex-wrap: wrap;">
+                    <div id="table-pct-balance-indicator" style="margin-left: auto; font-size: 0.9rem; font-weight: bold;">
+                        <!-- Live % Sum Indicator injected via JS -->
+                    </div>
+                    <button id="balance-100-btn" onclick="balanceRemainingTo100()" style="background:#27ae60; color:white; padding:10px 15px; border-radius:4px; font-weight:bold; cursor:pointer; border:none; display:none; box-shadow: 0 4px 6px rgba(0,0,0,0.3);">⚖️ موازنة الأقساط لـ 100%</button>
                     <button onclick="applyTableEdits()" style="background:var(--accent-blue); color:white; padding:10px 15px; border-radius:4px; font-weight:bold; cursor:pointer; border:none; box-shadow: 0 4px 6px rgba(0,0,0,0.3);">احسب بعد تعديل الجدول</button>
                     <button onclick="resetTableEdits()" style="background:#e74c3c; color:white; padding:10px 15px; border-radius:4px; font-weight:bold; cursor:pointer; border:none; box-shadow: 0 4px 6px rgba(0,0,0,0.3);">إلغاء كل التعديلات</button>
                 </div>
@@ -458,7 +542,7 @@
         </div>
     </div>
 
-    <script src="app.js?v=20261022_v2"></script>
+    <script src="app.js?v=20261101_v11"></script>
 </body>
 </html>
 
