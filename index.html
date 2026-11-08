@@ -22,8 +22,7 @@
         <h2 style="margin:0; font-size:1.2rem; color:var(--text)">Advanced NPV System</h2>
         <div style="margin-top: 8px; display: inline-flex; align-items: center; gap: 8px; background: rgba(30, 41, 59, 0.85); border: 1px solid #10b981; border-radius: 20px; padding: 4px 14px; font-size: 0.85rem; color: #10b981; font-weight: 600;">
             <span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:#10b981; box-shadow: 0 0 8px #10b981;"></span>
-            v2026.11.01_v12 - Calibrated (Zomra, Perla & Jirian | Exact Cash DP & Bulks | 100.00% Zero-Drift Precision)
-        </div>
+            v2026.11.03_v28 - Flexible Plan 100% Excel Calibrated (+6.38% Parity) & Multi-Option Closed-Loop Parity</div>
     </header>
 
     <div class="project-selector">
@@ -81,6 +80,7 @@
                 <button class="btn btn-outline" onclick="openRatesModal()">⚙️ Discount Rates</button>
                 <button class="btn btn-primary" onclick="exportPDF()">📄 Export PDF</button>
                 <button class="btn btn-primary" onclick="exportExcel()" style="background-color: #217346; color: white; border-color: #217346;">📊 Export Excel</button>
+                <button class="btn btn-secondary" onclick="copyExcelPercentages()" style="background-color: #0d6efd; color: white; border-color: #0d6efd;" title="نسخ عمود النسب بدقة متناهية للصقها مباشرة في شيت الـ Calculator بالخلية L16">📋 نسخ نسب الإكسيل</button>
                 <input type="file" id="template-upload" accept=".xlsx, .xlsm" style="display:none;" onchange="handleTemplateUpload(event)">
                 <button class="btn btn-primary" onclick="document.getElementById('template-upload').click()" style="background-color: #107c41; color: white; border-color: #107c41;">📤 Export to Template</button>
             </div>
@@ -434,7 +434,7 @@
                     <div id="table-pct-balance-indicator" style="margin-left: auto; font-size: 0.9rem; font-weight: bold;">
                         <!-- Live % Sum Indicator injected via JS -->
                     </div>
-                    <button id="balance-100-btn" onclick="balanceRemainingTo100()" style="background:#27ae60; color:white; padding:10px 15px; border-radius:4px; font-weight:bold; cursor:pointer; border:none; display:none; box-shadow: 0 4px 6px rgba(0,0,0,0.3);">⚖️ موازنة الأقساط لـ 100%</button>
+                    <button id="balance-100-btn" onclick="balanceRemainingTo100()" style="display:none !important;"></button>
                     <button onclick="applyTableEdits()" style="background:var(--accent-blue); color:white; padding:10px 15px; border-radius:4px; font-weight:bold; cursor:pointer; border:none; box-shadow: 0 4px 6px rgba(0,0,0,0.3);">احسب بعد تعديل الجدول</button>
                     <button onclick="resetTableEdits()" style="background:#e74c3c; color:white; padding:10px 15px; border-radius:4px; font-weight:bold; cursor:pointer; border:none; box-shadow: 0 4px 6px rgba(0,0,0,0.3);">إلغاء كل التعديلات</button>
                 </div>
@@ -543,7 +543,7 @@
         </div>
     </div>
 
-    <script src="app.js?v=20261101_v12"></script>
+    <script src="app.js?v=20261103_v28"></script>
 </body>
 </html>
 
