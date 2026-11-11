@@ -207,11 +207,24 @@ function setProject(proj) {
             0: 21, 1: 21, 2: 20, 3: 19, 4: 18, 5: 17,
             6: 16, 7: 15, 8: 14, 9: 13, 10: 12, 11: 12, 12: 12, 13: 12, 14: 12, 15: 12
         };
+    } else if (currentProject === 'Perla') {
+        discountRates = {
+            0: 20, 1: 19, 2: 16, 3: 14, 4: 11, 5: 11,
+            6: 10, 7: 10, 8: 10, 9: 10, 10: 9, 11: 9, 12: 9, 13: 9, 14: 9, 15: 9
+        };
     } else {
         discountRates = {
             0: 19, 1: 18, 2: 15, 3: 13, 4: 10,
             5: 10, 6: 9, 7: 9, 8: 9, 9: 9, 10: 9, 11: 9, 12: 9, 13: 9, 14: 9, 15: 9
         };
+    }
+    let basePriceInput = document.getElementById('base-price');
+    if (basePriceInput) {
+        if (currentProject === 'Perla' && (basePriceInput.value === '5000000' || basePriceInput.value === '28158648' || !basePriceInput.value)) {
+            basePriceInput.value = '30631636';
+        } else if (currentProject === 'Zomra' && (basePriceInput.value === '5000000' || basePriceInput.value === '30631636' || !basePriceInput.value)) {
+            basePriceInput.value = '28158648';
+        }
     }
     document.querySelectorAll('.tab-btn').forEach(b => {
         b.classList.remove('active');
@@ -298,49 +311,275 @@ window.applyRecYears = function(y) {
         if (el) el.value = '';
         if (typeEl) typeEl.value = 'pct';
     });
+    window.globalTableOverrides = {};
+    window.meltState = {};
     calculate();
 };
 
-window.applyRecDP = function(pct) {
+// Option 2: Increase years + adjust DP1 & Deliv, zero DP2 & Addl
+window.applyRecYearsWithDP = function(y, dp1Pct, delivPct) {
+    let yrEl = document.getElementById('duration-years');
+    if (yrEl) yrEl.value = y;
+    let toggle = document.getElementById('fixed-inst-toggle');
+    if (toggle) toggle.checked = true;
+    let scopeEl = document.getElementById('fixed-inst-scope');
+    if (scopeEl) scopeEl.value = 'all';
+    
     let dp1Val = document.getElementById('dp1-val');
     let dp1Type = document.getElementById('dp1-type');
     if (dp1Val && dp1Type) {
         dp1Type.value = 'pct';
-        dp1Val.value = parseFloat(Number(pct).toFixed(4));
+        dp1Val.value = parseFloat(Number(dp1Pct).toFixed(8));
     }
-    let toggle = document.getElementById('fixed-inst-toggle');
-    if (toggle) toggle.checked = true;
-    let scopeEl = document.getElementById('fixed-inst-scope');
-    if (scopeEl) scopeEl.value = 'all';
-    ['dp2', 'addl', 'deliv'].forEach(id => {
-        let el = document.getElementById(id + '-val');
-        let typeEl = document.getElementById(id + '-type');
-        if (el) el.value = '';
-        if (typeEl) typeEl.value = 'pct';
-    });
-    calculate();
-};
-
-window.applyRecDeliv = function(pct) {
+    let dp2Val = document.getElementById('dp2-val');
+    if (dp2Val) dp2Val.value = '0';
+    let addlVal = document.getElementById('addl-val');
+    if (addlVal) addlVal.value = '0';
+    
     let delivVal = document.getElementById('deliv-val');
     let delivType = document.getElementById('deliv-type');
     if (delivVal && delivType) {
         delivType.value = 'pct';
-        delivVal.value = parseFloat(Number(pct).toFixed(4));
+        delivVal.value = parseFloat(Number(delivPct).toFixed(8));
     }
+    
+    window.globalTableOverrides = {};
+    window.meltState = {};
+    calculate();
+};
+
+// Option 2 (Perla): Increase years + zero DP2 (0%) + increase DP1 (0% Deliv, 0% Addl)
+window.applyRecYearsWithDP_Perla = function(y, dp1Pct) {
+    let yrEl = document.getElementById('duration-years');
+    if (yrEl) yrEl.value = Math.min(10, y);
     let toggle = document.getElementById('fixed-inst-toggle');
     if (toggle) toggle.checked = true;
     let scopeEl = document.getElementById('fixed-inst-scope');
     if (scopeEl) scopeEl.value = 'all';
-    ['dp1', 'dp2', 'addl'].forEach(id => {
+    
+    let dp1Val = document.getElementById('dp1-val');
+    let dp1Type = document.getElementById('dp1-type');
+    if (dp1Val && dp1Type) {
+        dp1Type.value = 'pct';
+        dp1Val.value = parseFloat(Number(dp1Pct).toFixed(8));
+    }
+    let dp2Val = document.getElementById('dp2-val');
+    if (dp2Val) dp2Val.value = '0';
+    ['addl', 'deliv'].forEach(id => {
         let el = document.getElementById(id + '-val');
-        let typeEl = document.getElementById(id + '-type');
         if (el) el.value = '';
-        if (typeEl) typeEl.value = 'pct';
     });
+    
+    window.globalTableOverrides = {};
+    window.meltState = {};
     calculate();
 };
 
+// Option 3 (Perla): Increase years + keep DP2 (5%) + increase DP1
+window.applyRecYears_KeepDP2_Perla = function(y, dp1Pct) {
+    let yrEl = document.getElementById('duration-years');
+    if (yrEl) yrEl.value = Math.min(10, y);
+    let toggle = document.getElementById('fixed-inst-toggle');
+    if (toggle) toggle.checked = true;
+    let scopeEl = document.getElementById('fixed-inst-scope');
+    if (scopeEl) scopeEl.value = 'all';
+    
+    let dp1Val = document.getElementById('dp1-val');
+    let dp1Type = document.getElementById('dp1-type');
+    if (dp1Val && dp1Type) {
+        dp1Type.value = 'pct';
+        dp1Val.value = parseFloat(Number(dp1Pct).toFixed(8));
+    }
+    let dp2Val = document.getElementById('dp2-val');
+    if (dp2Val) dp2Val.value = '5';
+    ['addl', 'deliv'].forEach(id => {
+        let el = document.getElementById(id + '-val');
+        if (el) el.value = '';
+    });
+    
+    window.globalTableOverrides = {};
+    window.meltState = {};
+    calculate();
+};
+
+// Option 4 (Perla): Current years + zero DP2 (0%) + increase DP1
+window.applyRecDP_ZeroDP2_Perla = function(dp1Pct) {
+    let toggle = document.getElementById('fixed-inst-toggle');
+    if (toggle) toggle.checked = true;
+    let scopeEl = document.getElementById('fixed-inst-scope');
+    if (scopeEl) scopeEl.value = 'all';
+    
+    let dp1Val = document.getElementById('dp1-val');
+    let dp1Type = document.getElementById('dp1-type');
+    if (dp1Val && dp1Type) {
+        dp1Type.value = 'pct';
+        dp1Val.value = parseFloat(Number(dp1Pct).toFixed(8));
+    }
+    let dp2Val = document.getElementById('dp2-val');
+    if (dp2Val) dp2Val.value = '0';
+    ['addl', 'deliv'].forEach(id => {
+        let el = document.getElementById(id + '-val');
+        if (el) el.value = '';
+    });
+    
+    window.globalTableOverrides = {};
+    window.meltState = {};
+    calculate();
+};
+
+// Option 5 (Perla): Current years + keep DP2 (5%) + increase DP1
+window.applyRecDP_KeepDP2_Perla = function(dp1Pct) {
+    let toggle = document.getElementById('fixed-inst-toggle');
+    if (toggle) toggle.checked = true;
+    let scopeEl = document.getElementById('fixed-inst-scope');
+    if (scopeEl) scopeEl.value = 'all';
+    
+    let dp1Val = document.getElementById('dp1-val');
+    let dp1Type = document.getElementById('dp1-type');
+    if (dp1Val && dp1Type) {
+        dp1Type.value = 'pct';
+        dp1Val.value = parseFloat(Number(dp1Pct).toFixed(8));
+    }
+    let dp2Val = document.getElementById('dp2-val');
+    if (dp2Val) dp2Val.value = '5';
+    ['addl', 'deliv'].forEach(id => {
+        let el = document.getElementById(id + '-val');
+        if (el) el.value = '';
+    });
+    
+    window.globalTableOverrides = {};
+    window.meltState = {};
+    calculate();
+};
+
+// Option 3: Increase DP1 only, zero DP2 (0%) & Addl (0%), keep Delivery (5%)
+window.applyRecDP_KeepDeliv = function(dp1Pct, delivPct) {
+    let toggle = document.getElementById('fixed-inst-toggle');
+    if (toggle) toggle.checked = true;
+    let scopeEl = document.getElementById('fixed-inst-scope');
+    if (scopeEl) scopeEl.value = 'all';
+    
+    let dp1Val = document.getElementById('dp1-val');
+    let dp1Type = document.getElementById('dp1-type');
+    if (dp1Val && dp1Type) {
+        dp1Type.value = 'pct';
+        dp1Val.value = parseFloat(Number(dp1Pct).toFixed(8));
+    }
+    let dp2Val = document.getElementById('dp2-val');
+    if (dp2Val) dp2Val.value = '0';
+    let addlVal = document.getElementById('addl-val');
+    if (addlVal) addlVal.value = '0';
+    
+    let delivVal = document.getElementById('deliv-val');
+    let delivType = document.getElementById('deliv-type');
+    if (delivVal && delivType) {
+        delivType.value = 'pct';
+        delivVal.value = parseFloat(Number(delivPct || 5.0).toFixed(4));
+    }
+    
+    window.globalTableOverrides = {};
+    window.meltState = {};
+    calculate();
+};
+
+// Option 4: Keep all standard milestones (DP1 2.5%, DP2 2.5%, Addl 5%), increase Delivery
+window.applyRecDeliv_AllMilestones = function(delivPct) {
+    let toggle = document.getElementById('fixed-inst-toggle');
+    if (toggle) toggle.checked = true;
+    let scopeEl = document.getElementById('fixed-inst-scope');
+    if (scopeEl) scopeEl.value = 'all';
+    
+    let isZomra = (currentProject === 'Zomra');
+    let dp1Val = document.getElementById('dp1-val');
+    let dp1Type = document.getElementById('dp1-type');
+    if (dp1Val && dp1Type) {
+        dp1Type.value = 'pct';
+        dp1Val.value = isZomra ? '2.5' : '5';
+    }
+    let dp2Val = document.getElementById('dp2-val');
+    let dp2Type = document.getElementById('dp2-type');
+    if (dp2Val && dp2Type) {
+        dp2Type.value = 'pct';
+        dp2Val.value = isZomra ? '2.5' : '5';
+    }
+    let addlVal = document.getElementById('addl-val');
+    let addlType = document.getElementById('addl-type');
+    if (addlVal && addlType) {
+        addlType.value = 'pct';
+        addlVal.value = isZomra ? '5' : '0';
+    }
+    
+    let delivVal = document.getElementById('deliv-val');
+    let delivType = document.getElementById('deliv-type');
+    if (delivVal && delivType) {
+        delivType.value = 'pct';
+        delivVal.value = parseFloat(Number(delivPct).toFixed(8));
+    }
+    
+    window.globalTableOverrides = {};
+    window.meltState = {};
+    calculate();
+};
+
+// Option 5: Keep DP1 (2.5%), zero DP2 (0%) & Addl (0%), increase Delivery
+window.applyRecDeliv_ZeroMilestones = function(delivPct, dp1Pct) {
+    let toggle = document.getElementById('fixed-inst-toggle');
+    if (toggle) toggle.checked = true;
+    let scopeEl = document.getElementById('fixed-inst-scope');
+    if (scopeEl) scopeEl.value = 'all';
+    
+    let isZomra = (currentProject === 'Zomra');
+    let dp1Val = document.getElementById('dp1-val');
+    let dp1Type = document.getElementById('dp1-type');
+    if (dp1Val && dp1Type) {
+        dp1Type.value = 'pct';
+        dp1Val.value = parseFloat(Number(dp1Pct || (isZomra ? 2.5 : 5.0)).toFixed(4));
+    }
+    let dp2Val = document.getElementById('dp2-val');
+    if (dp2Val) dp2Val.value = '0';
+    let addlVal = document.getElementById('addl-val');
+    if (addlVal) addlVal.value = '0';
+    
+    let delivVal = document.getElementById('deliv-val');
+    let delivType = document.getElementById('deliv-type');
+    if (delivVal && delivType) {
+        delivType.value = 'pct';
+        delivVal.value = parseFloat(Number(delivPct).toFixed(8));
+    }
+    
+    window.globalTableOverrides = {};
+    window.meltState = {};
+    calculate();
+};
+
+// Option 6: Increase DP1, zero ALL milestones including Delivery
+window.applyRecDP_ZeroAll = function(dp1Pct) {
+    let toggle = document.getElementById('fixed-inst-toggle');
+    if (toggle) toggle.checked = true;
+    let scopeEl = document.getElementById('fixed-inst-scope');
+    if (scopeEl) scopeEl.value = 'all';
+    
+    let dp1Val = document.getElementById('dp1-val');
+    let dp1Type = document.getElementById('dp1-type');
+    if (dp1Val && dp1Type) {
+        dp1Type.value = 'pct';
+        dp1Val.value = parseFloat(Number(dp1Pct).toFixed(8));
+    }
+    ['dp2', 'addl', 'deliv'].forEach(id => {
+        let el = document.getElementById(id + '-val');
+        let typeEl = document.getElementById(id + '-type');
+        if (el) el.value = '0';
+        if (typeEl) typeEl.value = 'pct';
+    });
+    
+    window.globalTableOverrides = {};
+    window.meltState = {};
+    calculate();
+};
+
+// Backward compatible aliases
+window.applyRecDP = window.applyRecDP_ZeroAll;
+window.applyRecDeliv = window.applyRecDeliv_AllMilestones;
 window.applyRecDP2 = function(pct) {
     let dp2Val = document.getElementById('dp2-val');
     let dp2Type = document.getElementById('dp2-type');
@@ -358,6 +597,8 @@ window.applyRecDP2 = function(pct) {
         if (el) el.value = '';
         if (typeEl) typeEl.value = 'pct';
     });
+    window.globalTableOverrides = {};
+    window.meltState = {};
     calculate();
 };
 
@@ -373,6 +614,8 @@ window.applyRecPreOnly = function() {
         if (el) el.value = '';
         if (typeEl) typeEl.value = 'pct';
     });
+    window.globalTableOverrides = {};
+    window.meltState = {};
     calculate();
 };
 
@@ -584,26 +827,29 @@ window.installmentShiftState = { zeroInsts: [], targetInsts: [], destMode: 'down
 
 window.onShiftDestModeChange = function() {
     let modeEl = document.getElementById('inst-shift-dest-mode');
-    let mode = modeEl ? modeEl.value : 'down';
+    let mode = modeEl ? modeEl.value : 'all';
     let wrapper = document.getElementById('target-inst-ids-wrapper');
     let desc = document.getElementById('dest-mode-desc');
     
-    if (mode === 'specific') {
+    if (mode === 'all') {
+        if (wrapper) wrapper.style.display = 'none';
+        if (desc) desc.innerText = 'يوزع المبلغ بالتساوي على جميع الأقساط المتبقية في الخطة (قبل وبعد التصفير)';
+    } else if (mode === 'specific') {
         if (wrapper) wrapper.style.display = 'block';
-        if (desc) desc.innerText = 'حدد أرقام الأقساط التي تستقبل المبلغ بالكامل';
+        if (desc) desc.innerText = 'حدد أرقام الأقساط التي تستقبل المبلغ بالكامل (مثال: 5, 6)';
     } else if (mode === 'balloon') {
         if (wrapper) wrapper.style.display = 'none';
         if (desc) desc.innerText = 'يُرحل إلى القسط الأخير (البالون) في نهاية كل سنة';
     } else {
         if (wrapper) wrapper.style.display = 'none';
-        if (desc) desc.innerText = 'يوزع المبلغ بالتساوي على الأقساط التالية له فقط دون المساس بالأقساط المثبتة';
+        if (desc) desc.innerText = 'يوزع المبلغ بالتساوي على الأقساط التالية له فقط دون المساس بالأقساط السابقة';
     }
 };
 
 window.applyInstallmentShift = function() {
     let zeroStr = document.getElementById('zero-inst-ids')?.value || '';
     let targetStr = document.getElementById('target-inst-ids')?.value || '';
-    let destMode = document.getElementById('inst-shift-dest-mode')?.value || 'down';
+    let destMode = document.getElementById('inst-shift-dest-mode')?.value || 'all';
     
     let parseIds = (str) => {
         return str.split(/[\s,]+/)
@@ -625,13 +871,13 @@ window.applyInstallmentShift = function() {
 };
 
 window.resetInstallmentShifts = function() {
-    window.installmentShiftState = { zeroInsts: [], targetInsts: [], destMode: 'down' };
+    window.installmentShiftState = { zeroInsts: [], targetInsts: [], destMode: 'all' };
     let zEl = document.getElementById('zero-inst-ids');
     if (zEl) zEl.value = '';
     let tEl = document.getElementById('target-inst-ids');
     if (tEl) tEl.value = '';
     let modeEl = document.getElementById('inst-shift-dest-mode');
-    if (modeEl) modeEl.value = 'down';
+    if (modeEl) modeEl.value = 'all';
     if (window.onShiftDestModeChange) window.onShiftDestModeChange();
     let box = document.getElementById('inst-shift-status-box');
     if (box) {
@@ -831,7 +1077,7 @@ function renderBaseInputs() {
     let html = '';
     html += `<div class="input-group">
         <label>Base Years</label>
-        <input type="number" id="base-duration-years" value="8" min="1" max="15" oninput="delayedCalculate()">
+        <input type="number" id="base-duration-years" value="8" min="1" max="10" oninput="delayedCalculate()">
     </div>`;
     html += `<div class="input-group">
         <label>Base Freq</label>
@@ -887,23 +1133,23 @@ function getFlexiblePvFactor(diffDays) {
     if (diffDays <= 0) return 1.0;
     let r;
     if (currentProject === 'Zomra') {
-        if (diffDays < 368) r = (discountRates[0] !== undefined ? discountRates[0] : 21) / 100;
-        else if (diffDays < 1068) r = (discountRates[2] !== undefined ? discountRates[2] : 20) / 100;
-        else if (diffDays < 1433) r = (discountRates[3] !== undefined ? discountRates[3] : 19) / 100;
-        else if (diffDays < 1798) r = (discountRates[4] !== undefined ? discountRates[4] : 18) / 100;
-        else if (diffDays < 2163) r = (discountRates[5] !== undefined ? discountRates[5] : 17) / 100;
-        else if (diffDays < 2529) r = (discountRates[6] !== undefined ? discountRates[6] : 16) / 100;
-        else if (diffDays < 2894) r = (discountRates[7] !== undefined ? discountRates[7] : 15) / 100;
-        else if (diffDays < 3349) r = (discountRates[8] !== undefined ? discountRates[8] : 14) / 100;
-        else if (diffDays < 3715) r = (discountRates[9] !== undefined ? discountRates[9] : 13) / 100;
-        else r = (discountRates[10] !== undefined ? discountRates[10] : 12) / 100;
+        if (diffDays < 368) r = 0.21;
+        else if (diffDays < 1068) r = 0.20;
+        else if (diffDays < 1433) r = 0.19;
+        else if (diffDays < 1798) r = 0.18;
+        else if (diffDays < 2163) r = 0.17;
+        else if (diffDays < 2529) r = 0.16;
+        else if (diffDays < 2894) r = 0.15;
+        else if (diffDays < 3349) r = 0.14;
+        else if (diffDays < 3715) r = 0.13;
+        else r = 0.12;
     } else {
-        if (diffDays < 54) r = (discountRates[0] !== undefined ? discountRates[0] : 19) / 100;
-        else if (diffDays < 419) r = (discountRates[1] !== undefined ? discountRates[1] : 18) / 100;
-        else if (diffDays < 784) r = (discountRates[2] !== undefined ? discountRates[2] : 15) / 100;
-        else if (diffDays < 1150) r = (discountRates[3] !== undefined ? discountRates[3] : 13) / 100;
-        else if (diffDays < 1880) r = (discountRates[4] !== undefined ? discountRates[4] : 10) / 100;
-        else r = (discountRates[6] !== undefined ? discountRates[6] : 9) / 100;
+        if (diffDays < 54) r = 0.19;
+        else if (diffDays < 419) r = 0.18;
+        else if (diffDays < 784) r = 0.15;
+        else if (diffDays < 1150) r = 0.13;
+        else if (diffDays < 1880) r = 0.10;
+        else r = 0.09;
     }
     return 1.0 / Math.pow(1.0 + r / 365.0, diffDays);
 }
@@ -988,16 +1234,16 @@ function applyDiscountLogic(f, contractDateStr, forceNormal = false, forceFlex =
             let diffDays = Math.round((Date.UTC(fy, fm - 1, fd) - Date.UTC(2025, 11, 29)) / 86400000);
             if (diffDays < 0) diffDays = 0;
             let r;
-            if (diffDays < 368) r = (discountRates[0] !== undefined ? discountRates[0] : 21) / 100;
-            else if (diffDays < 1068) r = (discountRates[2] !== undefined ? discountRates[2] : 20) / 100;
-            else if (diffDays < 1433) r = (discountRates[3] !== undefined ? discountRates[3] : 19) / 100;
-            else if (diffDays < 1798) r = (discountRates[4] !== undefined ? discountRates[4] : 18) / 100;
-            else if (diffDays < 2163) r = (discountRates[5] !== undefined ? discountRates[5] : 17) / 100;
-            else if (diffDays < 2529) r = (discountRates[6] !== undefined ? discountRates[6] : 16) / 100;
-            else if (diffDays < 2894) r = (discountRates[7] !== undefined ? discountRates[7] : 15) / 100;
-            else if (diffDays < 3349) r = (discountRates[8] !== undefined ? discountRates[8] : 14) / 100;
-            else if (diffDays < 3715) r = (discountRates[9] !== undefined ? discountRates[9] : 13) / 100;
-            else r = (discountRates[10] !== undefined ? discountRates[10] : 12) / 100;
+            if (diffDays < 368) r = 0.21;
+            else if (diffDays < 1068) r = 0.20;
+            else if (diffDays < 1433) r = 0.19;
+            else if (diffDays < 1798) r = 0.18;
+            else if (diffDays < 2163) r = 0.17;
+            else if (diffDays < 2529) r = 0.16;
+            else if (diffDays < 2894) r = 0.15;
+            else if (diffDays < 3349) r = 0.14;
+            else if (diffDays < 3715) r = 0.13;
+            else r = 0.12;
             f.rate = r;
             f.pvFactor = 1.0 / Math.pow(1.0 + r / 365.0, diffDays);
             f.pv = (f.amount || 0) * f.pvFactor;
@@ -1030,14 +1276,16 @@ function applyDiscountLogic(f, contractDateStr, forceNormal = false, forceFlex =
         
         if (isFlexible) {
             let [fy, fm, fd] = f.date.split('-').map(Number);
-            let diffDays = Math.round((Date.UTC(fy, fm - 1, fd) - Date.UTC(2025, 11, 29)) / 86400000);
+            let [cy, cm, cd] = contractDateStr.split('-').map(Number);
+            let diffDays = Math.round((Date.UTC(fy, fm - 1, fd) - Date.UTC(cy, cm - 1, cd)) / 86400000);
+            if (diffDays < 0) diffDays = 0;
             let r;
-            if (diffDays < 54) r = (discountRates[0] !== undefined ? discountRates[0] : 19) / 100;
-            else if (diffDays < 419) r = (discountRates[1] !== undefined ? discountRates[1] : 18) / 100;
-            else if (diffDays < 784) r = (discountRates[2] !== undefined ? discountRates[2] : 15) / 100;
-            else if (diffDays < 1150) r = (discountRates[3] !== undefined ? discountRates[3] : 13) / 100;
-            else if (diffDays < 1880) r = (discountRates[4] !== undefined ? discountRates[4] : 10) / 100;
-            else r = (discountRates[6] !== undefined ? discountRates[6] : 9) / 100;
+            if (diffDays < 54) r = 0.19;
+            else if (diffDays < 419) r = 0.18;
+            else if (diffDays < 784) r = 0.15;
+            else if (diffDays < 1150) r = 0.13;
+            else if (diffDays < 1880) r = 0.10;
+            else r = 0.09;
             f.rate = r;
             f.pvFactor = 1.0 / Math.pow(1.0 + r / 365.0, diffDays);
             f.pv = (f.amount || 0) * f.pvFactor;
@@ -1077,14 +1325,16 @@ function applyDiscountLogic(f, contractDateStr, forceNormal = false, forceFlex =
         
         if (isFlexible) {
             let [fy, fm, fd] = f.date.split('-').map(Number);
-            let diffDays = Math.round((Date.UTC(fy, fm - 1, fd) - Date.UTC(2026, 7, 1)) / 86400000);
+            let [cy, cm, cd] = contractDateStr.split('-').map(Number);
+            let diffDays = Math.round((Date.UTC(fy, fm - 1, fd) - Date.UTC(cy, cm - 1, cd)) / 86400000);
+            if (diffDays < 0) diffDays = 0;
             let r;
-            if (diffDays < 54) r = (discountRates[0] !== undefined ? discountRates[0] : 19) / 100;
-            else if (diffDays < 419) r = (discountRates[1] !== undefined ? discountRates[1] : 18) / 100;
-            else if (diffDays < 784) r = (discountRates[2] !== undefined ? discountRates[2] : 15) / 100;
-            else if (diffDays < 1150) r = (discountRates[3] !== undefined ? discountRates[3] : 13) / 100;
-            else if (diffDays < 1880) r = (discountRates[4] !== undefined ? discountRates[4] : 10) / 100;
-            else r = (discountRates[6] !== undefined ? discountRates[6] : 9) / 100;
+            if (diffDays < 54) r = 0.19;
+            else if (diffDays < 419) r = 0.18;
+            else if (diffDays < 784) r = 0.15;
+            else if (diffDays < 1150) r = 0.13;
+            else if (diffDays < 1880) r = 0.10;
+            else r = 0.09;
             f.rate = r;
             f.pvFactor = 1.0 / Math.pow(1.0 + r / 365.0, diffDays);
             f.pv = (f.amount || 0) * f.pvFactor;
@@ -1092,23 +1342,28 @@ function applyDiscountLogic(f, contractDateStr, forceNormal = false, forceFlex =
             if (f.id === 'dp1') {
                 f.rate = 0;
                 f.period = 0;
-                f.pvFactor = 1;
+                f.pvFactor = 1.0;
                 f.pv = f.amount || 0;
+            } else if (f.id === 'dp2' || pmt <= 1) {
+                f.rate = (discountRates[0] !== undefined ? discountRates[0] : 20) / 100;
+                f.period = 1;
+                f.pvFactor = 1.0 / (1.0 + f.rate / 4.0); // 1 / 1.05 = 0.95238095238
+                f.pv = (f.amount || 0) * f.pvFactor;
             } else {
-                if (pmt <= 1 || f.id === 'dp2') {
-                    f.rate = (discountRates[0] !== undefined ? discountRates[0] : 19) / 100;
-                } else if (pmt <= 5) {
-                    f.rate = (discountRates[1] !== undefined ? discountRates[1] : 18) / 100;
+                if (pmt <= 5) {
+                    f.rate = (discountRates[1] !== undefined ? discountRates[1] : 19) / 100;
                 } else if (pmt <= 9) {
-                    f.rate = (discountRates[2] !== undefined ? discountRates[2] : 15) / 100;
+                    f.rate = (discountRates[2] !== undefined ? discountRates[2] : 16) / 100;
                 } else if (pmt <= 13) {
-                    f.rate = (discountRates[3] !== undefined ? discountRates[3] : 13) / 100;
+                    f.rate = (discountRates[3] !== undefined ? discountRates[3] : 14) / 100;
                 } else if (pmt <= 21) {
-                    f.rate = (discountRates[4] !== undefined ? discountRates[4] : 10) / 100;
+                    f.rate = (discountRates[4] !== undefined ? discountRates[4] : 11) / 100;
+                } else if (pmt <= 37) {
+                    f.rate = (discountRates[6] !== undefined ? discountRates[6] : 10) / 100;
                 } else {
-                    f.rate = (discountRates[6] !== undefined ? discountRates[6] : 9) / 100;
+                    f.rate = (discountRates[10] !== undefined ? discountRates[10] : 9) / 100;
                 }
-                f.pvFactor = 1 / Math.pow(1 + f.rate / 4, f.period);
+                f.pvFactor = 1.0 / Math.pow(1.0 + f.rate / 4.0, f.period);
                 f.pv = (f.amount || 0) * f.pvFactor;
             }
         }
@@ -1132,7 +1387,7 @@ function getRateForPeriod(period, isDP) {
 
 function generateFlowsTemplate(contractDateStr, years, freqMonths, isBase = false, customFirstDateStrParam = null, isPureStandard = false) {
     let flows = [];
-    years = Math.max(1, Math.min(20, parseInt(years) || 8));
+    years = Math.max(1, Math.min(10, parseInt(years) || 8));
     freqMonths = (parseInt(freqMonths) === 6 || parseInt(freqMonths) === 3) ? parseInt(freqMonths) : 3;
     let totalMonths = years * 12;
     
@@ -1229,18 +1484,23 @@ function generateFlowsTemplate(contractDateStr, years, freqMonths, isBase = fals
             flows.push({ id: 'inst_' + i, label: 'Installment ' + (i+1), date: dStr, months: m, isInst: true });
         }
     } else { // Perla
-        flows.push({ id: 'dp1', label: 'Down Payment', date: contractDateStr, months: 0, isDP: true, defaultPct: getOverridePct('dp1', 0.05) });
+        flows.push({ id: 'dp1', label: 'Down Payment 1', date: contractDateStr, months: 0, isDP: true, defaultPct: getOverridePct('dp1', 0.05), exactPct: getOverridePct('dp1', 0.05) });
         
         let dp2Date = formatDate(addMonths(contractDateStr, 3));
-        flows.push({ id: 'dp2', label: '2nd Payment', date: dp2Date, months: 3, isDP: true, defaultPct: getOverridePct('dp2', 0.05) });
+        flows.push({ id: 'dp2', label: 'Down Payment 2', date: dp2Date, months: 3, isDP: true, defaultPct: getOverridePct('dp2', 0.05), exactPct: getOverridePct('dp2', 0.05) });
         
-        let delivDate = formatDate(addMonths(contractDateStr, 48));
+        let delivDate = formatDate(addMonths(contractDateStr, 51));
+        let delivOverride = getOverridePct('deliv', 0);
+        if (delivOverride > 0) {
+            flows.push({ id: 'deliv', label: 'Delivery Payment', date: delivDate, months: 51, isDP: true, defaultPct: delivOverride });
+        }
         
-        let mnt1Date = formatDate(addMonths(contractDateStr, 36));
-        flows.push({ id: 'mnt1', label: 'Maintenance 1', date: mnt1Date, months: 36, isMnt: true });
-        flows.push({ id: 'mnt2', label: 'Maintenance 2', date: delivDate, months: 48, isMnt: true });
+        let mnt1Date = formatDate(addMonths(contractDateStr, 39));
+        flows.push({ id: 'mnt1', label: 'Maintenance 1', date: mnt1Date, months: 39, isMnt: true });
+        flows.push({ id: 'mnt2', label: 'Maintenance 2', date: delivDate, months: 51, isMnt: true });
         
         let numInst = overrideInstCount !== null ? overrideInstCount : (freqMonths === 6 ? (years * 2) : (years * 4 - 1));
+        let defaultInstPct = (1.0 - 0.05 - 0.05 - (delivOverride > 0 ? delivOverride : 0)) / numInst;
         
         let startMonth = (freqMonths === 6) ? 9 : 6;
         let firstDate = customFirstDateStr ? new Date(customFirstDateStr) : null;
@@ -1250,7 +1510,7 @@ function generateFlowsTemplate(contractDateStr, years, freqMonths, isBase = fals
         for (let i = 0; i < numInst; i++) {
             let m = diffMonths + i * freqMonths;
             let dStr = customFirstDateStr ? formatDate(addMonths(customFirstDateStr, i * freqMonths)) : formatDate(addMonths(contractDateStr, m));
-            flows.push({ id: 'inst_' + i, label: 'Installment ' + (i+1), date: dStr, months: m, isInst: true });
+            flows.push({ id: 'inst_' + i, label: 'Installment ' + (i+1), date: dStr, months: m, isInst: true, defaultPct: defaultInstPct, exactPct: defaultInstPct });
         }
     }
     
@@ -1484,6 +1744,7 @@ function calculateCustomFlows(price, template, options = {}) {
                 } else {
                     f.amount = ov.amount;
                     f._exactFixedVal = ov.amount;
+                    f._isFixedCash = true;
                 }
                 f.isFixedOverride = true;
             } 
@@ -1491,8 +1752,12 @@ function calculateCustomFlows(price, template, options = {}) {
             else if (f.id === 'dp1') {
                 if (dp1Data !== null) {
                     f.amount = dp1Data.amount;
-                    if (dp1Data.isPct) f._exactFixedPct = dp1Data.val;
-                    else f._exactFixedVal = dp1Data.val;
+                    if (dp1Data.isPct) {
+                        f._exactFixedPct = dp1Data.val;
+                    } else {
+                        f._exactFixedVal = dp1Data.val;
+                        f._isFixedCash = true;
+                    }
                 } else {
                     f.amount = price * (f.defaultPct || 0);
                     if (f.defaultPct) f._exactFixedPct = (f.defaultPct || 0) * 100;
@@ -1501,8 +1766,12 @@ function calculateCustomFlows(price, template, options = {}) {
             else if (f.id === 'dp2') {
                 if (dp2Data !== null) {
                     f.amount = dp2Data.amount;
-                    if (dp2Data.isPct) f._exactFixedPct = dp2Data.val;
-                    else f._exactFixedVal = dp2Data.val;
+                    if (dp2Data.isPct) {
+                        f._exactFixedPct = dp2Data.val;
+                    } else {
+                        f._exactFixedVal = dp2Data.val;
+                        f._isFixedCash = true;
+                    }
                 } else {
                     f.amount = price * (f.defaultPct || 0);
                     if (f.defaultPct) f._exactFixedPct = (f.defaultPct || 0) * 100;
@@ -1511,8 +1780,12 @@ function calculateCustomFlows(price, template, options = {}) {
             else if (f.id === 'addl') {
                 if (addlData !== null) {
                     f.amount = addlData.amount;
-                    if (addlData.isPct) f._exactFixedPct = addlData.val;
-                    else f._exactFixedVal = addlData.val;
+                    if (addlData.isPct) {
+                        f._exactFixedPct = addlData.val;
+                    } else {
+                        f._exactFixedVal = addlData.val;
+                        f._isFixedCash = true;
+                    }
                 } else {
                     f.amount = price * (f.defaultPct || 0);
                     if (f.defaultPct) f._exactFixedPct = (f.defaultPct || 0) * 100;
@@ -1545,8 +1818,12 @@ function calculateCustomFlows(price, template, options = {}) {
             else if (f.id === 'deliv') {
                 if (delivData !== null) {
                     f.amount = delivData.amount;
-                    if (delivData.isPct) f._exactFixedPct = delivData.val;
-                    else f._exactFixedVal = delivData.val;
+                    if (delivData.isPct) {
+                        f._exactFixedPct = delivData.val;
+                    } else {
+                        f._exactFixedVal = delivData.val;
+                        f._isFixedCash = true;
+                    }
                 } else {
                     f.amount = price * (f.defaultPct || 0);
                     if (f.defaultPct) f._exactFixedPct = (f.defaultPct || 0) * 100;
@@ -1592,7 +1869,7 @@ function calculateCustomFlows(price, template, options = {}) {
     let fixedInstType = document.getElementById('fixed-inst-type') ? document.getElementById('fixed-inst-type').value : 'amt';
     let hasFixedInst = isFixedInst && fixedInstVal > 0;
     
-    let delivMonth = currentProject === 'Zomra' ? 37 : 48;
+    let delivMonth = (currentProject === 'Zomra') ? 37 : (currentProject === 'Perla' ? 51 : 48);
     let preInsts = dynamicInsts.filter(f => f.months <= delivMonth);
     let postInsts = dynamicInsts.filter(f => f.months > delivMonth);
     let nPre = preInsts.length;
@@ -1623,8 +1900,26 @@ function calculateCustomFlows(price, template, options = {}) {
     let instAmtPre = 0;
     let instAmtPost = 0;
 
+    let hasMeltActive = window.meltState && Object.keys(window.meltState).length > 0;
     if (hasFixedInst) {
-        if (fixedInstScope === 'pre') {
+        if (hasMeltActive) {
+            // When user has melted milestones (e.g. DP2 or Addl), the installments dynamically absorb the melted portion!
+            if (typedPre !== null && !isNaN(typedPre)) {
+                actualPrePct = Math.max(0, Math.min(remPct, typedPre));
+                actualPostPct = remPct - actualPrePct;
+            } else if (typedPost !== null && !isNaN(typedPost)) {
+                actualPostPct = Math.max(0, Math.min(remPct, typedPost));
+                actualPrePct = remPct - actualPostPct;
+            } else {
+                actualPrePct = nTotal > 0 ? remPct * (nPre / nTotal) : 0;
+                actualPostPct = nTotal > 0 ? remPct * (nPost / nTotal) : 0;
+            }
+            let prePoolAmt = price * (actualPrePct / 100);
+            let postPoolAmt = price * (actualPostPct / 100);
+            instAmtPre = nPre > 0 ? prePoolAmt / nPre : 0;
+            instAmtPost = nPost > 0 ? postPoolAmt / nPost : 0;
+            distMode = 'custom';
+        } else if (fixedInstScope === 'pre') {
             instAmtPre = fixedAmt;
             let totalPreAmt = nPre * instAmtPre;
             let remPost = remAmt - totalPreAmt;
@@ -1726,7 +2021,7 @@ function calculateCustomFlows(price, template, options = {}) {
 
     flows.forEach(f => {
         if ((f.isInst || f.isMerged) && !f.isFixedOverride) {
-            let isFlowFixedInst = hasFixedInst && ((fixedInstScope === 'all') || (fixedInstScope === 'pre' && f.months <= delivMonth) || (fixedInstScope === 'post' && f.months > delivMonth));
+            let isFlowFixedInst = hasFixedInst && !hasMeltActive && ((fixedInstScope === 'all') || (fixedInstScope === 'pre' && f.months <= delivMonth) || (fixedInstScope === 'post' && f.months > delivMonth));
             if (isFlowFixedInst) {
                 f._isFixedInst = true;
                 f._isFixedCash = (fixedInstType === 'amt');
@@ -1840,9 +2135,11 @@ function calculateCustomFlows(price, template, options = {}) {
                     f._isInstZeroShifted = true;
                     f._instPortionAmt = 0;
                     f._delivPortionAmt = delivAmt;
+                    f.exactPct = (f._exactMergedDelivPct !== undefined && f._exactMergedDelivPct !== null) ? (f._exactMergedDelivPct / 100.0) : 0.05;
                 } else {
                     totalShiftedAmt += (f.amount || 0);
                     f.amount = 0;
+                    f.exactPct = 0.0;
                 }
                 applyDiscountLogic(f);
             }
@@ -1851,7 +2148,10 @@ function calculateCustomFlows(price, template, options = {}) {
         if (totalShiftedAmt > 0) {
             let recipientFlows = [];
             
-            if (destMode === 'specific' && targets.length > 0) {
+            if (destMode === 'all') {
+                // ترحيل وتوزيع بالتساوي على جميع الأقساط المتبقية (قبل وبعد التصفير)
+                recipientFlows = instFlowsList.filter((f, idx) => !zeros.includes(idx + 1) && !f.isFixedOverride);
+            } else if (destMode === 'specific' && targets.length > 0) {
                 targets.forEach(num => {
                     let idx = num - 1;
                     if (idx >= 0 && idx < instFlowsList.length && !zeros.includes(num)) {
@@ -1922,15 +2222,21 @@ function calculateCustomFlows(price, template, options = {}) {
                     if (idx >= 0 && idx < instFlowsList.length) {
                         instFlowsList[idx]._shiftedTo = targetNums.length <= 4 
                             ? targetNums.map(n => `قسط ${n}`).join('، ')
-                            : `الأقساط التالية (${targetNums[0]} إلى ${targetNums[targetNums.length - 1]})`;
+                            : (destMode === 'all' 
+                                ? 'جميع الأقساط المتبقية' 
+                                : `الأقساط التالية (${targetNums[0]} إلى ${targetNums[targetNums.length - 1]})`);
                     }
                 });
                 
                 recipientFlows.forEach(f => {
                     f.amount = (f.amount || 0) + addPerFlow;
+                    if (f.isMerged) {
+                        f._instPortionAmt = (f._instPortionAmt || 0) + addPerFlow;
+                    }
+                    f.exactPct = price > 0 ? (f.amount / price) : (f.defaultPct || 0);
                     f._isShiftTarget = true;
                     f._shiftedFrom = zeroLabels.join('، ');
-                    f._addedShiftAmt = addPerFlow;
+                    f._addedShiftAmt = (f._addedShiftAmt || 0) + addPerFlow;
                     applyDiscountLogic(f);
                 });
             }
@@ -1946,6 +2252,7 @@ function reconcileIntegerInstallments(flows, targetTotalPrice) {
     let targetTotal = Math.round(targetTotalPrice);
     let nonMnt = flows.filter(f => !f.isMnt);
     if (nonMnt.length === 0 || targetTotal <= 0) return flows;
+
 
     let nonInstFlows = nonMnt.filter(f => !f.isInst && !f.isMerged);
     let mergedFlows = nonMnt.filter(f => f.isMerged);
@@ -2037,8 +2344,9 @@ function reconcileIntegerInstallments(flows, targetTotalPrice) {
 
 function applyPerfectPercentages(flows, totalAmt) {
     if (!flows || !Array.isArray(flows)) return [];
-    let validTotal = (totalAmt > 0 && !isNaN(totalAmt)) ? Math.round(totalAmt) : 0;
     let nonMnt = flows.filter(f => !f.isMnt);
+    let sumAssignedAmt = nonMnt.reduce((s, f) => s + Math.round(f.amount || 0), 0);
+    let validTotal = sumAssignedAmt > 0 ? sumAssignedAmt : ((totalAmt > 0 && !isNaN(totalAmt)) ? totalAmt : 0);
     if (validTotal <= 0) return flows;
 
     // Step 1: Assign exact percentages to zero flows and explicitly fixed milestones
@@ -2046,7 +2354,11 @@ function applyPerfectPercentages(flows, totalAmt) {
         let amt = Math.round(f.amount || 0);
         f.amount = amt;
         f.pv = amt * (f.pvFactor !== undefined ? f.pvFactor : 1.0);
-        f.exactPct = (f._exactFixedPct !== undefined && f._exactFixedPct !== null) ? (f._exactFixedPct / 100.0) : (f.defaultPct !== undefined && !f._exactFixedVal ? f.defaultPct : (validTotal > 0 ? (amt / validTotal) : 0));
+        if (amt <= 0 || f._isZeroShifted) {
+            f.exactPct = 0.0;
+        } else if (!f.exactPct || isNaN(f.exactPct) || f.exactPct <= 0) {
+            f.exactPct = validTotal > 0 ? (amt / validTotal) : 0.0;
+        }
 
         // Is zero flow (e.g. zeroed/shifted installment)
         if (amt <= 0 || f._isZeroShifted) {
@@ -2087,11 +2399,8 @@ function applyPerfectPercentages(flows, totalAmt) {
     });
 
     // Step 2: Smart Grouping for Installments (Pure and Merged)
-    // Any installments that have the same installment portion (within ±5 EGP due to integer rounding)
-    // belong to the SAME equal group and MUST strictly share the exact same uniform percentage!
     let activeInsts = nonMnt.filter(f => (f.isInst || f.isMerged) && (f.amount > 0) && !f._isZeroShifted);
     
-    // Determine installment portion for each flow
     activeInsts.forEach(f => {
         if (f.isMerged) {
             let delivAmt = f._delivPortionAmt !== undefined ? f._delivPortionAmt : (f._savedMergedDelivAmt || 0);
@@ -2101,7 +2410,6 @@ function applyPerfectPercentages(flows, totalAmt) {
         }
     });
 
-    // Group active installments by _instPart (cluster within 5 EGP)
     let groups = [];
     activeInsts.forEach(f => {
         if (f.isFixedOverride && f._exactFixedPct !== undefined) {
@@ -2116,22 +2424,18 @@ function applyPerfectPercentages(flows, totalAmt) {
         }
     });
 
-    // For each equal group, calculate the exact average installment amount and uniform percentage
     groups.forEach(g => {
         let totalPart = g.flows.reduce((s, f) => s + f._instPart, 0);
         let avgPart = totalPart / g.flows.length;
         let uniformRawPct = (avgPart / validTotal) * 100;
         let uniformPctVal = Math.round(uniformRawPct * 100) / 100;
         let uniformDisplayPct = uniformPctVal.toFixed(2);
-        let uniformExactPct = validTotal > 0 ? (avgPart / validTotal) : 0;
 
         g.flows.forEach(f => {
             if (f.isFixedOverride && f._exactFixedPct !== undefined) {
                 f._pctVal = Math.round(f._exactFixedPct * 100) / 100;
                 f.displayPct = f._pctVal.toFixed(2);
-                f.exactPct = f._exactFixedPct / 100;
             } else if (f.isMerged) {
-                // Merged: delivery % + uniform installment %
                 let delivAmt = (f._delivPortionAmt !== undefined && f._delivPortionAmt !== null) ? f._delivPortionAmt : (f._savedMergedDelivAmt || 0);
                 let delivPct = (f._exactMergedDelivPct !== undefined && f._exactMergedDelivPct !== null)
                     ? f._exactMergedDelivPct
@@ -2139,16 +2443,13 @@ function applyPerfectPercentages(flows, totalAmt) {
                 let mergedPctVal = Math.round((delivPct + uniformPctVal) * 100) / 100;
                 f._pctVal = mergedPctVal;
                 f.displayPct = mergedPctVal.toFixed(2);
-                f.exactPct = (f.amount || 0) / (validTotal || 1);
             } else {
                 f._pctVal = uniformPctVal;
                 f.displayPct = uniformDisplayPct;
-                f.exactPct = uniformExactPct;
             }
         });
     });
 
-    // Step 3: Handle any remaining flows not yet assigned
     nonMnt.forEach(f => {
         if (f.displayPct === undefined || f.displayPct === null) {
             let rawPct = ((f.amount || 0) / validTotal) * 100;
@@ -2157,10 +2458,52 @@ function applyPerfectPercentages(flows, totalAmt) {
         }
     });
 
+    // Step 3: Hare-Niemeyer Largest Remainder Method (Strict 100.00% Mathematical Guarantee)
+    let activeNonMnt = nonMnt.filter(f => (f.amount > 0) && !f._isZeroShifted);
+    if (activeNonMnt.length > 0) {
+        let totalCents = 10000; // 100.00%
+        let sumAssignedCents = 0;
+        
+        activeNonMnt.forEach(f => {
+            let pVal = parseFloat(f.displayPct) || 0;
+            let cents = Math.round(pVal * 100);
+            f._cents = cents;
+            let rawPct = (f.amount / validTotal) * 100;
+            f._rawPctRem = (rawPct * 100) - cents;
+            sumAssignedCents += cents;
+        });
+
+        let diffCents = totalCents - sumAssignedCents;
+        if (diffCents !== 0) {
+            // Prioritize installments (pure or merged) for absorbing cents
+            let adjustable = activeNonMnt.filter(f => f.isInst || f.isMerged);
+            if (adjustable.length === 0) adjustable = activeNonMnt;
+
+            if (diffCents > 0 && adjustable.length > 0) {
+                let sorted = [...adjustable].sort((a, b) => b._rawPctRem - a._rawPctRem);
+                for (let i = 0; i < diffCents; i++) {
+                    sorted[i % sorted.length]._cents += 1;
+                }
+            } else if (diffCents < 0 && adjustable.length > 0) {
+                let toRemove = Math.abs(diffCents);
+                let sorted = [...adjustable].sort((a, b) => a._rawPctRem - b._rawPctRem);
+                for (let i = 0; i < toRemove; i++) {
+                    let target = sorted[i % sorted.length];
+                    if (target._cents > 0) target._cents -= 1;
+                }
+            }
+
+            activeNonMnt.forEach(f => {
+                f._pctVal = f._cents / 100.0;
+                f.displayPct = f._pctVal.toFixed(2);
+            });
+        }
+    }
+
     flows.forEach(f => {
         if (f.isMnt) {
             f.exactPct = 0.04;
-            f.displayPct = '4';
+            f.displayPct = '4.00';
         }
     });
 
@@ -2169,7 +2512,7 @@ function applyPerfectPercentages(flows, totalAmt) {
 
 function updatePreDeliveryTracker(flows, elementId) {
     if (!flows || !Array.isArray(flows)) return 0;
-    let delivMonth = currentProject === 'Zomra' ? 37 : 48; // Zomra delivery is month 37
+    let delivMonth = (currentProject === 'Zomra') ? 37 : (currentProject === 'Perla' ? 51 : 48); // Zomra delivery is month 37
     let totAmt = flows.filter(f => !f.isMnt).reduce((s, f) => s + (f.amount || 0), 0);
     let preAmt = 0;
     flows.forEach(f => {
@@ -2591,7 +2934,7 @@ window.resetMeltPayments = function() {
 function recalcMeltDistribution() {
     let years = parseInt(document.getElementById('duration-years')?.value) || 8;
     let freqMonths = parseInt(document.getElementById('payment-frequency')?.value) === 2 ? 6 : 3;
-    let delivMonth = currentProject === 'Zomra' ? 37 : 48;
+    let delivMonth = (currentProject === 'Zomra') ? 37 : (currentProject === 'Perla' ? 51 : 48);
     
     let tpl = generateFlowsTemplate(formatDate(new Date()), years, freqMonths, false);
     let dynamicInsts = tpl.filter(f => (f.isInst || f.isMerged));
@@ -2690,7 +3033,7 @@ function renderMeltImpactSummary(flows) {
         return;
     }
     
-    let delivMonth = currentProject === 'Zomra' ? 37 : 48;
+    let delivMonth = (currentProject === 'Zomra') ? 37 : (currentProject === 'Perla' ? 51 : 48);
     let preInsts = (flows || []).filter(f => (f.isInst || f.isMerged) && !f.isMnt && f.months <= delivMonth);
     let postInsts = (flows || []).filter(f => (f.isInst || f.isMerged) && !f.isMnt && f.months > delivMonth);
     
@@ -2743,7 +3086,7 @@ function renderFixedGuidanceBox(g) {
     let targetPv = basePvCache || (basePrice * 0.712);
     
     let isZomra = (currentProject === 'Zomra');
-    let delivMonth = isZomra ? 37 : 48;
+    let delivMonth = isZomra ? 37 : (currentProject === 'Perla' ? 51 : 48);
     let instPoolPct = isZomra ? 0.85 : 0.90;
     let nTotal = g.nTotal || (currentYears * (12 / freqMonths));
     let naturalInst = nTotal > 0 ? (basePrice * instPoolPct) / nTotal : 0;
@@ -2754,8 +3097,6 @@ function renderFixedGuidanceBox(g) {
     let dp1Flow = tpl.find(f => f.id === 'dp1');
     let dp2Flow = tpl.find(f => f.id === 'dp2');
     let addlFlow = isZomra ? tpl.find(f => f.id === 'addl') : null;
-    let delivFlow = isZomra ? tpl.find(f => f.id === 'deliv' || (f.mergedIds && f.mergedIds.includes('deliv'))) : null;
-    
     let getDf = (f) => {
         if (!f) return 1.0;
         let tempF = { date: f.date, months: f.months, amount: 1, id: f.id };
@@ -2766,7 +3107,8 @@ function renderFixedGuidanceBox(g) {
     let dfDp1 = 1.0;
     let dfDp2 = getDf(dp2Flow);
     let dfAddl = addlFlow ? getDf(addlFlow) : 0;
-    let dfDeliv = delivFlow ? getDf(delivFlow) : 0;
+    let delivFlow = tpl.find(f => f.id === 'deliv' || (f.mergedIds && f.mergedIds.includes('deliv')));
+    let dfDeliv = delivFlow ? getDf(delivFlow) : getDf({ date: formatDate(addMonths(contractDateStr, delivMonth)), months: delivMonth, id: 'deliv' });
     
     let instFlows = tpl.filter(f => (f.isInst || f.isMerged) && !f.isFixedOverride);
     let preInsts = instFlows.filter(f => f.months <= delivMonth);
@@ -2820,9 +3162,6 @@ function renderFixedGuidanceBox(g) {
         let totalFixedInst = nTotal * fixedInst;
         let pvFixedInsts = fixedInst * sumAllInstDf;
         
-        let currentOfferPv = globalCustomFlows.filter(f => !f.isMnt).reduce((sum, f) => sum + (f.pv || 0), 0);
-        let pvDeficit = targetPv - currentOfferPv;
-        
         if (g.scope !== 'all') {
             guidanceBox.style.background = 'rgba(46, 204, 113, 0.1)';
             guidanceBox.style.border = '1px solid rgba(46, 204, 113, 0.3)';
@@ -2848,15 +3187,14 @@ function renderFixedGuidanceBox(g) {
             return;
         }
         
-        // Calculate the 4 exact NPV solutions
-        // Solution 1: Natural Duration (Years) Matching
+        // Option 1: Natural Duration (Years) Matching
         let bestYear = null;
         let bestYearPrice = 0;
         let bestYearInst = 0;
         let bestYearDiffPct = 0;
         let bestGap = Infinity;
         
-        for (let y = 3; y <= 12; y++) {
+        for (let y = 3; y <= 10; y++) {
             if (y === currentYears) continue;
             let tplY = generateFlowsTemplate(contractDateStr, y, freqMonths, false);
             let pY = solveForPrice(targetPv, tplY);
@@ -2872,54 +3210,187 @@ function renderFixedGuidanceBox(g) {
             }
         }
         
-        // Solution 2: Exact Down Payment 1 via NPV preserving other milestone percentages
-        let W_dp1, P_dp1, neededDp1Amt, dp1PctOfPrice, dpPriceDiffPct;
-        if (isZomra) {
-            let S_std_dp1 = 0.025 + 0.05 + 0.05; // 0.125
-            let W_std_dp1 = 0.025 * dfDp2 + 0.05 * dfAddl + 0.05 * dfDeliv;
-            W_dp1 = (1 - S_std_dp1) + W_std_dp1;
-            P_dp1 = (targetPv + totalFixedInst - pvFixedInsts) / W_dp1;
-            neededDp1Amt = (1 - S_std_dp1) * P_dp1 - totalFixedInst;
-            dp1PctOfPrice = P_dp1 > 0 ? (neededDp1Amt / P_dp1) * 100 : 0;
-            dpPriceDiffPct = ((P_dp1 - basePrice) / basePrice) * 100;
-        } else {
-            let W_std_dp1 = 0.05 * dfDp2;
-            W_dp1 = 0.95 + W_std_dp1;
-            P_dp1 = (targetPv + totalFixedInst - pvFixedInsts) / W_dp1;
-            neededDp1Amt = 0.95 * P_dp1 - totalFixedInst;
-            dp1PctOfPrice = P_dp1 > 0 ? (neededDp1Amt / P_dp1) * 100 : 0;
-            dpPriceDiffPct = ((P_dp1 - basePrice) / basePrice) * 100;
-        }
-        
-        // Solution 3: Exact Delivery Payment (Zomra) or DP2 (Perla) via NPV
-        let sol3Desc, sol3BtnText, sol3ClickAction;
-        if (isZomra) {
-            let S_nonDeliv = 0.10; // DP1 2.5% + DP2 2.5% + Addl 5%
-            let W_nonDeliv = 0.025 * dfDp1 + 0.025 * dfDp2 + 0.05 * dfAddl;
-            let W_deliv = W_nonDeliv + (1 - S_nonDeliv) * dfDeliv;
-            P_deliv = (targetPv + totalFixedInst * dfDeliv - pvFixedInsts) / W_deliv;
-            let neededDelivAmt = (1 - S_nonDeliv) * P_deliv - totalFixedInst;
-            let delivPctOfPrice = P_deliv > 0 ? (neededDelivAmt / P_deliv) * 100 : 0;
-            let delivPriceDiffPct = ((P_deliv - basePrice) / basePrice) * 100;
+        if (!isZomra) {
+            // =========================================================================
+            // PERLA TAILORED GUIDANCE (Strictly DP1 5%, DP2 5%, 0% Deliv, 0% 6-Mo, Max 10 Years)
+            // =========================================================================
+            let opt2HtmlPerla = '';
+            let opt3HtmlPerla = '';
+            if (bestYear) {
+                // Option 2 (Perla): Increase years to bestYear + zero DP2 (0%) + increase DP1
+                let tplY = generateFlowsTemplate(contractDateStr, bestYear, freqMonths, false);
+                let instFlowsY = tplY.filter(f => (f.isInst || f.isMerged) && !f.isFixedOverride);
+                let nTotalY = instFlowsY.length;
+                let sumInstDfY = instFlowsY.reduce((sum, f) => sum + getDf(f), 0);
+                let pvFixedY = fixedInst * sumInstDfY;
+                let totFixedY = nTotalY * fixedInst;
+                
+                let dp1AmtY_zero = targetPv - pvFixedY;
+                let P_Y_zero = dp1AmtY_zero + totFixedY;
+                let dp1PctY_zero = P_Y_zero > 0 ? (dp1AmtY_zero / P_Y_zero) * 100 : 0;
+                let diffPctY_zero = ((P_Y_zero - basePrice) / basePrice) * 100;
+                let displayDp1Y_zero = (Math.abs(dp1PctY_zero - Math.round(dp1PctY_zero * 100) / 100) < 0.005) ? (Math.round(dp1PctY_zero * 100) / 100).toFixed(2) : dp1PctY_zero.toFixed(2);
+                
+                opt2HtmlPerla = `
+                    <div style="display: flex; justify-content: space-between; align-items: center; background: rgba(142, 68, 173, 0.15); border: 1px solid rgba(142, 68, 173, 0.35); padding: 8px 10px; border-radius: 4px;">
+                        <div>
+                            <strong style="color: #9b59b6;">🗓️ الخيار 2: زيادة السنين لـ (${bestYear} سنوات) + سداد مقدم ${displayDp1Y_zero}% وتصفير الدفعة الثانية</strong><br>
+                            <span style="font-size: 0.83rem; color: #ddd;">سداد مقدم <strong>${displayDp1Y_zero}%</strong> (${formatNum(Math.round(dp1AmtY_zero))} ج.م)، تصفير الدفعة الثانية (0%)، وبدون أي دفعات استلام، وتثبيت كافة الأقساط (${nTotalY} قسطاً) عند ${formatNum(fixedInst)} ج.م بسعر <strong>${formatNum(Math.round(P_Y_zero))} ج.م</strong> (${diffPctY_zero >= 0 ? '+' : ''}${diffPctY_zero.toFixed(2)}%).</span>
+                        </div>
+                        <button class="btn btn-primary" onclick="applyRecYearsWithDP_Perla(${bestYear}, ${dp1PctY_zero.toFixed(8)})" style="padding: 5px 12px; font-size: 0.8rem; background: #8e44ad; border-color: #8e44ad; white-space: nowrap; margin-right: 10px;">تطبيق ${bestYear} سنوات + تصفير الدفعة 2</button>
+                    </div>
+                `;
+
+                // Option 3 (Perla): Increase years to bestYear + keep DP2 (5%) + increase DP1
+                let dp2FlowY = tplY.find(f => f.id === 'dp2');
+                let dfDp2Y = getDf(dp2FlowY);
+                let P_Y_keep = (targetPv - pvFixedY + totFixedY) / (0.95 + 0.05 * dfDp2Y);
+                let dp1AmtY_keep = 0.95 * P_Y_keep - totFixedY;
+                let dp1PctY_keep = P_Y_keep > 0 ? (dp1AmtY_keep / P_Y_keep) * 100 : 0;
+                let diffPctY_keep = ((P_Y_keep - basePrice) / basePrice) * 100;
+                let displayDp1Y_keep = (Math.abs(dp1PctY_keep - Math.round(dp1PctY_keep * 100) / 100) < 0.005) ? (Math.round(dp1PctY_keep * 100) / 100).toFixed(2) : dp1PctY_keep.toFixed(2);
+
+                opt3HtmlPerla = `
+                    <div style="display: flex; justify-content: space-between; align-items: center; background: rgba(46, 204, 113, 0.15); border: 1px solid rgba(46, 204, 113, 0.35); padding: 8px 10px; border-radius: 4px;">
+                        <div>
+                            <strong style="color: #2ecc71;">🗓️ الخيار 3: زيادة السنين لـ (${bestYear} سنوات) + إبقاء الدفعة الثانية (5%) وزيادة المقدم الأول (${displayDp1Y_keep}%)</strong><br>
+                            <span style="font-size: 0.83rem; color: #ddd;">سداد مقدم <strong>${displayDp1Y_keep}%</strong> (${formatNum(Math.round(dp1AmtY_keep))} ج.م)، وسداد الدفعة الثانية 5% (${formatNum(Math.round(P_Y_keep * 0.05))} ج.م)، وتثبيت الأقساط (${nTotalY} قسطاً) عند ${formatNum(fixedInst)} ج.م بسعر <strong>${formatNum(Math.round(P_Y_keep))} ج.م</strong> (${diffPctY_keep >= 0 ? '+' : ''}${diffPctY_keep.toFixed(2)}%).</span>
+                        </div>
+                        <button class="btn btn-primary" onclick="applyRecYears_KeepDP2_Perla(${bestYear}, ${dp1PctY_keep.toFixed(8)})" style="padding: 5px 12px; font-size: 0.8rem; background: #27ae60; border-color: #27ae60; white-space: nowrap; margin-right: 10px;">تطبيق ${bestYear} سنوات + بقاء الدفعة 2 (5%)</button>
+                    </div>
+                `;
+            }
+
+            // Option 4 (Perla): Current Years + zero DP2 (0%) + increase DP1
+            let dp1Amt_zero_curr = targetPv - pvFixedInsts;
+            let P_zero_curr = dp1Amt_zero_curr + totalFixedInst;
+            let dp1Pct_zero_curr = P_zero_curr > 0 ? (dp1Amt_zero_curr / P_zero_curr) * 100 : 0;
+            let diffPct_zero_curr = ((P_zero_curr - basePrice) / basePrice) * 100;
+            let displayDp1_zero_curr = (Math.abs(dp1Pct_zero_curr - Math.round(dp1Pct_zero_curr * 100) / 100) < 0.005) ? (Math.round(dp1Pct_zero_curr * 100) / 100).toFixed(2) : dp1Pct_zero_curr.toFixed(2);
+
+            // Option 5 (Perla): Current Years + keep DP2 (5%) + increase DP1
+            let P_keep_curr = (targetPv - pvFixedInsts + totalFixedInst) / (0.95 + 0.05 * dfDp2);
+            let dp1Amt_keep_curr = 0.95 * P_keep_curr - totalFixedInst;
+            let dp1Pct_keep_curr = P_keep_curr > 0 ? (dp1Amt_keep_curr / P_keep_curr) * 100 : 0;
+            let diffPct_keep_curr = ((P_keep_curr - basePrice) / basePrice) * 100;
+            let displayDp1_keep_curr = (Math.abs(dp1Pct_keep_curr - Math.round(dp1Pct_keep_curr * 100) / 100) < 0.005) ? (Math.round(dp1Pct_keep_curr * 100) / 100).toFixed(2) : dp1Pct_keep_curr.toFixed(2);
+
+            let isDeficit = fixedInst < naturalInst;
+            guidanceBox.style.background = isDeficit ? 'rgba(243, 156, 18, 0.12)' : 'rgba(52, 152, 219, 0.12)';
+            guidanceBox.style.border = isDeficit ? '1px solid #f39c12' : '1px solid #3498db';
             
-            let displayDelivPct = (Math.abs(delivPctOfPrice - Math.round(delivPctOfPrice * 100) / 100) < 0.005) ? (Math.round(delivPctOfPrice * 100) / 100).toFixed(2) : delivPctOfPrice.toFixed(4);
-            sol3BtnText = `تحميل ${displayDelivPct}% على الاستلام`;
-            sol3Desc = `📦 <strong>تحميل على الاستلام:</strong> سداد <strong>${displayDelivPct}%</strong> (${formatNum(Math.round(neededDelivAmt))} ج.م) عند الاستلام لتثبيت القسط عند ${formatNum(fixedInst)} ج.م بسعر ${formatNum(Math.round(P_deliv))} ج.م (${delivPriceDiffPct >= 0 ? '+' : ''}${delivPriceDiffPct.toFixed(2)}%).`;
-            sol3ClickAction = `applyRecDeliv(${delivPctOfPrice.toFixed(4)})`;
-        } else {
-            let W_dp2 = 0.05 * dfDp1 + 0.95 * dfDp2;
-            let P_dp2 = (targetPv + totalFixedInst * dfDp2 - pvFixedInsts) / W_dp2;
-            let neededDp2Amt = 0.95 * P_dp2 - totalFixedInst;
-            let dp2PctOfPrice = P_dp2 > 0 ? (neededDp2Amt / P_dp2) * 100 : 0;
-            let dp2PriceDiffPct = ((P_dp2 - basePrice) / basePrice) * 100;
-            
-            let displayDp2Pct = (Math.abs(dp2PctOfPrice - Math.round(dp2PctOfPrice * 100) / 100) < 0.005) ? (Math.round(dp2PctOfPrice * 100) / 100).toFixed(2) : dp2PctOfPrice.toFixed(4);
-            sol3BtnText = `تعديل الدفعة 2 إلى ${displayDp2Pct}%`;
-            sol3Desc = `💰 <strong>تعديل الدفعة الثانية:</strong> سداد <strong>${displayDp2Pct}%</strong> (${formatNum(Math.round(neededDp2Amt))} ج.م) بعد 3 شهور لتثبيت القسط عند ${formatNum(fixedInst)} ج.م بسعر ${formatNum(Math.round(P_dp2))} ج.م (${dp2PriceDiffPct >= 0 ? '+' : ''}${dp2PriceDiffPct.toFixed(2)}%).`;
-            sol3ClickAction = `applyRecDP2(${dp2PctOfPrice.toFixed(4)})`;
+            let headerText = isDeficit 
+                ? `⚠️ تنبيه: القسط المدخل (${formatCurr(fixedInst)}) أقل من القسط الطبيعي (${formatCurr(naturalInst)}). لمطابقة شيت إكسيل بيرلا بنسبة 100% وبدون أي فارق، اختر أحد الحلول التالية:`
+                : `ℹ️ ملاحظة: القسط المدخل (${formatCurr(fixedInst)}) أكبر من القسط الطبيعي (${formatCurr(naturalInst)}). لمطابقة شيت إكسيل بيرلا بنسبة 100% وبدون أي فارق، اختر أحد الحلول التالية:`;
+
+            guidanceBox.innerHTML = `
+                <div style="color: ${isDeficit ? '#f39c12' : '#3498db'}; font-weight: bold; margin-bottom: 10px; font-size: 0.95rem;">
+                    ${headerText}
+                </div>
+                <div style="display: flex; flex-direction: column; gap: 8px;">
+                    ${bestYear ? `
+                    <div style="display: flex; justify-content: space-between; align-items: center; background: rgba(52, 152, 219, 0.15); border: 1px solid rgba(52, 152, 219, 0.35); padding: 8px 10px; border-radius: 4px;">
+                        <div>
+                            <strong style="color: #3498db;">🗓️ الخيار 1: تعديل السنين فقط إلى (${bestYear} سنوات)</strong><br>
+                            <span style="font-size: 0.83rem; color: #ddd;">الإبقاء على دفعات بيرلا (5% مقدم + 5% بعد 3 شهور)؛ القسط الطبيعي في الإكسيل يصبح <strong>${formatNum(Math.round(bestYearInst))} ج.م</strong> بسعر إجمالي <strong>${formatNum(Math.round(bestYearPrice))} ج.م</strong> (${bestYearDiffPct >= 0 ? '+' : ''}${bestYearDiffPct.toFixed(2)}%).</span>
+                        </div>
+                        <button class="btn btn-primary" onclick="applyRecYears(${bestYear})" style="padding: 5px 12px; font-size: 0.8rem; white-space: nowrap; margin-right: 10px;">تطبيق ${bestYear} سنوات (طبيعي)</button>
+                    </div>` : ''}
+
+                    ${opt2HtmlPerla}
+                    ${opt3HtmlPerla}
+
+                    <div style="display: flex; justify-content: space-between; align-items: center; background: rgba(41, 128, 185, 0.15); border: 1px solid rgba(41, 128, 185, 0.35); padding: 8px 10px; border-radius: 4px;">
+                        <div>
+                            <strong style="color: #2980b9;">💰 الخيار 4: تصفير الدفعة الثانية وزيادة المقدم الأول (${displayDp1_zero_curr}%) على ${currentYears} سنوات</strong><br>
+                            <span style="font-size: 0.83rem; color: #ddd;">سداد مقدم <strong>${displayDp1_zero_curr}%</strong> (${formatNum(Math.round(dp1Amt_zero_curr))} ج.م) وتصفير الدفعة الثانية (0%)، وتثبيت كافة الأقساط (${nTotal} قسطاً) عند ${formatNum(fixedInst)} ج.م بسعر إجمالي <strong>${formatNum(Math.round(P_zero_curr))} ج.م</strong> (${diffPct_zero_curr >= 0 ? '+' : ''}${diffPct_zero_curr.toFixed(2)}%).</span>
+                        </div>
+                        <button class="btn btn-primary" onclick="applyRecDP_ZeroDP2_Perla(${dp1Pct_zero_curr.toFixed(8)})" style="padding: 5px 12px; font-size: 0.8rem; background: #2980b9; border-color: #2980b9; white-space: nowrap; margin-right: 10px;">زيادة المقدم (${displayDp1_zero_curr}%) وتصفير الدفعة 2</button>
+                    </div>
+
+                    <div style="display: flex; justify-content: space-between; align-items: center; background: rgba(39, 174, 96, 0.15); border: 1px solid rgba(39, 174, 96, 0.35); padding: 8px 10px; border-radius: 4px;">
+                        <div>
+                            <strong style="color: #2ecc71;">💰 الخيار 5: إبقاء الدفعة الثانية (5%) وزيادة المقدم الأول (${displayDp1_keep_curr}%) على ${currentYears} سنوات</strong><br>
+                            <span style="font-size: 0.83rem; color: #ddd;">سداد مقدم <strong>${displayDp1_keep_curr}%</strong> (${formatNum(Math.round(dp1Amt_keep_curr))} ج.م) وسداد الدفعة الثانية 5% (${formatNum(Math.round(P_keep_curr * 0.05))} ج.م)، وتثبيت كافة الأقساط (${nTotal} قسطاً) عند ${formatNum(fixedInst)} ج.م بسعر إجمالي <strong>${formatNum(Math.round(P_keep_curr))} ج.م</strong> (${diffPct_keep_curr >= 0 ? '+' : ''}${diffPct_keep_curr.toFixed(2)}%).</span>
+                        </div>
+                        <button class="btn btn-primary" onclick="applyRecDP_KeepDP2_Perla(${dp1Pct_keep_curr.toFixed(8)})" style="padding: 5px 12px; font-size: 0.8rem; background: #217346; border-color: #217346; white-space: nowrap; margin-right: 10px;">زيادة المقدم (${displayDp1_keep_curr}%) وبقاء الدفعة 2 (5%)</button>
+                    </div>
+                </div>
+            `;
+            return;
         }
+
+        // =========================================================================
+        // ZOMRA GUIDANCE OPTIONS (Option 1 through Option 7)
+        // =========================================================================
+        // Option 2: Increase Years (bestYear) + adjust DP1 & Deliv (5%), zero DP2 (0%) & Addl (0%)
+        let opt2Html = '';
+        if (bestYear) {
+            let tplY = generateFlowsTemplate(contractDateStr, bestYear, freqMonths, false);
+            let delivFlowY = tplY.find(f => f.id === 'deliv' || (f.mergedIds && f.mergedIds.includes('deliv')));
+            let dfDelivY = delivFlowY ? getDf(delivFlowY) : dfDeliv;
+            let instFlowsY = tplY.filter(f => (f.isInst || f.isMerged) && !f.isFixedOverride);
+            let nTotalY = instFlowsY.length;
+            let sumInstDfY = instFlowsY.reduce((sum, f) => sum + getDf(f), 0);
+            let pvFixedY = fixedInst * sumInstDfY;
+            let totFixedY = nTotalY * fixedInst;
+            
+            let delivPctY = 0.05;
+            let W_Y = (1.0 - delivPctY) + delivPctY * dfDelivY;
+            let P_Y = (targetPv - pvFixedY + totFixedY) / W_Y;
+            let dp1AmtY = targetPv - pvFixedY - P_Y * delivPctY * dfDelivY;
+            let dp1PctY = P_Y > 0 ? (dp1AmtY / P_Y) * 100 : 0;
+            let diffPctY = ((P_Y - basePrice) / basePrice) * 100;
+            
+            let displayDp1Y = (Math.abs(dp1PctY - Math.round(dp1PctY * 100) / 100) < 0.005) ? (Math.round(dp1PctY * 100) / 100).toFixed(2) : dp1PctY.toFixed(2);
+            opt2Html = `
+                <div style="display: flex; justify-content: space-between; align-items: center; background: rgba(142, 68, 173, 0.15); border: 1px solid rgba(142, 68, 173, 0.35); padding: 8px 10px; border-radius: 4px;">
+                    <div>
+                        <strong style="color: #9b59b6;">🗓️ الخيار 2: زيادة السنين لـ (${bestYear} سنوات) + سداد مقدم ${displayDp1Y}% وتصفير الدفعات</strong><br>
+                        <span style="font-size: 0.83rem; color: #ddd;">سداد مقدم <strong>${displayDp1Y}%</strong> (${formatNum(Math.round(dp1AmtY))} ج.م)، إبقاء الاستلام 5%، وتثبيت كل الأقساط (${nTotalY} قسطاً) عند ${formatNum(fixedInst)} ج.م بسعر <strong>${formatNum(Math.round(P_Y))} ج.م</strong> (${diffPctY >= 0 ? '+' : ''}${diffPctY.toFixed(2)}%).</span>
+                    </div>
+                    <button class="btn btn-primary" onclick="applyRecYearsWithDP(${bestYear}, ${dp1PctY.toFixed(8)}, 5.0)" style="padding: 5px 12px; font-size: 0.8rem; background: #8e44ad; border-color: #8e44ad; white-space: nowrap; margin-right: 10px;">تطبيق ${bestYear} سنوات + تصفير الدفعات</button>
+                </div>
+            `;
+        }
+
+        // Option 3: Increase DP1 only, Zero DP2 (0%) & Addl (0%), Keep Delivery at 5%
+        let delivPct_3 = 0.05;
+        let W_3 = (1.0 - delivPct_3) + delivPct_3 * dfDeliv;
+        let P_3 = (targetPv - pvFixedInsts + totalFixedInst) / W_3;
+        let dp1Amt_3 = targetPv - pvFixedInsts - P_3 * delivPct_3 * dfDeliv;
+        let dp1Pct_3 = P_3 > 0 ? (dp1Amt_3 / P_3) * 100 : 0;
+        let diffPct_3 = ((P_3 - basePrice) / basePrice) * 100;
+        let displayDp1_3 = (Math.abs(dp1Pct_3 - Math.round(dp1Pct_3 * 100) / 100) < 0.005) ? (Math.round(dp1Pct_3 * 100) / 100).toFixed(2) : dp1Pct_3.toFixed(2);
         
-        // Solution 4: Exact Pre-Delivery Only via NPV
+        // Option 4: Keep All Standard Project Milestones (DP1 2.5%, DP2 2.5%, Addl 5%), Increase Delivery
+        let S_nonDeliv_4 = 0.10;
+        let W_nonDeliv_4 = isZomra ? (0.025 * dfDp1 + 0.025 * dfDp2 + 0.05 * dfAddl) : (0.05 * dfDp1 + 0.05 * dfDp2);
+        let W_4 = W_nonDeliv_4 + (1.0 - S_nonDeliv_4) * dfDeliv;
+        let P_4 = (targetPv - pvFixedInsts + totalFixedInst * dfDeliv) / W_4;
+        let delivAmt_4 = (1.0 - S_nonDeliv_4) * P_4 - totalFixedInst;
+        let delivPct_4 = P_4 > 0 ? (delivAmt_4 / P_4) * 100 : 0;
+        let diffPct_4 = ((P_4 - basePrice) / basePrice) * 100;
+        let displayDeliv_4 = (Math.abs(delivPct_4 - Math.round(delivPct_4 * 100) / 100) < 0.005) ? (Math.round(delivPct_4 * 100) / 100).toFixed(2) : delivPct_4.toFixed(2);
+
+        // Option 5: Keep DP1 (2.5%), Zero DP2 (0%) & Addl (0%), Increase Delivery
+        let dp1Pct_5 = isZomra ? 0.025 : 0.05;
+        let denom_5 = dp1Pct_5 + (1.0 - dp1Pct_5) * dfDeliv;
+        let numer_5 = targetPv - pvFixedInsts + totalFixedInst * dfDeliv;
+        let P_5 = numer_5 / denom_5;
+        let delivAmt_5 = P_5 * (1.0 - dp1Pct_5) - totalFixedInst;
+        let delivPct_5 = P_5 > 0 ? (delivAmt_5 / P_5) * 100 : 0;
+        let diffPct_5 = ((P_5 - basePrice) / basePrice) * 100;
+        let displayDeliv_5 = (Math.abs(delivPct_5 - Math.round(delivPct_5 * 100) / 100) < 0.005) ? (Math.round(delivPct_5 * 100) / 100).toFixed(2) : delivPct_5.toFixed(2);
+
+        // Option 6: Increase DP1, Zero ALL milestones including Delivery (0%)
+        let dp1Amt_6 = targetPv - pvFixedInsts;
+        let P_6 = dp1Amt_6 + totalFixedInst;
+        let dp1Pct_6 = P_6 > 0 ? (dp1Amt_6 / P_6) * 100 : 0;
+        let diffPct_6 = ((P_6 - basePrice) / basePrice) * 100;
+        let displayDp1_6 = (Math.abs(dp1Pct_6 - Math.round(dp1Pct_6 * 100) / 100) < 0.005) ? (Math.round(dp1Pct_6 * 100) / 100).toFixed(2) : dp1Pct_6.toFixed(2);
+
+        // Option 7: Pre-Delivery Only via NPV
         let W_ms = isZomra ? (0.025 + 0.025 * dfDp2 + 0.05 * dfAddl + 0.05 * dfDeliv) : (0.05 + 0.05 * dfDp2);
         let instPool = isZomra ? 0.85 : 0.90;
         let nPreCount = preInsts.length;
@@ -2932,44 +3403,67 @@ function renderFixedGuidanceBox(g) {
         let prePriceDiffPct = ((P_pre - basePrice) / basePrice) * 100;
         
         let isDeficit = fixedInst < naturalInst;
-        guidanceBox.style.background = isDeficit ? 'rgba(243, 156, 18, 0.15)' : 'rgba(52, 152, 219, 0.15)';
+        guidanceBox.style.background = isDeficit ? 'rgba(243, 156, 18, 0.12)' : 'rgba(52, 152, 219, 0.12)';
         guidanceBox.style.border = isDeficit ? '1px solid #f39c12' : '1px solid #3498db';
         
         let headerText = isDeficit 
-            ? `⚠️ تنبيه: القسط (${formatCurr(fixedInst)}) أقل من القسط الطبيعي (${formatCurr(naturalInst)}). لمطابقة شيت الإكسيل (NPV) بنسبة 100%، اختر أحد الحلول الآتية:`
-            : `ℹ️ ملاحظة: القسط (${formatCurr(fixedInst)}) أكبر من القسط الطبيعي (${formatCurr(naturalInst)}). لمطابقة شيت الإكسيل (NPV) بنسبة 100%، اختر أحد الحلول الآتية:`;
-            
-        let yearsBtnText = `تطبيق ${bestYear} سنوات`;
-        let yearsDesc = `🗓️ <strong>تعديل السنين (${bestYear} سنوات):</strong> القسط في الإكسيل يصبح <strong>${formatNum(Math.round(bestYearInst))} ج.م</strong> بسعر إجمالي ${formatNum(Math.round(bestYearPrice))} ج.م (${bestYearDiffPct >= 0 ? '+' : ''}${bestYearDiffPct.toFixed(2)}%).`;
-        
-        let displayDp1Pct = (Math.abs(dp1PctOfPrice - Math.round(dp1PctOfPrice * 100) / 100) < 0.005) ? (Math.round(dp1PctOfPrice * 100) / 100).toFixed(2) : dp1PctOfPrice.toFixed(4);
-        let dpBtnText = `تطبيق مقدم ${displayDp1Pct}%`;
-        let dpDesc = `💰 <strong>تعديل المقدم:</strong> سداد مقدم <strong>${displayDp1Pct}%</strong> (${formatNum(Math.round(neededDp1Amt))} ج.م) لتثبيت القسط عند ${formatNum(fixedInst)} ج.م بسعر ${formatNum(Math.round(P_dp1))} ج.م (${dpPriceDiffPct >= 0 ? '+' : ''}${dpPriceDiffPct.toFixed(2)}%).`;
-        
-        let preBtnText = `تثبيت قبل الاستلام فقط`;
-        let preDesc = `⚖️ <strong>تثبيت قبل الاستلام فقط:</strong> دفع <strong>${formatNum(fixedInst)} ج.م</strong> قبل الاستلام، ويكون قسط ما بعد الاستلام <strong>${formatNum(Math.round(solvedPostInst))} ج.م</strong> بسعر ${formatNum(Math.round(P_pre))} ج.م (${prePriceDiffPct >= 0 ? '+' : ''}${prePriceDiffPct.toFixed(2)}%).`;
+            ? `⚠️ تنبيه: القسط المدخل (${formatCurr(fixedInst)}) أقل من القسط الطبيعي (${formatCurr(naturalInst)}). لمطابقة شيت الإكسيل (NPV) بنسبة 100% بالملي وبدون أي فارق، اختر أحد الحلول التالية:`
+            : `ℹ️ ملاحظة: القسط المدخل (${formatCurr(fixedInst)}) أكبر من القسط الطبيعي (${formatCurr(naturalInst)}). لمطابقة شيت الإكسيل (NPV) بنسبة 100% بالملي وبدون أي فارق، اختر أحد الحلول التالية:`;
 
         guidanceBox.innerHTML = `
-            <div style="color: ${isDeficit ? '#f39c12' : '#3498db'}; font-weight: bold; margin-bottom: 8px;">
+            <div style="color: ${isDeficit ? '#f39c12' : '#3498db'}; font-weight: bold; margin-bottom: 10px; font-size: 0.95rem;">
                 ${headerText}
             </div>
-            <div style="display: flex; flex-direction: column; gap: 6px;">
+            <div style="display: flex; flex-direction: column; gap: 8px;">
                 ${bestYear ? `
-                <div style="display: flex; justify-content: space-between; align-items: center; background: rgba(0,0,0,0.25); padding: 8px 10px; border-radius: 4px;">
-                    <span>${yearsDesc}</span>
-                    <button class="btn btn-primary" onclick="applyRecYears(${bestYear})" style="padding: 4px 10px; font-size: 0.8rem; white-space: nowrap;">${yearsBtnText}</button>
+                <div style="display: flex; justify-content: space-between; align-items: center; background: rgba(52, 152, 219, 0.15); border: 1px solid rgba(52, 152, 219, 0.35); padding: 8px 10px; border-radius: 4px;">
+                    <div>
+                        <strong style="color: #3498db;">🗓️ الخيار 1: تعديل السنين فقط إلى (${bestYear} سنوات)</strong><br>
+                        <span style="font-size: 0.83rem; color: #ddd;">الإبقاء على كامل دفعات المشروع القياسية؛ القسط الطبيعي في الإكسيل يصبح <strong>${formatNum(Math.round(bestYearInst))} ج.م</strong> بسعر إجمالي <strong>${formatNum(Math.round(bestYearPrice))} ج.م</strong> (${bestYearDiffPct >= 0 ? '+' : ''}${bestYearDiffPct.toFixed(2)}%).</span>
+                    </div>
+                    <button class="btn btn-primary" onclick="applyRecYears(${bestYear})" style="padding: 5px 12px; font-size: 0.8rem; white-space: nowrap; margin-right: 10px;">تطبيق ${bestYear} سنوات (طبيعي)</button>
                 </div>` : ''}
-                <div style="display: flex; justify-content: space-between; align-items: center; background: rgba(0,0,0,0.25); padding: 8px 10px; border-radius: 4px;">
-                    <span>${dpDesc}</span>
-                    <button class="btn btn-primary" onclick="applyRecDP(${dp1PctOfPrice.toFixed(4)})" style="padding: 4px 10px; font-size: 0.8rem; background: #217346; border-color: #217346; white-space: nowrap;">${dpBtnText}</button>
+
+                ${opt2Html}
+
+                <div style="display: flex; justify-content: space-between; align-items: center; background: rgba(46, 204, 113, 0.15); border: 1px solid rgba(46, 204, 113, 0.35); padding: 8px 10px; border-radius: 4px;">
+                    <div>
+                        <strong style="color: #2ecc71;">💰 الخيار 3: زيادة المقدم فقط (${displayDp1_3}%) وتصفير ${isZomra ? 'دفعات 2.5% و 5%' : 'دفعة 5% الثانية'} مع الإبقاء على دفعة الاستلام (5%)</strong><br>
+                        <span style="font-size: 0.83rem; color: #ddd;">سداد مقدم <strong>${displayDp1_3}%</strong> (${formatNum(Math.round(dp1Amt_3))} ج.م)، وتصفير ${isZomra ? 'الدفعة 2 ودفعة 6 شهور' : 'دفعة 5% الثانية'}، إبقاء الاستلام 5% (${formatNum(Math.round(P_3 * 0.05))} ج.م)، وتثبيت كافة الأقساط عند ${formatNum(fixedInst)} ج.م بسعر إجمالي <strong>${formatNum(Math.round(P_3))} ج.م</strong> (${diffPct_3 >= 0 ? '+' : ''}${diffPct_3.toFixed(2)}%).</span>
+                    </div>
+                    <button class="btn btn-primary" onclick="applyRecDP_KeepDeliv(${dp1Pct_3.toFixed(8)}, 5.0)" style="padding: 5px 12px; font-size: 0.8rem; background: #27ae60; border-color: #27ae60; white-space: nowrap; margin-right: 10px;">زيادة المقدم (${displayDp1_3}%) وإبقاء الاستلام (5%)</button>
                 </div>
-                <div style="display: flex; justify-content: space-between; align-items: center; background: rgba(0,0,0,0.25); padding: 8px 10px; border-radius: 4px;">
-                    <span>${sol3Desc}</span>
-                    <button class="btn btn-primary" onclick="${sol3ClickAction}" style="padding: 4px 10px; font-size: 0.8rem; background: var(--accent-blue); border-color: var(--accent-blue); white-space: nowrap;">${sol3BtnText}</button>
+
+                <div style="display: flex; justify-content: space-between; align-items: center; background: rgba(41, 128, 185, 0.15); border: 1px solid rgba(41, 128, 185, 0.35); padding: 8px 10px; border-radius: 4px;">
+                    <div>
+                        <strong style="color: #2980b9;">📦 الخيار 4: الإبقاء على كافة دفعات المشروع وزيادة دفعة الاستلام (${displayDeliv_4}%)</strong><br>
+                        <span style="font-size: 0.83rem; color: #ddd;">${isZomra ? 'دفع 2.5% مقدم + 2.5% دفعة 2 + 5% دفعة 6 شهور' : 'دفع 5% مقدم 1 + 5% مقدم 2'}، وسداد <strong>${displayDeliv_4}%</strong> (${formatNum(Math.round(delivAmt_4))} ج.م) عند الاستلام لتثبيت كافة الأقساط عند ${formatNum(fixedInst)} ج.م بسعر إجمالي <strong>${formatNum(Math.round(P_4))} ج.م</strong> (${diffPct_4 >= 0 ? '+' : ''}${diffPct_4.toFixed(2)}%).</span>
+                    </div>
+                    <button class="btn btn-primary" onclick="applyRecDeliv_AllMilestones(${delivPct_4.toFixed(8)})" style="padding: 5px 12px; font-size: 0.8rem; background: #2980b9; border-color: #2980b9; white-space: nowrap; margin-right: 10px;">زيادة الاستلام (${displayDeliv_4}%) مع بقاء الدفعات</button>
                 </div>
-                <div style="display: flex; justify-content: space-between; align-items: center; background: rgba(0,0,0,0.25); padding: 8px 10px; border-radius: 4px;">
-                    <span>${preDesc}</span>
-                    <button class="btn btn-outline" onclick="applyRecPreOnly()" style="padding: 4px 10px; font-size: 0.8rem; border-color: var(--gold); color: #fff; white-space: nowrap;">${preBtnText}</button>
+
+                <div style="display: flex; justify-content: space-between; align-items: center; background: rgba(22, 160, 133, 0.15); border: 1px solid rgba(22, 160, 133, 0.35); padding: 8px 10px; border-radius: 4px;">
+                    <div>
+                        <strong style="color: #1abc9c;">📦 الخيار 5: إبقاء المقدم (${isZomra ? '2.5%' : '5%'}) وتصفير ${isZomra ? 'دفعات 2.5% و 5%' : 'دفعة 5% الثانية'} وتعديل الاستلام (${displayDeliv_5}%)</strong><br>
+                        <span style="font-size: 0.83rem; color: #ddd;">سداد مقدم ${isZomra ? '2.5%' : '5%'} (${formatNum(Math.round(P_5 * (isZomra ? 0.025 : 0.05)))} ج.م)، وتصفير ${isZomra ? 'الدفعة 2 ودفعة 6 شهور' : 'دفعة 5% الثانية'}، وسداد <strong>${displayDeliv_5}%</strong> (${formatNum(Math.round(delivAmt_5))} ج.م) عند الاستلام لتثبيت الأقساط عند ${formatNum(fixedInst)} ج.م بسعر إجمالي <strong>${formatNum(Math.round(P_5))} ج.م</strong> (${diffPct_5 >= 0 ? '+' : ''}${diffPct_5.toFixed(2)}%).</span>
+                    </div>
+                    <button class="btn btn-primary" onclick="applyRecDeliv_ZeroMilestones(${delivPct_5.toFixed(8)}, ${isZomra ? 2.5 : 5.0})" style="padding: 5px 12px; font-size: 0.8rem; background: #16a085; border-color: #16a085; white-space: nowrap; margin-right: 10px;">زيادة الاستلام (${displayDeliv_5}%) وتصفير الدفعات</button>
+                </div>
+
+                <div style="display: flex; justify-content: space-between; align-items: center; background: rgba(39, 174, 96, 0.15); border: 1px solid rgba(39, 174, 96, 0.35); padding: 8px 10px; border-radius: 4px;">
+                    <div>
+                        <strong style="color: #2ecc71;">⚡ الخيار 6: زيادة المقدم (${displayDp1_6}%) وإلغاء كافة الدفعات حتى الاستلام (تصفير كل شيء)</strong><br>
+                        <span style="font-size: 0.83rem; color: #ddd;">سداد مقدم <strong>${displayDp1_6}%</strong> (${formatNum(Math.round(dp1Amt_6))} ج.م) وإلغاء ${isZomra ? 'الدفعة 2 ودفعة 6 شهور' : 'دفعة 5% الثانية'} والاستلام لتثبيت كافة الأقساط عند ${formatNum(fixedInst)} ج.م بسعر إجمالي <strong>${formatNum(Math.round(P_6))} ج.م</strong> (${diffPct_6 >= 0 ? '+' : ''}${diffPct_6.toFixed(2)}%).</span>
+                    </div>
+                    <button class="btn btn-primary" onclick="applyRecDP_ZeroAll(${dp1Pct_6.toFixed(8)})" style="padding: 5px 12px; font-size: 0.8rem; background: #217346; border-color: #217346; white-space: nowrap; margin-right: 10px;">زيادة المقدم (${displayDp1_6}%) وإلغاء كل الدفعات</button>
+                </div>
+
+                <div style="display: flex; justify-content: space-between; align-items: center; background: rgba(241, 196, 15, 0.15); border: 1px solid rgba(241, 196, 15, 0.35); padding: 8px 10px; border-radius: 4px;">
+                    <div>
+                        <strong style="color: #f1c40f;">⚖️ الخيار 7: تثبيت قسط ما قبل الاستلام فقط عند ${formatNum(fixedInst)} ج.م</strong><br>
+                        <span style="font-size: 0.83rem; color: #ddd;">دفع <strong>${formatNum(fixedInst)} ج.م</strong> قبل الاستلام، ويكون قسط ما بعد الاستلام <strong>${formatNum(Math.round(solvedPostInst))} ج.م</strong> بسعر إجمالي <strong>${formatNum(Math.round(P_pre))} ج.م</strong> (${prePriceDiffPct >= 0 ? '+' : ''}${prePriceDiffPct.toFixed(2)}%).</span>
+                    </div>
+                    <button class="btn btn-outline" onclick="applyRecPreOnly()" style="padding: 5px 12px; font-size: 0.8rem; border-color: var(--gold); color: #fff; white-space: nowrap; margin-right: 10px;">تثبيت قبل الاستلام فقط</button>
                 </div>
             </div>
         `;
@@ -3036,26 +3530,42 @@ function renderTargetPriceGuidance(targetPrice, currentOfferPrice, targetPv) {
         `;
     }
 
-    // 2. Exact Down Payment on Current Plan
-    let low = 0, high = 85, bestDp = null;
-    for (let iter = 0; iter < 45; iter++) {
-        let mid = (low + high) / 2;
-        let tpl = generateFlowsTemplate(contractDateStr, currentYears, freqMonths, false);
-        tpl.forEach(f => {
-            if (f.id === 'dp1') f.defaultPct = mid / 100;
-        });
-        let flows = calculateCustomFlows(targetPrice, tpl);
-        let pv = flows.filter(f => !f.isMnt).reduce((sum, f) => sum + f.pv, 0);
-        if (pv < targetPv) {
-            low = mid;
-        } else {
-            high = mid;
-            bestDp = mid;
-        }
-    }
+    // 2. Exact Down Payment on Current Plan (Closed-form Analytical Solution)
+    let tpl = generateFlowsTemplate(contractDateStr, currentYears, freqMonths, false);
+    let dynInstsTpl = tpl.filter(f => (f.isInst || f.isMerged) && !f.isFixedOverride);
+    let sumInstDf = 0;
+    dynInstsTpl.forEach(f => {
+        let tempF = { date: f.date, months: f.months, period: f.period, amount: 1, id: f.id };
+        applyDiscountLogic(tempF, contractDateStr);
+        sumInstDf += (tempF.pvFactor !== undefined ? tempF.pvFactor : 1.0);
+    });
+    let nInsts = dynInstsTpl.length;
+    let W_inst = nInsts > 0 ? (sumInstDf / nInsts) : 0;
 
-    let dpNeededPct = bestDp !== null ? bestDp : 0;
-    let dpNeededAmt = targetPrice * (dpNeededPct / 100);
+    let sumMsWeight = 0;
+    let sumMsPct = 0;
+    tpl.forEach(f => {
+        if (f.id === 'dp2' || f.id === 'addl') {
+            let p = f.defaultPct || 0;
+            sumMsPct += p;
+            let tempF = { date: f.date, months: f.months, period: f.period, amount: 1, id: f.id };
+            applyDiscountLogic(tempF, contractDateStr);
+            sumMsWeight += p * (tempF.pvFactor !== undefined ? tempF.pvFactor : 1.0);
+        } else if (f.isMerged) {
+            let p = 0.05;
+            sumMsPct += p;
+            let tempF = { date: f.date, months: f.months, period: f.period, amount: 1, id: 'deliv' };
+            applyDiscountLogic(tempF, contractDateStr);
+            sumMsWeight += p * (tempF.pvFactor !== undefined ? tempF.pvFactor : 1.0);
+        }
+    });
+
+    let neededDpAmt = 0;
+    if (Math.abs(1.0 - W_inst) > 1e-9) {
+        neededDpAmt = (targetPv - targetPrice * (sumMsWeight + (1.0 - sumMsPct) * W_inst)) / (1.0 - W_inst);
+    }
+    let dpNeededPct = targetPrice > 0 ? (neededDpAmt / targetPrice) * 100 : 0;
+    let dpNeededAmt = neededDpAmt;
     let dpCurPct = parseFloat(document.getElementById('dp1-val')?.value) || (currentProject === 'Zomra' ? 2.5 : 5);
 
     let dpActionHtml = '';
@@ -3071,7 +3581,7 @@ function renderTargetPriceGuidance(targetPrice, currentOfferPrice, targetPv) {
 
     // 3. Exact Pre-Delivery Installment Solver on Current Plan
     let tplCurrent = generateFlowsTemplate(contractDateStr, currentYears, freqMonths, false);
-    let delivMonth = currentProject === 'Zomra' ? 37 : 48;
+    let delivMonth = (currentProject === 'Zomra') ? 37 : (currentProject === 'Perla' ? 51 : 48);
     let dynInsts = tplCurrent.filter(f => (f.isInst || f.isMerged) && !f.isFixedOverride);
     let preCount = dynInsts.filter(f => f.months <= delivMonth).length;
     let postCount = dynInsts.filter(f => f.months > delivMonth).length;
@@ -3220,6 +3730,7 @@ function calculate() {
         let baseTemplate = generateFlowsTemplate(contractDateStr, baseYears, baseFreq, true);
         let baseFlows = calculateBaseFlows(basePrice, baseTemplate, contractDateStr);
         basePvCache = baseFlows.filter(f => !f.isMnt).reduce((sum, f) => sum + (f.pv || 0), 0); // Exclude Mnt from NPV
+        window.basePvCache = basePvCache;
 
         baseFlows = reconcileIntegerInstallments(baseFlows, basePrice);
         baseFlows = applyPerfectPercentages(baseFlows, Math.round(basePrice));
@@ -3265,20 +3776,18 @@ function calculate() {
         let hasTableOverrides = window.globalTableOverrides && Object.keys(window.globalTableOverrides).length > 0;
         let hasCustomInputs = hasCustomMilestones;
         let isDistCustomized = window.globalDistState && (window.globalDistState.mode !== 'auto' || window.globalDistState.typedPrePct !== null || window.globalDistState.typedPostPct !== null);
-        let is7030 = (document.getElementById('toggle-70-30') && document.getElementById('toggle-70-30').checked) ||
-                     (document.getElementById('toggle-intra-year') && document.getElementById('toggle-intra-year').checked &&
-                      document.getElementById('intra-year-type')?.value === 'pct' &&
-                      parseFloat(document.getElementById('intra-year-val')?.value) === 70 &&
-                      document.getElementById('intra-year-scope')?.value === 'all');
+        let isIntraToggle = (document.getElementById('toggle-intra-year') && document.getElementById('toggle-intra-year').checked);
+        let isLegacy7030 = (document.getElementById('toggle-70-30') && document.getElementById('toggle-70-30').checked);
+        let intraValRaw = document.getElementById('intra-year-val') ? parseFloat(document.getElementById('intra-year-val').value) : NaN;
+        if (isLegacy7030 && (!isIntraToggle || isNaN(intraValRaw) || intraValRaw <= 0)) {
+            intraValRaw = 70;
+        }
+        let hasIntraYearShift = (freqMonths !== 6) && (isIntraToggle || isLegacy7030) && !isNaN(intraValRaw) && intraValRaw > 0;
 
         let naturalOfferPrice = 0;
-        if (currentProject === 'Perla' && years === 8 && freqMonths === 3 && !hasFixedInst && !hasTableOverrides && !hasCustomInputs && !isDistCustomized) {
-            if (is7030) {
-                naturalOfferPrice = basePriceCache * 1.00863920294539959;
-            } else {
-                naturalOfferPrice = basePriceCache;
-            }
-        } else if ((currentProject === 'Zomra' || currentProject === 'Jirian') && years === 8 && freqMonths === 3 && !hasFixedInst && !hasTableOverrides && !hasCustomInputs && !isDistCustomized && !is7030) {
+        if (currentProject === 'Perla' && years === 8 && freqMonths === 3 && !hasFixedInst && !hasTableOverrides && !hasCustomInputs && !isDistCustomized && !hasIntraYearShift) {
+            naturalOfferPrice = basePriceCache;
+        } else if ((currentProject === 'Zomra' || currentProject === 'Jirian') && years === 8 && freqMonths === 3 && !hasFixedInst && !hasTableOverrides && !hasCustomInputs && !isDistCustomized && !hasIntraYearShift) {
             naturalOfferPrice = basePriceCache;
         } else {
             naturalOfferPrice = solveForPrice(targetPv, customTemplate);
@@ -3336,7 +3845,7 @@ function calculate() {
         let hasFirstDateShift = customFirstDateStr !== null;
         let isPureStandardPlan = (freqMonths === baseFreq) && 
                                  !hasFixedInst && !hasTableOverrides && !hasCustomInputs && 
-                                 !isDistCustomized && !is7030 && !hasTargetPrice && !hasManualDiscount &&
+                                 !isDistCustomized && !hasIntraYearShift && !hasTargetPrice && !hasManualDiscount &&
                                  !hasInstallmentShift && !hasFirstDateShift;
         let isPureBaselinePlan = isPureStandardPlan && (years === baseYears);
 
@@ -3351,31 +3860,275 @@ function calculate() {
             window.globalCustomFlows = globalCustomFlows;
 
         } else if (targetPv > 0 && !hasTargetPrice && !hasManualDiscount) {
-            // Excel GoalSeek Closed-Loop Solver:
+            // Excel GoalSeek Closed-Loop Analytical Solver (100% Millimeter Parity):
             // Matches Excel cell M13 = Target_PV / SUM( L_i * PV_Factor_i )
-            // Closed-form analytical solver (Excel GoalSeek Parity):
+            // Perfectly solves combinations of fixed cash amounts and percentages without drift.
             globalCustomFlows = calculateCustomFlows(effectivePrice, customTemplate);
             let nonMnt = globalCustomFlows.filter(f => !f.isMnt);
+
+            let fixedCashTotal = 0;
             let fixedCashPvSum = 0;
-            let dynamicPvFactorSum = 0;
+            let fixedPctTotal = 0;
+            let fixedPctPvSum = 0;
+            let dynamicFlows = [];
+            let totalDynAmt = 0;
+
             nonMnt.forEach(f => {
                 let df = f.pvFactor !== undefined ? f.pvFactor : 1.0;
-                if (f._isFixedCash && f.amount > 0) {
-                    fixedCashPvSum += f.amount * df;
+
+                if (f.isMerged) {
+                    let delivPct = (f._exactMergedDelivPct !== undefined && f._exactMergedDelivPct !== null) ? (f._exactMergedDelivPct / 100.0) : 0.05;
+                    fixedPctTotal += delivPct;
+                    fixedPctPvSum += delivPct * df;
+
+                    let instPart = f._instPortionAmt !== undefined ? f._instPortionAmt : Math.max(0, f.amount - (f._delivPortionAmt || 0));
+                    let isInstFixedCash = f._isFixedCash || (hasFixedInst && !hasMeltActive && ((fixedInstScope === 'all') || (fixedInstScope === 'pre' && f.months <= delivMonth) || (fixedInstScope === 'post' && f.months > delivMonth)));
+                    
+                    if (isInstFixedCash) {
+                        let cashVal = (f._exactFixedVal !== undefined && f._exactFixedVal > 0) ? f._exactFixedVal : (instPart || fixedAmt);
+                        fixedCashTotal += cashVal;
+                        fixedCashPvSum += cashVal * df;
+                    } else if (f._isZeroShifted || instPart === 0) {
+                        // zero
+                    } else {
+                        dynamicFlows.push({ flow: f, weight: instPart, df: df, isMerged: true, delivPct: delivPct });
+                        totalDynAmt += instPart;
+                    }
+                } else if (f._isZeroShifted || f.amount === 0) {
+                    // Zero flow (cancelled/shifted)
                 } else {
-                    let pct = (f.pctRatio !== undefined) ? f.pctRatio : ((f.amount || 0) / (effectivePrice || 1));
-                    dynamicPvFactorSum += pct * df;
+                    let isFixedCash = (f._exactFixedVal !== undefined && f._exactFixedVal > 0) || (f._isFixedCash && f.amount > 0);
+
+                    if (isFixedCash) {
+                        let cashAmt = f._exactFixedVal !== undefined ? f._exactFixedVal : f.amount;
+                        f._isFixedCash = true;
+                        fixedCashTotal += cashAmt;
+                        fixedCashPvSum += cashAmt * df;
+                    } else if (f._exactFixedPct !== undefined && f._exactFixedPct !== null) {
+                        let pct = f._exactFixedPct / 100.0;
+                        fixedPctTotal += pct;
+                        fixedPctPvSum += pct * df;
+                    } else if (f.isFixedOverride && f._exactFixedPct) {
+                        let pct = f._exactFixedPct / 100.0;
+                        fixedPctTotal += pct;
+                        fixedPctPvSum += pct * df;
+                    } else if (!f.isInst && f.defaultPct !== undefined && !f._exactFixedVal) {
+                        let pct = f.defaultPct;
+                        fixedPctTotal += pct;
+                        fixedPctPvSum += pct * df;
+                    } else {
+                        let instAmt = f.amount || 0;
+                        dynamicFlows.push({ flow: f, weight: instAmt, df: df, isMerged: false });
+                        totalDynAmt += instAmt;
+                    }
                 }
             });
-            if (dynamicPvFactorSum > 0) {
-                effectivePrice = (targetPv - fixedCashPvSum) / dynamicPvFactorSum;
+
+            if (dynamicFlows.length === 0) {
+                let pFromCash = (fixedPctTotal < 1.0) ? (fixedCashTotal / (1.0 - fixedPctTotal)) : 0;
+                let pFromPv = (fixedPctPvSum > 0) ? ((targetPv - fixedCashPvSum) / fixedPctPvSum) : 0;
+                if (pFromPv > 0 && Math.abs(pFromCash - pFromPv) < 500) {
+                    effectivePrice = pFromPv;
+                } else if (pFromCash > 0) {
+                    effectivePrice = pFromCash;
+                } else if (pFromPv > 0) {
+                    effectivePrice = pFromPv;
+                }
+            } else {
+                let W_dyn = 0;
+                if (totalDynAmt > 0) {
+                    dynamicFlows.forEach(d => {
+                        d.normWeight = d.weight / totalDynAmt;
+                        W_dyn += d.normWeight * d.df;
+                    });
+                } else {
+                    let eqW = 1.0 / dynamicFlows.length;
+                    dynamicFlows.forEach(d => {
+                        d.normWeight = eqW;
+                        W_dyn += eqW * d.df;
+                    });
+                }
+
+                let denom = fixedPctPvSum + (1.0 - fixedPctTotal) * W_dyn;
+                let numer = targetPv - fixedCashPvSum + fixedCashTotal * W_dyn;
+
+                if (denom > 0) {
+                    effectivePrice = numer / denom;
+                }
             }
             actualPrice = effectivePrice;
             finalOfferPrice = effectivePrice;
             window.lastCalculatedPrice = effectivePrice;
 
-            // Reconcile installments directly to Math.round(effectivePrice)
-            globalCustomFlows = calculateCustomFlows(effectivePrice, customTemplate);
+            // Re-assign exact amounts and percentages with 100% mathematical consistency
+            let poolDyn = effectivePrice * (1.0 - fixedPctTotal) - fixedCashTotal;
+
+            nonMnt.forEach(f => {
+                let df = f.pvFactor !== undefined ? f.pvFactor : 1.0;
+
+                if (f.isMerged) {
+                    let delivPct = (f._exactMergedDelivPct !== undefined && f._exactMergedDelivPct !== null) ? (f._exactMergedDelivPct / 100.0) : 0.05;
+                    let delivAmt = effectivePrice * delivPct;
+                    f._delivPortionAmt = delivAmt;
+
+                    let isInstFixedCash = f._isFixedCash || (hasFixedInst && !hasMeltActive && ((fixedInstScope === 'all') || (fixedInstScope === 'pre' && f.months <= delivMonth) || (fixedInstScope === 'post' && f.months > delivMonth)));
+                    if (isInstFixedCash) {
+                        let cashVal = (f._exactFixedVal !== undefined && f._exactFixedVal > 0) ? f._exactFixedVal : (f._instPortionAmt || fixedAmt);
+                        f._instPortionAmt = cashVal;
+                        f.amount = cashVal + delivAmt;
+                        f.exactPct = effectivePrice > 0 ? (f.amount / effectivePrice) : 0;
+                        f.pv = f.amount * df;
+                    }
+                } else if (f._isZeroShifted || f.amount === 0) {
+                    f.amount = 0;
+                    f.exactPct = 0;
+                    f.pv = 0;
+                } else {
+                    let isFixedCash = (f._exactFixedVal !== undefined && f._exactFixedVal > 0) || (f._isFixedCash && f.amount > 0);
+
+                    if (isFixedCash) {
+                        let cashAmt = f._exactFixedVal !== undefined ? f._exactFixedVal : f.amount;
+                        f.amount = cashAmt;
+                        f.exactPct = effectivePrice > 0 ? (cashAmt / effectivePrice) : 0;
+                        f.pv = cashAmt * df;
+                    } else if (f._exactFixedPct !== undefined && f._exactFixedPct !== null) {
+                        let pct = f._exactFixedPct / 100.0;
+                        f.amount = effectivePrice * pct;
+                        f.exactPct = pct;
+                        f.pv = f.amount * df;
+                    } else if (f.isFixedOverride && f._exactFixedPct) {
+                        let pct = f._exactFixedPct / 100.0;
+                        f.amount = effectivePrice * pct;
+                        f.exactPct = pct;
+                        f.pv = f.amount * df;
+                    } else if (!f.isInst && f.defaultPct !== undefined && !f._exactFixedVal) {
+                        let pct = f.defaultPct;
+                        f.amount = effectivePrice * pct;
+                        f.exactPct = pct;
+                        f.pv = f.amount * df;
+                    }
+                }
+            });
+
+            dynamicFlows.forEach(d => {
+                let df = d.df;
+                let instAmt = poolDyn * d.normWeight;
+                let instPct = effectivePrice > 0 ? (instAmt / effectivePrice) : 0;
+                if (d.isMerged) {
+                    let delivAmt = effectivePrice * d.delivPct;
+                    d.flow._delivPortionAmt = delivAmt;
+                    d.flow._instPortionAmt = instAmt;
+                    d.flow.amount = instAmt + delivAmt;
+                    d.flow.exactPct = instPct + d.delivPct;
+                    d.flow.pv = d.flow.amount * df;
+                } else {
+                    d.flow.amount = instAmt;
+                    d.flow.exactPct = instPct;
+                    d.flow.pv = instAmt * df;
+                }
+            });
+
+            // Parity Guard: If dynamicFlows is empty (e.g. all installments fixed cash + percentage DP/Deliv),
+            // ensure DP1 absorbs any 0.01 floating drift so sum of non-mnt amounts is 100.00% equal to effectivePrice
+            if (dynamicFlows.length === 0) {
+                let sumNonMnt = nonMnt.reduce((s, f) => s + (f.amount || 0), 0);
+                let diff = effectivePrice - sumNonMnt;
+                if (Math.abs(diff) > 0.001 && Math.abs(diff) < 50) {
+                    let dp1 = nonMnt.find(f => f.id === 'dp1');
+                    if (dp1) {
+                        dp1.amount += diff;
+                        dp1.exactPct = effectivePrice > 0 ? (dp1.amount / effectivePrice) : 0;
+                        dp1.pv = dp1.amount * (dp1.pvFactor || 1.0);
+                    }
+                }
+            }
+
+            // Populate display percentages and smart group matching
+            nonMnt.forEach(f => {
+                if (f._isZeroShifted || f.amount === 0) {
+                    f.exactPct = 0.0;
+                    f._pctVal = 0.0;
+                    f.displayPct = '0.00';
+                } else if (f.isFixedOverride && f._exactFixedPct !== undefined && f._exactFixedPct !== null) {
+                    f._pctVal = Math.round(f._exactFixedPct * 100) / 100;
+                    f.displayPct = f._pctVal.toFixed(2);
+                } else if (!f.isInst && !f.isMerged && f._exactFixedPct !== undefined && f._exactFixedPct !== null) {
+                    f._pctVal = Math.round(f._exactFixedPct * 100) / 100;
+                    f.displayPct = f._pctVal.toFixed(2);
+                } else if (!f.isInst && !f.isMerged && f._exactFixedVal !== undefined && f._exactFixedVal > 0) {
+                    let rawPct = effectivePrice > 0 ? (f.amount / effectivePrice * 100) : 0;
+                    f._pctVal = Math.round(rawPct * 100) / 100;
+                    f.displayPct = f._pctVal.toFixed(2);
+                } else if (!f.isInst && !f.isMerged && f.defaultPct !== undefined && !f._exactFixedVal) {
+                    f._pctVal = Math.round(f.defaultPct * 10000) / 100;
+                    f.displayPct = f._pctVal.toFixed(2);
+                }
+            });
+
+            let activeInsts = nonMnt.filter(f => (f.isInst || f.isMerged) && f.amount > 0 && !f._isZeroShifted);
+            activeInsts.forEach(f => {
+                if (f.isMerged) {
+                    let delivAmt = f._delivPortionAmt !== undefined ? f._delivPortionAmt : (f._savedMergedDelivAmt || 0);
+                    f._instPart = Math.max(0, f.amount - delivAmt);
+                } else {
+                    f._instPart = f.amount;
+                }
+            });
+
+            let grpList = [];
+            activeInsts.forEach(f => {
+                if (f.isFixedOverride && f._exactFixedPct !== undefined) {
+                    grpList.push({ flows: [f], targetVal: f._instPart });
+                    return;
+                }
+                let grp = grpList.find(g => Math.abs(g.targetVal - f._instPart) <= 5);
+                if (grp) {
+                    grp.flows.push(f);
+                } else {
+                    grpList.push({ flows: [f], targetVal: f._instPart });
+                }
+            });
+
+            grpList.forEach(g => {
+                let totalPart = g.flows.reduce((s, f) => s + f._instPart, 0);
+                let avgPart = totalPart / g.flows.length;
+                let uniformRawPct = effectivePrice > 0 ? (avgPart / effectivePrice * 100) : 0;
+                let uniformPctVal = Math.round(uniformRawPct * 100) / 100;
+                let uniformDisplayPct = uniformPctVal.toFixed(2);
+
+                g.flows.forEach(f => {
+                    if (f.isFixedOverride && f._exactFixedPct !== undefined) {
+                        f._pctVal = Math.round(f._exactFixedPct * 100) / 100;
+                        f.displayPct = f._pctVal.toFixed(2);
+                    } else if (f.isMerged) {
+                        let delivPct = (f._exactMergedDelivPct !== undefined && f._exactMergedDelivPct !== null)
+                            ? f._exactMergedDelivPct
+                            : (effectivePrice > 0 ? ((f._delivPortionAmt || 0) / effectivePrice * 100) : 0);
+                        let mergedPctVal = Math.round((delivPct + uniformPctVal) * 100) / 100;
+                        f._pctVal = mergedPctVal;
+                        f.displayPct = mergedPctVal.toFixed(2);
+                    } else {
+                        f._pctVal = uniformPctVal;
+                        f.displayPct = uniformDisplayPct;
+                    }
+                });
+            });
+
+            nonMnt.forEach(f => {
+                if (f.displayPct === undefined || f.displayPct === null) {
+                    let rawPct = effectivePrice > 0 ? (f.amount / effectivePrice * 100) : 0;
+                    f._pctVal = Math.round(rawPct * 100) / 100;
+                    f.displayPct = f._pctVal.toFixed(2);
+                }
+            });
+
+            globalCustomFlows.forEach(f => {
+                if (f.isMnt) {
+                    f.exactPct = 0.04;
+                    f.displayPct = '4.00';
+                }
+            });
+
             globalCustomFlows = reconcileIntegerInstallments(globalCustomFlows, effectivePrice);
             globalCustomFlows = applyPerfectPercentages(globalCustomFlows, Math.round(effectivePrice));
             window.globalCustomFlows = globalCustomFlows;
@@ -3404,7 +4157,7 @@ function calculate() {
         if (offerTotPvEl) offerTotPvEl.innerText = formatCurr(offerPv);
         
         let offerPreDelivPct = 0;
-        let delivMonth = currentProject === 'Zomra' ? 37 : 48;
+        let delivMonth = (currentProject === 'Zomra') ? 37 : (currentProject === 'Perla' ? 51 : 48);
         let offerNonMntTot = globalCustomFlows.filter(f => !f.isMnt).reduce((s, f) => s + (f.amount || 0), 0);
         let offerPreAmt = 0;
         globalCustomFlows.forEach(f => {
@@ -3572,8 +4325,8 @@ function renderTable(flows, tbodyId) {
         sumOfPcts += parseFloat(cf.displayPct) || 0;
     });
 
-    // Strictly reconcile displayed totalAmt to exact sum of integer amounts in nonMntFlows
-    totalAmt = nonMntFlows.reduce((sum, f) => sum + Math.round(f.amount || 0), 0);
+    // Strictly reconcile displayed totalAmt to exact sum of amounts in nonMntFlows matching Excel M14
+    totalAmt = nonMntFlows.reduce((sum, f) => sum + (f.amount || 0), 0);
 
     let trTotal = document.createElement('tr');
     trTotal.style.backgroundColor = '#e2efda';
@@ -3696,6 +4449,17 @@ window.applyTableEdits = function(callerEl) {
     if (!tbody) return;
     if (!window.globalTableOverrides) window.globalTableOverrides = {};
     
+    // If user edits an installment manually, uncheck fixed-inst-toggle so remaining installments dynamically balance
+    if (callerEl && callerEl.closest) {
+        let tr = callerEl.closest('tr');
+        if (tr && tr.dataset && tr.dataset.flowId && tr.dataset.flowId.startsWith('inst_')) {
+            let fToggle = document.getElementById('fixed-inst-toggle');
+            if (fToggle && fToggle.checked) {
+                fToggle.checked = false;
+            }
+        }
+    }
+    
     // If a specific input element triggered onchange (callerEl), process that row specifically
     if (callerEl && callerEl.closest) {
         let tr = callerEl.closest('tr');
@@ -3753,6 +4517,15 @@ window.applyTableEdits = function(callerEl) {
                 
                 let pctChanged = Math.abs(typedPct - currentPct) > 0.001;
                 let amtChanged = Math.abs(typedAmt - currentAmt) > 0.50;
+                
+                if (pctChanged || amtChanged) {
+                    if (flowId.startsWith('inst_')) {
+                        let fToggle = document.getElementById('fixed-inst-toggle');
+                        if (fToggle && fToggle.checked) {
+                            fToggle.checked = false;
+                        }
+                    }
+                }
                 
                 if (pctChanged) {
                     if (!window.globalTableOverrides[flowId]) window.globalTableOverrides[flowId] = {};
@@ -4322,7 +5095,7 @@ async function populateTemplateWorkbook(workbook, offerPrice) {
             itemCounter++;
             let isFirst = j === 0;
             let itemAmt = Math.round(item.amount || 0);
-            let exactRatio = (item.exactPct !== undefined && !isNaN(item.exactPct)) ? item.exactPct : (offerPrice > 0 ? (itemAmt / offerPrice) : 0);
+            let exactRatio = (!item || item._isZeroShifted || !item.amount || item.amount <= 0) ? 0.0 : (offerPrice > 0 ? (itemAmt / offerPrice) : 0);
             
             if (rowIdx >= totalRowIdx) {
                 ws.spliceRows(totalRowIdx, 0, []);
@@ -4475,7 +5248,7 @@ function exportExcelFallback(offerPrice) {
             grpName = 'Year ' + y;
         }
         let itemAmt = Math.round(f.amount || 0);
-        let exactRatio = (f.exactPct !== undefined && !isNaN(f.exactPct)) ? f.exactPct : (offerPrice > 0 ? (itemAmt / offerPrice) : 0);
+        let exactRatio = (!f || f._isZeroShifted || !f.amount || f.amount <= 0) ? 0.0 : (offerPrice > 0 ? (itemAmt / offerPrice) : 0);
         let row = [
             grpName,
             f.label,
@@ -4668,49 +5441,115 @@ window.clearTargetPrice = function() {
     calculate();
 };
 
-window.copyExcelPercentages = function() {
+window.getExcelPercentagesText = function() {
     if (!window.globalCustomFlows || window.globalCustomFlows.length === 0) {
-        alert('لا توجد بيانات متاحة للنسخ.');
-        return;
+        return '';
     }
     let nonMnt = window.globalCustomFlows.filter(f => !f.isMnt);
-    let offerAmtText = document.getElementById('offer-total-amt') ? document.getElementById('offer-total-amt').innerText : '';
-    let offerPrice = parseFloat(offerAmtText.replace(/[^0-9.-]+/g, '')) || window.lastCalculatedPrice || basePriceCache || 0;
+    let offerPrice = window.lastCalculatedPrice || basePriceCache || 0;
     
-    let lines = nonMnt.map(f => {
-        let ratio;
-        if (f._isZeroShifted) {
-            ratio = 0.0;
-        } else if (f._exactFixedPct !== undefined && f._exactFixedPct !== null) {
-            ratio = f._exactFixedPct / 100.0;
-        } else if (!f.isInst && !f.isMerged && f.defaultPct !== undefined && !f._exactFixedVal) {
-            ratio = f.defaultPct;
-        } else if (f.exactPct !== undefined && !isNaN(f.exactPct)) {
-            ratio = f.exactPct;
+    let freqEl = document.getElementById('payment-frequency');
+    let freqMonths = (freqEl && parseInt(freqEl.value) === 2) ? 6 : 3;
+
+    let isPerla = (currentProject === 'Perla');
+    let rowCount = isPerla ? 42 : 43;
+    let excelRatios = new Array(rowCount).fill(0.0);
+
+    let dp1Flow = nonMnt.find(f => f.id === 'dp1');
+    let dp2Flow = nonMnt.find(f => f.id === 'dp2');
+    let addlFlow = nonMnt.find(f => f.id === 'addl');
+    let delivFlow = nonMnt.find(f => f.id === 'deliv');
+    let instFlows = nonMnt.filter(f => (f.isInst || f.isMerged));
+
+    let totalNonMntAmt = nonMnt.reduce((s, f) => s + Math.round(f.amount || 0), 0);
+    let effPrice = totalNonMntAmt > 0 ? totalNonMntAmt : offerPrice;
+
+    let getRatio = (flow) => {
+        if (!flow || flow._isZeroShifted || !flow.amount || flow.amount <= 0) return 0.0;
+        if (flow.exactPct !== undefined && !isNaN(flow.exactPct) && flow.exactPct > 0) return flow.exactPct;
+        return effPrice > 0 ? (flow.amount / effPrice) : 0.0;
+    };
+
+    if (isPerla) {
+        if (dp1Flow) excelRatios[0] = getRatio(dp1Flow);
+        if (dp2Flow) excelRatios[1] = getRatio(dp2Flow);
+
+        if (freqMonths === 6) {
+            instFlows.forEach((inst, idx) => {
+                let rIdx = 3 + idx * 2;
+                if (rIdx < rowCount) {
+                    excelRatios[rIdx] = getRatio(inst);
+                }
+            });
         } else {
-            ratio = offerPrice > 0 ? (f.amount || 0) / offerPrice : 0;
+            instFlows.forEach((inst, idx) => {
+                let rIdx = 2 + idx;
+                if (rIdx < rowCount) {
+                    excelRatios[rIdx] = getRatio(inst);
+                }
+            });
         }
-        return ratio.toFixed(8);
-    });
-    
-    let textToCopy = lines.join('\r\n');
+
+        if (delivFlow && delivFlow.amount > 0 && !instFlows.some(f => f.hasDeliv || (f.mergedIds && f.mergedIds.includes('deliv')))) {
+            excelRatios[17] += getRatio(delivFlow);
+        }
+    } else {
+        if (dp1Flow) excelRatios[0] = getRatio(dp1Flow);
+        if (dp2Flow) excelRatios[1] = getRatio(dp2Flow);
+        if (addlFlow) excelRatios[3] = getRatio(addlFlow);
+
+        if (freqMonths === 6) {
+            instFlows.forEach((inst, idx) => {
+                let rIdx = 4 + idx * 2;
+                if (rIdx < 43) {
+                    excelRatios[rIdx] = getRatio(inst);
+                }
+            });
+        } else {
+            instFlows.forEach((inst, idx) => {
+                let rIdx = (idx === 0) ? 2 : (3 + idx);
+                if (rIdx < 43) {
+                    excelRatios[rIdx] = getRatio(inst);
+                }
+            });
+        }
+
+        if (delivFlow && !instFlows.some(f => f.hasDeliv || (f.mergedIds && f.mergedIds.includes('deliv')))) {
+            excelRatios[14] += getRatio(delivFlow);
+        }
+    }
+
+    let sumR = excelRatios.reduce((s, v) => s + v, 0);
+    if (sumR > 0 && Math.abs(1.0 - sumR) > 1e-12) {
+        for (let i = rowCount - 1; i >= 0; i--) {
+            if (excelRatios[i] > 0) {
+                excelRatios[i] += (1.0 - sumR);
+                break;
+            }
+        }
+    }
+
+    let lines = excelRatios.map(r => r.toFixed(12));
+    return lines.join('\r\n');
+};
+
+window.copyExcelPercentages = function() {
+    let textToCopy = window.getExcelPercentagesText();
+    if (!textToCopy) {
+        alert('لا توجد بيانات جدول لنسخها.');
+        return;
+    }
+    let lines = textToCopy.split('\r\n');
+
     if (navigator.clipboard && navigator.clipboard.writeText) {
         navigator.clipboard.writeText(textToCopy).then(() => {
-            alert('✅ تم نسخ عمود النسب بالدقة الكاملة (Full Precision) بنجاح!\n\nيمكنك الآن فتح شيت الإكسيل (Calculator) والوقوف على أول خلية في عمود النسب (L16) وعمل لصق (Ctrl+V).\nستجد السعر وجميع مبالغ الأقساط متطابقة 100% بالملي وبدون أي فرق جنيه واحد أو علامة تحذير.');
+            alert('تم نسخ ' + lines.length + ' نسبة بنجاح لصقها في عمود L (من L16) في شيت الإكسيل بدقة 12 رقم عشري.');
         }).catch(() => {
-            fallbackCopyText(textToCopy);
+            copyFallback(textToCopy);
         });
     } else {
-        fallbackCopyText(textToCopy);
+        copyFallback(textToCopy);
     }
 };
 
-function fallbackCopyText(text) {
-    let ta = document.createElement('textarea');
-    ta.value = text;
-    document.body.appendChild(ta);
-    ta.select();
-    document.execCommand('copy');
-    document.body.removeChild(ta);
-    alert('✅ تم نسخ عمود النسب بالدقة الكاملة (Full Precision) بنجاح!\n\nيمكنك الآن فتح شيت الإكسيل (Calculator) والوقوف على أول خلية في عمود النسب (L16) وعمل لصق (Ctrl+V).\nستجد السعر وجميع مبالغ الأقساط متطابقة 100% بالملي وبدون أي فرق جنيه واحد أو علامة تحذير.');
-}
+

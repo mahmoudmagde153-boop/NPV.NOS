@@ -38,7 +38,7 @@
             <div class="header-inputs">
                 <div class="input-group">
                     <label>Base Price (EGP)</label>
-                    <input type="number" id="base-price" value="5000000" oninput="delayedCalculate()">
+                    <input type="number" id="base-price" value="28158648" oninput="delayedCalculate()">
                 </div>
                 <div class="input-group">
                     <label>Contract Date</label>
@@ -46,7 +46,7 @@
                 </div>
                 <div class="input-group">
                     <label>Duration (Years)</label>
-                    <input type="number" id="duration-years" value="8" min="1" max="15" oninput="delayedCalculate()">
+                    <input type="number" id="duration-years" value="8" min="1" max="10" oninput="delayedCalculate()">
                 </div>
                 <div class="input-group">
                     <label>Flexible Option</label>
@@ -277,11 +277,12 @@
                         <div class="input-group">
                             <label style="font-size: 0.85rem; font-weight: bold; color: var(--accent-blue);">وجهة الترحيل (أين يذهب المبلغ؟)</label>
                             <select id="inst-shift-dest-mode" onchange="onShiftDestModeChange(); delayedCalculate();" style="padding: 8px; font-weight: bold;">
-                                <option value="down" selected>⬇️ ترحيل على باقي الأقساط لحد تحت (تلقائي)</option>
-                                <option value="specific">🎯 ترحيل على أقساط محددة بالرقم (مثال: 12، 16)</option>
+                                <option value="all" selected>🌐 توزيع بالتساوي على جميع الأقساط (قبل وبعد التصفير)</option>
+                                <option value="down">⬇️ ترحيل على باقي الأقساط التالية لحد تحت</option>
+                                <option value="specific">🎯 ترحيل على أقساط محددة بالرقم (مثال: 5، 6)</option>
                                 <option value="balloon">🎈 ترحيل على بالون نهاية السنة (Balloon)</option>
                             </select>
-                            <span id="dest-mode-desc" style="font-size: 0.72rem; color: var(--text-muted); margin-top: 3px;">يوزع المبلغ بالتساوي على الأقساط التالية له فقط</span>
+                            <span id="dest-mode-desc" style="font-size: 0.72rem; color: var(--text-muted); margin-top: 3px;">يوزع المبلغ بالتساوي على جميع الأقساط المتبقية في الخطة (قبل وبعد التصفير)</span>
                         </div>
                         <div class="input-group" id="target-inst-ids-wrapper" style="display: none;">
                             <label style="font-size: 0.85rem; font-weight: bold; color: #2ecc71;">الأقساط المستهدفة بالرقم</label>
@@ -543,7 +544,7 @@
         </div>
     </div>
 
-    <script src="app.js?v=20261103_v28"></script>
+    <script src="app.js?v=20261111_v42"></script>
 </body>
 </html>
 
