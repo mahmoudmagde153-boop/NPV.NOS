@@ -22,12 +22,16 @@
         <h2 style="margin:0; font-size:1.2rem; color:var(--text)">Advanced NPV System</h2>
         <div style="margin-top: 8px; display: inline-flex; align-items: center; gap: 8px; background: rgba(30, 41, 59, 0.85); border: 1px solid #10b981; border-radius: 20px; padding: 4px 14px; font-size: 0.85rem; color: #10b981; font-weight: 600;">
             <span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:#10b981; box-shadow: 0 0 8px #10b981;"></span>
-            v2026.11.03_v28 - Flexible Plan 100% Excel Calibrated (+6.38% Parity) & Multi-Option Closed-Loop Parity</div>
+            v2026.11.13_v46 - تحديث زمرة الشامل (أقساط 2.65625% واستلام 7.65625% متطابق 100% مع الإكسيل)</div>
     </header>
+    <div style="background: linear-gradient(90deg, #064e3b, #047857); border: 2px solid #10b981; color: #ffffff; padding: 10px 18px; border-radius: 8px; margin: 12px auto; max-width: 1000px; text-align: center; font-size: 0.92rem; font-weight: bold; box-shadow: 0 4px 12px rgba(0,0,0,0.3);">
+        🚀 تم تحديث النظام بالكامل (v46) | أقساط زمرة الربع سنوية: <span style="color:#fde047;">747,964 ج.م (2.65625%)</span> — دفعة وقسط الاستلام: <span style="color:#fde047;">2,155,897 ج.م (7.65625%)</span> متطابق بالمليم مع شيت الإكسيل!
+    </div>
 
     <div class="project-selector">
         <button class="tab-btn active" onclick="setProject('Zomra')">Project Zomra</button>
         <button class="tab-btn" onclick="setProject('Perla')">Project Perla</button>
+        <button class="tab-btn" onclick="setProject('ORB')">Project ORB</button>
         <button class="tab-btn" onclick="setProject('Jirian')">Project Jirian</button>
     </div>
 
@@ -81,6 +85,7 @@
                 <button class="btn btn-primary" onclick="exportPDF()">📄 Export PDF</button>
                 <button class="btn btn-primary" onclick="exportExcel()" style="background-color: #217346; color: white; border-color: #217346;">📊 Export Excel</button>
                 <button class="btn btn-secondary" onclick="copyExcelPercentages()" style="background-color: #0d6efd; color: white; border-color: #0d6efd;" title="نسخ عمود النسب بدقة متناهية للصقها مباشرة في شيت الـ Calculator بالخلية L16">📋 نسخ نسب الإكسيل</button>
+                <button class="btn btn-secondary" onclick="copyFullTableTSV()" style="background-color: #17a2b8; color: white; border-color: #17a2b8;" title="نسخ جدول الدفعات والتواريخ بالكامل بصيغة TSV للصقه مباشرة في أي شيت إكسيل بـ Ctrl+V">📊 نسخ جدول الدفعات بالكامل (Excel)</button>
                 <input type="file" id="template-upload" accept=".xlsx, .xlsm" style="display:none;" onchange="handleTemplateUpload(event)">
                 <button class="btn btn-primary" onclick="document.getElementById('template-upload').click()" style="background-color: #107c41; color: white; border-color: #107c41;">📤 Export to Template</button>
             </div>
@@ -544,7 +549,7 @@
         </div>
     </div>
 
-    <script src="app.js?v=20261111_v42"></script>
+    <script src="app_v46.js"></script>
 </body>
 </html>
 
