@@ -1116,19 +1116,324 @@ function renderBaseInputs() {
     document.getElementById('base-inputs').innerHTML = html;
 }
 
-function renderCustomInputs() {
-    let html = '';
-    let dp1Label = currentProject === 'Jirian' ? 'Down Payment (5%)' : 'Down Payment 1';
-    let dp2Label = currentProject === 'Jirian' ? '1st Dec Payment (5%)' : 'Down Payment 2';
-    html += createInputGroup('dp1', dp1Label);
-    html += createInputGroup('dp2', dp2Label);
-    
-    if (currentProject === 'Zomra') {
-        html += createInputGroup('addl', '6-Months Payment');
-        html += createInputGroup('deliv', 'Delivery Payment');
+window.toggleSplitDP1 = function(isSplit) {
+    if (!window.customMilestonesState) window.customMilestonesState = {};
+    window.customMilestonesState.splitDP1 = Boolean(isSplit);
+    let isZomra = (currentProject === 'Zomra');
+    if (isSplit) {
+        window.customMilestonesState.dp1_a_val = isZomra ? 1.25 : 2.5;
+        window.customMilestonesState.dp1_b_val = isZomra ? 1.25 : 2.5;
     }
-    document.getElementById('custom-inputs').innerHTML = html;
+    renderCustomInputs();
+    calculate();
+};
+
+window.toggleSplitDP2 = function(isSplit) {
+    if (!window.customMilestonesState) window.customMilestonesState = {};
+    window.customMilestonesState.splitDP2 = Boolean(isSplit);
+    let isZomra = (currentProject === 'Zomra');
+    if (isSplit) {
+        window.customMilestonesState.dp2_a_val = isZomra ? 1.25 : 2.5;
+        window.customMilestonesState.dp2_b_val = isZomra ? 1.25 : 2.5;
+    }
+    renderCustomInputs();
+    calculate();
+};
+
+window.onCustomMilestoneChange = function(field, val) {
+    if (!window.customMilestonesState) window.customMilestonesState = {};
+    window.customMilestonesState[field] = val;
+    delayedCalculate();
+};
+
+window.addExtraPayment = function() {
+    if (!window.customMilestonesState) window.customMilestonesState = {};
+    if (!Array.isArray(window.customMilestonesState.extraPayments)) {
+        window.customMilestonesState.extraPayments = [];
+    }
+    let dateEl = document.getElementById('contract-date');
+    let contractDateStr = dateEl ? dateEl.value : '';
+    if (!contractDateStr || isNaN(new Date(contractDateStr).getTime())) contractDateStr = formatDate(new Date());
+
+    let count = window.customMilestonesState.extraPayments.length + 1;
+    let defDate = formatDate(addMonths(contractDateStr, count * 6));
+    window.customMilestonesState.extraPayments.push({
+        id: 'extra_' + Date.now(),
+        label: 'دفعة إضافية ' + count,
+        val: 2.5,
+        type: 'pct',
+        date: defDate
+    });
+    renderCustomInputs();
+    calculate();
+};
+
+window.removeExtraPayment = function(id) {
+    if (!window.customMilestonesState || !window.customMilestonesState.extraPayments) return;
+    window.customMilestonesState.extraPayments = window.customMilestonesState.extraPayments.filter(e => e.id !== id);
+    renderCustomInputs();
+    calculate();
+};
+
+window.onExtraPaymentChange = function(id, field, val) {
+    if (!window.customMilestonesState || !window.customMilestonesState.extraPayments) return;
+    let item = window.customMilestonesState.extraPayments.find(e => e.id === id);
+    if (item) {
+        item[field] = val;
+    }
+    delayedCalculate();
+};
+
+function renderCustomInputs() {
+    let container = document.getElementById('custom-inputs');
+    if (!container) return;
+    
+    let isZomra = (currentProject === 'Zomra');
+    let s = window.customMilestonesState || {};
+    
+    let dateEl = document.getElementById('contract-date');
+    let cDateStr = dateEl ? dateEl.value : '';
+    if (!cDateStr || isNaN(new Date(cDateStr).getTime())) cDateStr = formatDate(new Date());
+
+    let defDp1Pct = isZomra ? 2.5 : 5.0;
+    let defDp2Pct = isZomra ? 2.5 : 5.0;
+
+    let dp1Label = currentProject === 'Jirian' ? 'Down Payment (5%)' : 'المقدم الأول (Down Payment 1)';
+    let dp2Label = currentProject === 'Jirian' ? '1st Dec Payment (5%)' : (isZomra ? 'الدفعة الثانية بعد شهر (DP 2)' : 'الدفعة الثانية بعد 3 شهور (DP 2)');
+
+    let html = `
+    <div style="background: rgba(255, 255, 255, 0.03); border: 1.5px solid rgba(212, 175, 55, 0.35); border-radius: 8px; padding: 14px; margin-bottom: 15px; width: 100%; box-sizing: border-box;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; flex-wrap: wrap; gap: 8px;">
+            <div style="display: flex; align-items: center; gap: 8px;">
+                <span style="font-size: 1.25rem;">💎</span>
+                <span style="font-weight: bold; color: var(--gold); font-size: 1rem;">الدفعات والمقدمات خارج الأقساط (Custom Milestones & Extra Payments)</span>
+            </div>
+            <button type="button" class="btn btn-outline" onclick="addExtraPayment()" style="border-color: var(--accent-blue); color: var(--accent-blue); padding: 4px 12px; font-size: 0.82rem; font-weight: bold; cursor: pointer; display: inline-flex; align-items: center; gap: 4px;">
+                ➕ إضافة دفعة خارج الأقساط
+            </button>
+        </div>
+
+        <div style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 12px; line-height: 1.4;">
+            يمكنك تقسيم الـ 5% إلى دفعتين (2.5% + 2.5%) مع تحديد تاريخ كل دفعة، أو إضافة دفعات سنوية/مخصصة خارج الأقساط. تُخصم قيمتها وتُوزع الأقساط تلقائياً بدقة 100%.
+        </div>
+
+        <!-- Down Payment 1 -->
+        <div style="margin-bottom: 10px;">
+    `;
+
+    // DP1 Split vs Single
+    if (s.splitDP1) {
+        let v1a = s.dp1_a_val !== undefined ? s.dp1_a_val : (isZomra ? 1.25 : 2.5);
+        let t1a = s.dp1_a_type || 'pct';
+        let d1a = s.dp1_a_date || cDateStr;
+
+        let v1b = s.dp1_b_val !== undefined ? s.dp1_b_val : (isZomra ? 1.25 : 2.5);
+        let t1b = s.dp1_b_type || 'pct';
+        let d1b = s.dp1_b_date || formatDate(addMonths(cDateStr, 1));
+
+        html += `
+        <div style="background: rgba(56, 189, 248, 0.06); border: 1.5px solid rgba(56, 189, 248, 0.4); border-radius: 6px; padding: 10px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                <span style="font-weight: bold; color: var(--accent-blue); font-size: 0.88rem;">✂️ المقدم الأول مُقسّم (1أ + 1ب)</span>
+                <button type="button" class="btn btn-outline" onclick="toggleSplitDP1(false)" style="padding: 2px 8px; font-size: 0.75rem; border-color: rgba(255,255,255,0.3); color: #ddd; cursor: pointer;">
+                    🔗 دمج لدفعة واحدة (${defDp1Pct}%)
+                </button>
+            </div>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+                <div style="background: rgba(0,0,0,0.2); padding: 8px; border-radius: 4px;">
+                    <label style="font-size: 0.75rem; color: #aaa; margin-bottom: 3px; display: block;">دفعة 1أ (عند الحجز/التعاقد):</label>
+                    <div style="display: flex; gap: 4px; margin-bottom: 4px;">
+                        <input type="number" step="0.01" id="dp1-a-val" value="${v1a}" oninput="onCustomMilestoneChange('dp1_a_val', this.value)" style="width: 60%; padding: 5px;">
+                        <select id="dp1-a-type" onchange="onCustomMilestoneChange('dp1_a_type', this.value)" style="width: 40%; padding: 5px;">
+                            <option value="pct" ${t1a === 'pct' ? 'selected' : ''}>%</option>
+                            <option value="amt" ${t1a === 'amt' ? 'selected' : ''}>EGP</option>
+                        </select>
+                    </div>
+                    <input type="date" id="dp1-a-date" value="${d1a}" onchange="onCustomMilestoneChange('dp1_a_date', this.value)" style="width: 100%; padding: 5px; box-sizing: border-box;">
+                </div>
+                <div style="background: rgba(0,0,0,0.2); padding: 8px; border-radius: 4px;">
+                    <label style="font-size: 0.75rem; color: #aaa; margin-bottom: 3px; display: block;">دفعة 1ب (دفعة التعاقد / بعد شهر):</label>
+                    <div style="display: flex; gap: 4px; margin-bottom: 4px;">
+                        <input type="number" step="0.01" id="dp1-b-val" value="${v1b}" oninput="onCustomMilestoneChange('dp1_b_val', this.value)" style="width: 60%; padding: 5px;">
+                        <select id="dp1-b-type" onchange="onCustomMilestoneChange('dp1_b_type', this.value)" style="width: 40%; padding: 5px;">
+                            <option value="pct" ${t1b === 'pct' ? 'selected' : ''}>%</option>
+                            <option value="amt" ${t1b === 'amt' ? 'selected' : ''}>EGP</option>
+                        </select>
+                    </div>
+                    <input type="date" id="dp1-b-date" value="${d1b}" onchange="onCustomMilestoneChange('dp1_b_date', this.value)" style="width: 100%; padding: 5px; box-sizing: border-box;">
+                </div>
+            </div>
+        </div>
+        `;
+    } else {
+        let v1 = s.dp1_val !== undefined ? s.dp1_val : '';
+        let t1 = s.dp1_type || 'pct';
+        let d1 = s.dp1_date || cDateStr;
+        html += `
+        <div style="background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.08); border-radius: 6px; padding: 10px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                <label style="font-size: 0.85rem; font-weight: bold; color: var(--gold); margin: 0;">${dp1Label}</label>
+                <button type="button" class="btn btn-outline" onclick="toggleSplitDP1(true)" style="padding: 2px 8px; font-size: 0.75rem; border-color: var(--accent-blue); color: var(--accent-blue); cursor: pointer;">
+                    ✂️ تقسيم لدفعتين (2.5% + 2.5%)
+                </button>
+            </div>
+            <div style="display: grid; grid-template-columns: 1fr 90px 1.2fr; gap: 6px; align-items: center;">
+                <input type="number" step="0.01" id="dp1-val" value="${v1}" oninput="onCustomMilestoneChange('dp1_val', this.value)" placeholder="افتراضي ${defDp1Pct}%" style="padding: 6px;">
+                <select id="dp1-type" onchange="onCustomMilestoneChange('dp1_type', this.value)" style="padding: 6px;">
+                    <option value="pct" ${t1 === 'pct' ? 'selected' : ''}>%</option>
+                    <option value="amt" ${t1 === 'amt' ? 'selected' : ''}>EGP</option>
+                </select>
+                <input type="date" id="dp1-date" value="${d1}" onchange="onCustomMilestoneChange('dp1_date', this.value)" style="padding: 6px;" title="تاريخ الدفعة">
+            </div>
+        </div>
+        `;
+    }
+    html += `</div>`; // End DP1
+
+    // DP2 Split vs Single
+    html += `<div style="margin-bottom: 10px;">`;
+    let defMonth2 = isZomra ? 1 : 3;
+    let defDate2 = formatDate(addMonths(cDateStr, defMonth2));
+
+    if (s.splitDP2) {
+        let v2a = s.dp2_a_val !== undefined ? s.dp2_a_val : (isZomra ? 1.25 : 2.5);
+        let t2a = s.dp2_a_type || 'pct';
+        let d2a = s.dp2_a_date || formatDate(addMonths(cDateStr, isZomra ? 1 : 2));
+
+        let v2b = s.dp2_b_val !== undefined ? s.dp2_b_val : (isZomra ? 1.25 : 2.5);
+        let t2b = s.dp2_b_type || 'pct';
+        let d2b = s.dp2_b_date || formatDate(addMonths(cDateStr, isZomra ? 2 : 3));
+
+        html += `
+        <div style="background: rgba(56, 189, 248, 0.06); border: 1.5px solid rgba(56, 189, 248, 0.4); border-radius: 6px; padding: 10px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                <span style="font-weight: bold; color: var(--accent-blue); font-size: 0.88rem;">✂️ الدفعة الثانية مُقسّمة (2أ + 2ب)</span>
+                <button type="button" class="btn btn-outline" onclick="toggleSplitDP2(false)" style="padding: 2px 8px; font-size: 0.75rem; border-color: rgba(255,255,255,0.3); color: #ddd; cursor: pointer;">
+                    🔗 دمج لدفعة واحدة (${defDp2Pct}%)
+                </button>
+            </div>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+                <div style="background: rgba(0,0,0,0.2); padding: 8px; border-radius: 4px;">
+                    <label style="font-size: 0.75rem; color: #aaa; margin-bottom: 3px; display: block;">دفعة 2أ:</label>
+                    <div style="display: flex; gap: 4px; margin-bottom: 4px;">
+                        <input type="number" step="0.01" id="dp2-a-val" value="${v2a}" oninput="onCustomMilestoneChange('dp2_a_val', this.value)" style="width: 60%; padding: 5px;">
+                        <select id="dp2-a-type" onchange="onCustomMilestoneChange('dp2_a_type', this.value)" style="width: 40%; padding: 5px;">
+                            <option value="pct" ${t2a === 'pct' ? 'selected' : ''}>%</option>
+                            <option value="amt" ${t2a === 'amt' ? 'selected' : ''}>EGP</option>
+                        </select>
+                    </div>
+                    <input type="date" id="dp2-a-date" value="${d2a}" onchange="onCustomMilestoneChange('dp2_a_date', this.value)" style="width: 100%; padding: 5px; box-sizing: border-box;">
+                </div>
+                <div style="background: rgba(0,0,0,0.2); padding: 8px; border-radius: 4px;">
+                    <label style="font-size: 0.75rem; color: #aaa; margin-bottom: 3px; display: block;">دفعة 2ب:</label>
+                    <div style="display: flex; gap: 4px; margin-bottom: 4px;">
+                        <input type="number" step="0.01" id="dp2-b-val" value="${v2b}" oninput="onCustomMilestoneChange('dp2_b_val', this.value)" style="width: 60%; padding: 5px;">
+                        <select id="dp2-b-type" onchange="onCustomMilestoneChange('dp2_b_type', this.value)" style="width: 40%; padding: 5px;">
+                            <option value="pct" ${t2b === 'pct' ? 'selected' : ''}>%</option>
+                            <option value="amt" ${t2b === 'amt' ? 'selected' : ''}>EGP</option>
+                        </select>
+                    </div>
+                    <input type="date" id="dp2-b-date" value="${d2b}" onchange="onCustomMilestoneChange('dp2_b_date', this.value)" style="width: 100%; padding: 5px; box-sizing: border-box;">
+                </div>
+            </div>
+        </div>
+        `;
+    } else {
+        let v2 = s.dp2_val !== undefined ? s.dp2_val : '';
+        let t2 = s.dp2_type || 'pct';
+        let d2 = s.dp2_date || defDate2;
+        html += `
+        <div style="background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.08); border-radius: 6px; padding: 10px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                <label style="font-size: 0.85rem; font-weight: bold; color: var(--gold); margin: 0;">${dp2Label}</label>
+                <button type="button" class="btn btn-outline" onclick="toggleSplitDP2(true)" style="padding: 2px 8px; font-size: 0.75rem; border-color: var(--accent-blue); color: var(--accent-blue); cursor: pointer;">
+                    ✂️ تقسيم لدفعتين (2.5% + 2.5%)
+                </button>
+            </div>
+            <div style="display: grid; grid-template-columns: 1fr 90px 1.2fr; gap: 6px; align-items: center;">
+                <input type="number" step="0.01" id="dp2-val" value="${v2}" oninput="onCustomMilestoneChange('dp2_val', this.value)" placeholder="افتراضي ${defDp2Pct}%" style="padding: 6px;">
+                <select id="dp2-type" onchange="onCustomMilestoneChange('dp2_type', this.value)" style="padding: 6px;">
+                    <option value="pct" ${t2 === 'pct' ? 'selected' : ''}>%</option>
+                    <option value="amt" ${t2 === 'amt' ? 'selected' : ''}>EGP</option>
+                </select>
+                <input type="date" id="dp2-date" value="${d2}" onchange="onCustomMilestoneChange('dp2_date', this.value)" style="padding: 6px;" title="تاريخ الدفعة">
+            </div>
+        </div>
+        `;
+    }
+    html += `</div>`; // End DP2
+
+    // Project-specific additions (Zomra)
+    if (isZomra) {
+        let vAddl = s.addl_val !== undefined ? s.addl_val : '';
+        let tAddl = s.addl_type || 'pct';
+        let dAddl = s.addl_date || formatDate(addMonths(cDateStr, 6));
+
+        let vDeliv = s.deliv_val !== undefined ? s.deliv_val : '';
+        let tDeliv = s.deliv_type || 'pct';
+        let dDeliv = s.deliv_date || formatDate(addMonths(cDateStr, 37));
+
+        html += `
+        <div style="margin-bottom: 10px; background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.08); border-radius: 6px; padding: 10px;">
+            <label style="font-size: 0.85rem; font-weight: bold; color: var(--gold); margin-bottom: 6px; display: block;">دفعة بعد 6 شهور (6-Months Payment)</label>
+            <div style="display: grid; grid-template-columns: 1fr 90px 1.2fr; gap: 6px; align-items: center;">
+                <input type="number" step="0.01" id="addl-val" value="${vAddl}" oninput="onCustomMilestoneChange('addl_val', this.value)" placeholder="افتراضي 5%" style="padding: 6px;">
+                <select id="addl-type" onchange="onCustomMilestoneChange('addl_type', this.value)" style="padding: 6px;">
+                    <option value="pct" ${tAddl === 'pct' ? 'selected' : ''}>%</option>
+                    <option value="amt" ${tAddl === 'amt' ? 'selected' : ''}>EGP</option>
+                </select>
+                <input type="date" id="addl-date" value="${dAddl}" onchange="onCustomMilestoneChange('addl_date', this.value)" style="padding: 6px;">
+            </div>
+        </div>
+
+        <div style="margin-bottom: 10px; background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.08); border-radius: 6px; padding: 10px;">
+            <label style="font-size: 0.85rem; font-weight: bold; color: var(--gold); margin-bottom: 6px; display: block;">دفعة الاستلام (Delivery Payment)</label>
+            <div style="display: grid; grid-template-columns: 1fr 90px 1.2fr; gap: 6px; align-items: center;">
+                <input type="number" step="0.01" id="deliv-val" value="${vDeliv}" oninput="onCustomMilestoneChange('deliv_val', this.value)" placeholder="افتراضي 5%" style="padding: 6px;">
+                <select id="deliv-type" onchange="onCustomMilestoneChange('deliv_type', this.value)" style="padding: 6px;">
+                    <option value="pct" ${tDeliv === 'pct' ? 'selected' : ''}>%</option>
+                    <option value="amt" ${tDeliv === 'amt' ? 'selected' : ''}>EGP</option>
+                </select>
+                <input type="date" id="deliv-date" value="${dDeliv}" onchange="onCustomMilestoneChange('deliv_date', this.value)" style="padding: 6px;">
+            </div>
+        </div>
+        `;
+    }
+
+    // Extra Payments (if any)
+    if (s.extraPayments && s.extraPayments.length > 0) {
+        html += `<div style="margin-top: 10px; display: flex; flex-direction: column; gap: 8px;">`;
+        s.extraPayments.forEach((extra, idx) => {
+            html += `
+            <div style="background: rgba(46, 204, 113, 0.05); border: 1.5px dashed rgba(46, 204, 113, 0.4); border-radius: 6px; padding: 10px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                    <div style="display: flex; align-items: center; gap: 6px; width: 70%;">
+                        <span style="color: #2ecc71; font-size: 0.9rem;">⭐</span>
+                        <input type="text" value="${escapeHtml(extra.label)}" oninput="onExtraPaymentChange('${extra.id}', 'label', this.value)" style="background: transparent; border: 1px solid rgba(255,255,255,0.2); color: #2ecc71; font-weight: bold; font-size: 0.88rem; padding: 2px 6px; border-radius: 4px; width: 100%;">
+                    </div>
+                    <button type="button" class="btn btn-outline" onclick="removeExtraPayment('${extra.id}')" style="padding: 2px 8px; font-size: 0.75rem; border-color: #e74c3c; color: #e74c3c; cursor: pointer;">
+                        🗑️ حذف
+                    </button>
+                </div>
+                <div style="display: grid; grid-template-columns: 1fr 90px 1.2fr; gap: 6px; align-items: center;">
+                    <input type="number" step="0.01" value="${extra.val !== undefined ? extra.val : ''}" oninput="onExtraPaymentChange('${extra.id}', 'val', this.value)" placeholder="القيمة" style="padding: 6px;">
+                    <select onchange="onExtraPaymentChange('${extra.id}', 'type', this.value)" style="padding: 6px;">
+                        <option value="pct" ${extra.type === 'pct' ? 'selected' : ''}>%</option>
+                        <option value="amt" ${extra.type === 'amt' ? 'selected' : ''}>EGP</option>
+                    </select>
+                    <input type="date" value="${extra.date}" onchange="onExtraPaymentChange('${extra.id}', 'date', this.value)" style="padding: 6px;">
+                </div>
+            </div>
+            `;
+        });
+        html += `</div>`;
+    }
+
+    html += `</div>`; // Close card
+    container.innerHTML = html;
 }
+
+
 
 // --- Engine ---
 function getPeriod(months) {
@@ -2654,7 +2959,8 @@ function applyPerfectPercentages(flows, totalAmt) {
         let uniformPctVal = Math.round(uniformRawPct * 100) / 100;
         let uniformDisplayPct = uniformPctVal.toFixed(2);
         let refInst = g.flows.find(f => !f.isMerged) || g.flows[0];
-        let exactInstPct = (refInst && refInst.defaultPct !== undefined && refInst.defaultPct > 0)
+        let isGroupMatchingDefault = (isAllInstsUniform && refInst && refInst.defaultPct !== undefined && refInst.defaultPct > 0 && Math.abs(refInst.defaultPct - (avgPart / validTotal)) < 0.0001);
+        let exactInstPct = isGroupMatchingDefault
             ? refInst.defaultPct
             : (validTotal > 0 ? (avgPart / validTotal) : (uniformRawPct / 100.0));
 
@@ -5678,124 +5984,208 @@ window.clearTargetPrice = function() {
     calculate();
 };
 
+// ==========================================
+// EXCEL PERCENTAGES & TSV CLIPBOARD EXPORT
+// ==========================================
+
+window.showToast = function(msg, isSuccess = true) {
+    let toast = document.getElementById('npv-toast-notification');
+    if (!toast) {
+        toast = document.createElement('div');
+        toast.id = 'npv-toast-notification';
+        toast.style.position = 'fixed';
+        toast.style.bottom = '24px';
+        toast.style.left = '50%';
+        toast.style.transform = 'translateX(-50%)';
+        toast.style.padding = '12px 24px';
+        toast.style.borderRadius = '8px';
+        toast.style.boxShadow = '0 8px 32px rgba(0,0,0,0.5)';
+        toast.style.zIndex = '999999';
+        toast.style.fontSize = '0.92rem';
+        toast.style.fontWeight = 'bold';
+        toast.style.display = 'flex';
+        toast.style.alignItems = 'center';
+        toast.style.gap = '10px';
+        toast.style.transition = 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)';
+        document.body.appendChild(toast);
+    }
+    toast.style.background = isSuccess ? 'linear-gradient(135deg, #1b3a24, #0d2818)' : 'linear-gradient(135deg, #3a1b1b, #280d0d)';
+    toast.style.border = isSuccess ? '1.5px solid #2ecc71' : '1.5px solid #e74c3c';
+    toast.style.color = '#fff';
+    toast.innerHTML = msg;
+    toast.style.opacity = '1';
+    toast.style.pointerEvents = 'auto';
+    clearTimeout(window._toastTimeout);
+    window._toastTimeout = setTimeout(() => {
+        toast.style.opacity = '0';
+        toast.style.pointerEvents = 'none';
+    }, 3200);
+};
+
 window.getExcelPercentagesText = function() {
     if (!window.globalCustomFlows || window.globalCustomFlows.length === 0) {
         return '';
     }
     let nonMnt = window.globalCustomFlows.filter(f => !f.isMnt);
-    let offerPrice = window.lastCalculatedPrice || basePriceCache || 0;
-    
-    let freqEl = document.getElementById('payment-frequency');
-    let freqMonths = (freqEl && parseInt(freqEl.value) === 2) ? 6 : 3;
+    let totalNonMntAmt = nonMnt.reduce((s, f) => s + Math.round(f.amount || 0), 0);
+    let offerPrice = totalNonMntAmt > 0 ? totalNonMntAmt : (window.lastCalculatedPrice || basePriceCache || 0);
 
-    let isPerla = (currentProject === 'Perla');
-    let isOrb = (currentProject === 'ORB');
     let isZomra = (currentProject === 'Zomra');
-    let isJirian = (currentProject === 'Jirian');
     let rowCount = isZomra ? 43 : 42;
     let excelRatios = new Array(rowCount).fill(0.0);
 
-    let dp1Flow = nonMnt.find(f => f.id === 'dp1');
-    let dp2Flow = nonMnt.find(f => f.id === 'dp2');
-    let addlFlow = nonMnt.find(f => f.id === 'addl');
-    let delivFlow = nonMnt.find(f => f.id === 'deliv');
-    let instFlows = nonMnt.filter(f => (f.isInst || f.isMerged));
-
-    let totalNonMntAmt = nonMnt.reduce((s, f) => s + Math.round(f.amount || 0), 0);
-    let effPrice = totalNonMntAmt > 0 ? totalNonMntAmt : offerPrice;
-
-    let getRatio = (flow) => {
-        if (!flow || flow._isZeroShifted || !flow.amount || flow.amount <= 0) return 0.0;
-        if (flow.exactPct !== undefined && !isNaN(flow.exactPct) && flow.exactPct > 0) {
-            return flow.exactPct;
-        }
-        return effPrice > 0 ? (flow.amount / effPrice) : 0.0;
-    };
-
-    if (isPerla || isOrb) {
-        if (dp1Flow) excelRatios[0] = getRatio(dp1Flow);
-        if (dp2Flow) excelRatios[1] = getRatio(dp2Flow);
-
-        if (freqMonths === 6) {
-            instFlows.forEach((inst, idx) => {
-                let rIdx = 3 + idx * 2;
-                if (rIdx < rowCount) {
-                    excelRatios[rIdx] = getRatio(inst);
-                }
-            });
+    // Map every flow strictly according to its calculated cash amount relative to total offer price
+    for (let i = 0; i < rowCount; i++) {
+        if (i < nonMnt.length) {
+            let f = nonMnt[i];
+            if (!f || f._isZeroShifted || !f.amount || f.amount <= 0) {
+                excelRatios[i] = 0.0;
+            } else if (f.isFixedOverride && f._exactFixedPct !== undefined && f._exactFixedPct !== null) {
+                excelRatios[i] = f._exactFixedPct / 100.0;
+            } else {
+                let amt = Math.round(f.amount || 0);
+                excelRatios[i] = (amt > 0 && offerPrice > 0) ? (amt / offerPrice) : 0.0;
+            }
         } else {
-            instFlows.forEach((inst, idx) => {
-                let rIdx = 2 + idx;
-                if (rIdx < rowCount) {
-                    excelRatios[rIdx] = getRatio(inst);
-                }
-            });
+            excelRatios[i] = 0.0;
         }
+    }
 
-        if (delivFlow && delivFlow.amount > 0 && !instFlows.some(f => f.hasDeliv || (f.mergedIds && f.mergedIds.includes('deliv')))) {
-            let delivIdx = isOrb ? (freqMonths === 6 ? 7 : 8) : (freqMonths === 6 ? 17 : 17);
-            if (delivIdx < rowCount) excelRatios[delivIdx] += getRatio(delivFlow);
-        }
-    } else if (isZomra) {
-        if (dp1Flow) excelRatios[0] = getRatio(dp1Flow);
-        if (dp2Flow) excelRatios[1] = getRatio(dp2Flow);
-
-        if (freqMonths === 6) {
-            if (addlFlow) excelRatios[3] = getRatio(addlFlow);
-            instFlows.forEach((inst, idx) => {
-                let rIdx = 4 + idx * 2;
-                if (rIdx < rowCount) {
-                    excelRatios[rIdx] = getRatio(inst);
-                }
-            });
-        } else {
-            if (instFlows.length > 0) excelRatios[2] = getRatio(instFlows[0]);
-            if (addlFlow) excelRatios[3] = getRatio(addlFlow);
-            for (let idx = 1; idx < instFlows.length; idx++) {
-                let rIdx = 3 + idx;
-                if (rIdx < rowCount) {
-                    excelRatios[rIdx] = getRatio(instFlows[idx]);
-                }
+    // Mathematical guarantee: strict 100.00% normalization
+    let sumR = excelRatios.reduce((s, v) => s + v, 0);
+    if (sumR > 0 && Math.abs(1.0 - sumR) > 1e-12) {
+        for (let i = rowCount - 1; i >= 0; i--) {
+            if (excelRatios[i] > 0) {
+                excelRatios[i] += (1.0 - sumR);
+                break;
             }
         }
-
-        if (delivFlow && delivFlow.amount > 0 && !instFlows.some(f => f.hasDeliv || (f.mergedIds && f.mergedIds.includes('deliv')))) {
-            let delivIdx = 14;
-            if (delivIdx < rowCount) excelRatios[delivIdx] += getRatio(delivFlow);
-        }
-    } else { // Jirian
-        if (dp1Flow) excelRatios[0] = getRatio(dp1Flow);
-        if (dp2Flow) excelRatios[1] = getRatio(dp2Flow);
-        instFlows.forEach((inst, idx) => {
-            let rIdx = 2 + idx;
-            if (rIdx < rowCount) excelRatios[rIdx] = getRatio(inst);
-        });
     }
 
     return excelRatios.map(r => {
         if (r <= 0) return '0%';
         let pct = r * 100;
-        let rounded = parseFloat(pct.toFixed(8));
-        return rounded + '%';
-    }).join('\n');
+        let str = pct.toFixed(8).replace(/\.?0+$/, '');
+        return str + '%';
+    }).join('\r\n');
 };
-window.copyExcelPercentages = function() {
+
+window.copyExcelPercentages = function(btn) {
+    if (!btn && window.event && window.event.currentTarget) {
+        btn = window.event.currentTarget;
+    }
+    
+    // 1. Process active table input if user is still typing in a table cell
+    let activeInput = document.activeElement;
+    if (activeInput && (activeInput.classList.contains('tbl-pct') || activeInput.classList.contains('tbl-amt') || activeInput.classList.contains('tbl-date'))) {
+        if (typeof applyTableEdits === 'function') {
+            applyTableEdits(activeInput);
+        }
+    }
+
+    // 2. Synchronous recalculation to ensure freshest data
+    if (typeof calculate === 'function') {
+        calculate();
+    }
+    
     let textToCopy = window.getExcelPercentagesText();
     if (!textToCopy) {
-        alert('لا توجد بيانات جدول لنسخها.');
+        window.showToast('⚠️ لا توجد بيانات جدول لنسخها حالياً.', false);
         return;
     }
-    let lines = textToCopy.split('\r\n');
+    let lines = textToCopy.split('\r\n').filter(Boolean);
+
+    let originalBtnText = btn ? btn.innerHTML : '';
+    if (btn) {
+        btn.innerHTML = '✓ تم نسخ النسب!';
+        btn.style.backgroundColor = '#28a745';
+        btn.style.borderColor = '#28a745';
+        setTimeout(() => {
+            btn.innerHTML = originalBtnText;
+            btn.style.backgroundColor = '#0d6efd';
+            btn.style.borderColor = '#0d6efd';
+        }, 2200);
+    }
+
+    let doCopy = () => {
+        window.showToast(`✅ تم نسخ ${lines.length} نسبة بنجاح! جاهزة للصق بـ Ctrl+V في عمود L أو S في شيت الإكسيل (من الخلية L16 أو S16) بدقة 100%.`);
+    };
 
     if (navigator.clipboard && navigator.clipboard.writeText) {
-        navigator.clipboard.writeText(textToCopy).then(() => {
-            alert('تم نسخ ' + lines.length + ' نسبة بنجاح لصقها في عمود L (من L16) في شيت الإكسيل بدقة 12 رقم عشري.');
-        }).catch(() => {
-            copyFallback(textToCopy);
+        navigator.clipboard.writeText(textToCopy).then(doCopy).catch(() => {
+            window.copyFallback(textToCopy);
+            doCopy();
         });
     } else {
-        copyFallback(textToCopy);
+        window.copyFallback(textToCopy);
+        doCopy();
     }
 };
 
+window.copyFullTableTSV = function(btn) {
+    if (!btn && window.event && window.event.currentTarget) {
+        btn = window.event.currentTarget;
+    }
+    if (typeof calculate === 'function') {
+        calculate();
+    }
+    if (!window.globalCustomFlows || window.globalCustomFlows.length === 0) {
+        window.showToast('⚠️ لا توجد بيانات جدول لنسخها.', false);
+        return;
+    }
+    let headers = ["الدفعة", "التاريخ", "النسبة %", "المبلغ (ج.م)", "القيمة الحالية NPV (ج.م)"];
+    let rows = [headers.join('\t')];
+    window.globalCustomFlows.forEach(f => {
+        rows.push([
+            f.label,
+            f.date,
+            (f.displayPct || 0) + '%',
+            Math.round(f.amount || 0),
+            Math.round(f.pv || 0)
+        ].join('\t'));
+    });
+    let tsv = rows.join('\r\n');
 
+    let originalBtnText = btn ? btn.innerHTML : '';
+    if (btn) {
+        btn.innerHTML = '✓ تم نسخ الجدول!';
+        btn.style.backgroundColor = '#28a745';
+        btn.style.borderColor = '#28a745';
+        setTimeout(() => {
+            btn.innerHTML = originalBtnText;
+            btn.style.backgroundColor = '#17a2b8';
+            btn.style.borderColor = '#17a2b8';
+        }, 2200);
+    }
+
+    let doCopy = () => {
+        window.showToast('✅ تم نسخ جدول الدفعات والتواريخ بالكامل بنجاح بصيغة TSV! يمكنك لصقه مباشرة بـ Ctrl+V في الإكسيل.');
+    };
+
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(tsv).then(doCopy).catch(() => {
+            window.copyFallback(tsv);
+            doCopy();
+        });
+    } else {
+        window.copyFallback(tsv);
+        doCopy();
+    }
+};
+
+window.copyFallback = function(text) {
+    let textarea = document.createElement('textarea');
+    textarea.value = text;
+    textarea.style.position = 'fixed';
+    textarea.style.left = '-9999px';
+    textarea.style.top = '-9999px';
+    document.body.appendChild(textarea);
+    textarea.focus();
+    textarea.select();
+    try {
+        document.execCommand('copy');
+    } catch (err) {
+        console.error('Copy fallback error:', err);
+    }
+    document.body.removeChild(textarea);
+};

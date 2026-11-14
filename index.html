@@ -84,8 +84,8 @@
                 <button class="btn btn-outline" onclick="openRatesModal()">⚙️ Discount Rates</button>
                 <button class="btn btn-primary" onclick="exportPDF()">📄 Export PDF</button>
                 <button class="btn btn-primary" onclick="exportExcel()" style="background-color: #217346; color: white; border-color: #217346;">📊 Export Excel</button>
-                <button class="btn btn-secondary" onclick="copyExcelPercentages()" style="background-color: #0d6efd; color: white; border-color: #0d6efd;" title="نسخ عمود النسب بدقة متناهية للصقها مباشرة في شيت الـ Calculator بالخلية L16">📋 نسخ نسب الإكسيل</button>
-                <button class="btn btn-secondary" onclick="copyFullTableTSV()" style="background-color: #17a2b8; color: white; border-color: #17a2b8;" title="نسخ جدول الدفعات والتواريخ بالكامل بصيغة TSV للصقه مباشرة في أي شيت إكسيل بـ Ctrl+V">📊 نسخ جدول الدفعات بالكامل (Excel)</button>
+                <button class="btn btn-secondary" onclick="copyExcelPercentages(this)" style="background-color: #0d6efd; color: white; border-color: #0d6efd;" title="نسخ عمود النسب بدقة متناهية للصقها مباشرة في شيت الـ Calculator بالخلية L16">📋 نسخ نسب الإكسيل</button>
+                <button class="btn btn-secondary" onclick="copyFullTableTSV(this)" style="background-color: #17a2b8; color: white; border-color: #17a2b8;" title="نسخ جدول الدفعات والتواريخ بالكامل بصيغة TSV للصقه مباشرة في أي شيت إكسيل بـ Ctrl+V">📊 نسخ جدول الدفعات بالكامل (Excel)</button>
                 <input type="file" id="template-upload" accept=".xlsx, .xlsm" style="display:none;" onchange="handleTemplateUpload(event)">
                 <button class="btn btn-primary" onclick="document.getElementById('template-upload').click()" style="background-color: #107c41; color: white; border-color: #107c41;">📤 Export to Template</button>
             </div>
@@ -549,7 +549,7 @@
         </div>
     </div>
 
-    <script src="app_v46.js"></script>
+    <script src="app_v46.js?v=20261114_exact_pct"></script>
 </body>
 </html>
 
