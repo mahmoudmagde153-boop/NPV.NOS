@@ -74,6 +74,12 @@
                     <label>Unit No (Optional)</label>
                     <input type="text" id="unit-number" placeholder="رقم الوحدة (اختياري)" oninput="updateExportHeaderInfo()">
                 </div>
+                <div class="input-group" id="garage-control-group">
+                    <label id="garage-label" style="font-weight: bold; color: var(--gold);">🚗 Garage Option (جراج)</label>
+                    <select id="garage-option" onchange="onGarageOptionChange(); delayedCalculate();" style="font-weight: bold; border-color: rgba(212, 175, 55, 0.4);">
+                        <option value="none">❌ بدون جراج (Excluded)</option>
+                    </select>
+                </div>
             </div>
             
             <div class="header-actions">
@@ -419,6 +425,14 @@
                         <span class="summary-label">Total PV</span>
                         <span class="summary-value" id="offer-total-pv" style="color:var(--gold)">0</span>
                     </div>
+                    <div class="summary-item" id="offer-garage-summary-item" style="display: none;">
+                        <span class="summary-label">🚗 Total Garage</span>
+                        <span class="summary-value" id="offer-total-garage" style="color:#2ecc71; font-weight: bold;">0</span>
+                    </div>
+                    <div class="summary-item" id="offer-grand-total-summary-item" style="display: none; grid-column: 1 / -1; padding-top: 8px; border-top: 1.5px solid var(--gold); justify-content: space-between; align-items: center;">
+                        <span class="summary-label" style="font-weight: bold; color: var(--gold);">Grand Total (Unit + Mnt + Garage)</span>
+                        <span class="summary-value" id="offer-grand-total-amt" style="color:var(--gold); font-weight: bold; font-size: 1.15rem;">0</span>
+                    </div>
                     <div class="summary-item" style="grid-column: 1 / -1; padding-top: 10px; border-top: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center;">
                         <span class="summary-label">Collected Pre-Delivery</span>
                         <div style="display: flex; align-items: center; gap: 8px;">
@@ -549,7 +563,7 @@
         </div>
     </div>
 
-    <script src="app_v46.js?v=20261114_exact_pct"></script>
+    <script src="app_v46.js?v=20261116_garage_fixed"></script>
 </body>
 </html>
 

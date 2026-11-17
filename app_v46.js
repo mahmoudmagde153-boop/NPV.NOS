@@ -194,6 +194,100 @@ function getRateForYear(y) {
 }
 
 // --- UI Logic ---
+// --- Garage / Parking Slot Feature (Independent Fixed Amenity) ---
+window.garageOption = 'none';
+
+function getGarageSchedule(project, option, contractDateStr) {
+    let opt = option || window.garageOption;
+    if (!opt || opt === 'none') return null;
+    let proj = (project || currentProject || 'Perla').toLowerCase();
+    let cDateStr = contractDateStr || (document.getElementById('contract-date')?.value) || formatDate(new Date());
+    
+    if (proj.includes('orb')) {
+        let isTandem = (opt === 'orb_tandem');
+        let totalAmt = isTandem ? 700000 : 500000;
+        let instAmt = isTandem ? 175000 : 125000;
+        let typeName = isTandem ? 'Tandem Parking Slot' : 'Standard Parking Slot';
+        
+        return {
+            title: `${typeName} (${formatCurr(totalAmt)})`,
+            totalAmount: totalAmt,
+            optionType: isTandem ? 'tandem' : 'standard',
+            items: [
+                { seq: 'G1', label: `${typeName} 01 (At Contract)`, date: cDateStr, amount: instAmt },
+                { seq: 'G2', label: `${typeName} 02 (+1 Year)`, date: formatDate(addMonths(cDateStr, 12)), amount: instAmt },
+                { seq: 'G3', label: `${typeName} 03 (+2 Years)`, date: formatDate(addMonths(cDateStr, 24)), amount: instAmt },
+                { seq: 'G4', label: `${typeName} 04 (+3 Years)`, date: formatDate(addMonths(cDateStr, 36)), amount: instAmt }
+            ]
+        };
+    } else if (proj.includes('zomra')) {
+        if (opt !== 'zomra_standard') return null;
+        let totalAmt = 400000;
+        let instAmt = 100000;
+        let delivDate = formatDate(addMonths(cDateStr, 37));
+        
+        return {
+            title: `Parking Slot (${formatCurr(totalAmt)})`,
+            totalAmount: totalAmt,
+            optionType: 'zomra',
+            items: [
+                { seq: 'G1', label: 'Garage Installment 01 (+1 Year)', date: formatDate(addMonths(cDateStr, 12)), amount: instAmt },
+                { seq: 'G2', label: 'Garage Installment 02 (1 Year Pre-Delivery)', date: formatDate(addMonths(delivDate, -12)), amount: instAmt },
+                { seq: 'G3', label: 'Garage Installment 03 (At Delivery)', date: delivDate, amount: instAmt },
+                { seq: 'G4', label: 'Garage Installment 04 (+1 Year Post-Delivery)', date: formatDate(addMonths(delivDate, 12)), amount: instAmt }
+            ]
+        };
+    }
+    return null;
+}
+
+
+window.updateGarageDropdown = function(proj) {
+    let sel = document.getElementById('garage-option');
+    if (!sel) return;
+    
+    let curVal = window.garageOption || sel.value || 'none';
+    sel.innerHTML = '';
+    
+    let pName = (proj || currentProject || 'Perla').toLowerCase();
+    
+    if (pName.includes('orb')) {
+        sel.innerHTML = `
+            <option value="none">❌ بدون جراج (Excluded)</option>
+            <option value="orb_standard">🚗 Standard Parking Slot (500,000 ج.م - 4 أقساط سنوية × 125,000)</option>
+            <option value="orb_tandem">🚙 Tandem Parking Slot (700,000 ج.م - 4 أقساط سنوية × 175,000)</option>
+        `;
+        if (curVal === 'orb_standard' || curVal === 'orb_tandem') {
+            sel.value = curVal;
+        } else {
+            sel.value = 'none';
+        }
+    } else if (pName.includes('zomra')) {
+        sel.innerHTML = `
+            <option value="none">❌ بدون جراج (Excluded)</option>
+            <option value="zomra_standard">🚗 Parking Slot (400,000 ج.م - 4 دفعات متساوية × 100,000)</option>
+        `;
+        if (curVal === 'zomra_standard') {
+            sel.value = curVal;
+        } else {
+            sel.value = 'none';
+        }
+    } else {
+        sel.innerHTML = `
+            <option value="none">❌ بدون جراج (غير متاح لمشروع ${proj})</option>
+        `;
+        sel.value = 'none';
+    }
+    window.garageOption = sel.value;
+};
+
+window.onGarageOptionChange = function() {
+    let sel = document.getElementById('garage-option');
+    if (sel) {
+        window.garageOption = sel.value;
+    }
+};
+
 function setProject(proj) {
     if (typeof proj === 'string') {
         let pLower = proj.toLowerCase();
@@ -247,6 +341,7 @@ function setProject(proj) {
     if (flexToggle && !flexToggle.value) {
         flexToggle.value = 'no';
     }
+    updateGarageDropdown(currentProject);
     renderBaseInputs();
     renderCustomInputs();
     calculate();
@@ -2000,7 +2095,6 @@ function generateFlowsTemplate(contractDateStr, years, freqMonths, isBase = fals
             flows.push({ id: 'inst_' + i, label: 'Installment ' + (i+1), date: dStr, months: m, isInst: true, defaultPct: defaultInstPct, exactPct: defaultInstPct });
         }
     }
-    
     let mergedFlows = [];
     let shouldMerge = document.getElementById('merge-delivery-toggle') ? document.getElementById('merge-delivery-toggle').checked : true;
     
@@ -4927,10 +5021,88 @@ function renderTable(flows, tbodyId) {
         `;
         tbody.appendChild(trMntTotal);
     }
+
+    // Render Garage Schedule (Fixed Amenity - Completely Independent of Unit Percentages)
+    let garSched = (tbodyId === 'offer-tbody') ? getGarageSchedule(currentProject, window.garageOption, document.getElementById('contract-date')?.value) : null;
+    if (garSched && garSched.items && garSched.items.length > 0) {
+        let trGarHead = document.createElement('tr');
+        trGarHead.style.backgroundColor = '#1f4e78';
+        trGarHead.style.color = 'white';
+        trGarHead.innerHTML = `<td colspan="5" style="font-weight:bold; padding: 6px 8px;">🚗 Parking / Garage Schedule (${garSched.title})</td>`;
+        tbody.appendChild(trGarHead);
+        
+        garSched.items.forEach(g => {
+            let trG = document.createElement('tr');
+            trG.style.backgroundColor = '#f2f7fa';
+            trG.innerHTML = `
+                <td style="text-align:left; font-weight: 500;">${g.label}</td>
+                <td>${g.date}</td>
+                <td style="color:#27ae60; font-weight:bold;">Fixed</td>
+                <td style="color:var(--accent-blue); font-weight:bold;">${formatCurr(g.amount)}</td>
+                <td style="color:var(--text-muted);">-</td>
+            `;
+            tbody.appendChild(trG);
+        });
+        
+        let trGarTotal = document.createElement('tr');
+        trGarTotal.style.backgroundColor = '#d9e8f5';
+        trGarTotal.innerHTML = `
+            <td style="text-align:right; font-weight:bold;">Total Parking / Garage:</td>
+            <td></td>
+            <td style="font-weight:bold; color:#27ae60;">Fixed Amenity</td>
+            <td style="color:var(--accent-blue); font-weight:bold;">${formatCurr(garSched.totalAmount)}</td>
+            <td style="color:var(--text-muted);">-</td>
+        `;
+        tbody.appendChild(trGarTotal);
+        
+        // Grand Total Row (Unit Offer Price + Maintenance Deposit + Garage)
+        let mntSum = (flows || []).filter(f => f.isMnt).reduce((s, f) => s + (f.amount || 0), 0);
+        let dispOfferPrice = window.lastCalculatedPrice || totalAmt;
+        let grandTotal = dispOfferPrice + mntSum + garSched.totalAmount;
+        let trGrand = document.createElement('tr');
+        trGrand.style.backgroundColor = '#1b365d';
+        trGrand.style.color = 'white';
+        trGrand.style.fontSize = '1.02rem';
+        trGrand.innerHTML = `
+            <td style="text-align:right; font-weight:bold; padding: 8px 10px; color: #ffd700;">GRAND TOTAL (OFFER + MNT + GARAGE):</td>
+            <td></td>
+            <td style="font-weight:bold; color: #ffd700;">100% + Mnt + Gar</td>
+            <td style="color:#ffffff; font-weight:bold; font-size:1.08rem;">${formatCurr(grandTotal)}</td>
+            <td style="color:#ffd700; font-weight:bold;">-</td>
+        `;
+        tbody.appendChild(trGrand);
+    }
     
     if (tbodyId === 'offer-tbody') {
         let dispAmt = window.lastCalculatedPrice || totalAmt;
         document.getElementById('offer-total-amt').innerText = formatCurr(dispAmt);
+        
+        // Update Garage & Grand Total summary items (Zero impact on unit percentages)
+        let garSched = getGarageSchedule(currentProject, window.garageOption, document.getElementById('contract-date')?.value);
+        let garSum = garSched ? garSched.totalAmount : 0;
+        let mntSum = (flows || []).filter(f => f.isMnt).reduce((s, f) => s + (f.amount || 0), 0);
+        let grandTotal = dispAmt + mntSum + garSum;
+        
+        let garItem = document.getElementById('offer-garage-summary-item');
+        let grandItem = document.getElementById('offer-grand-total-summary-item');
+        let garVal = document.getElementById('offer-total-garage');
+        let grandVal = document.getElementById('offer-grand-total-amt');
+        
+        if (garSum > 0) {
+            if (garItem) {
+                garItem.style.display = 'flex';
+                garItem.style.justifyContent = 'space-between';
+            }
+            if (garVal) garVal.innerText = formatCurr(garSum);
+            if (grandItem) {
+                grandItem.style.display = 'flex';
+                grandItem.style.justifyContent = 'space-between';
+            }
+            if (grandVal) grandVal.innerText = formatCurr(grandTotal);
+        } else {
+            if (garItem) garItem.style.display = 'none';
+            if (grandItem) grandItem.style.display = 'none';
+        }
     }
 }
 
@@ -5154,7 +5326,10 @@ function buildExportPlanHtml(opts) {
 
     let nonMntFlows = (flows || []).filter(f => !f.isMnt);
     let mntFlows = (flows || []).filter(f => f.isMnt);
-    let totalItems = nonMntFlows.length + mntFlows.length;
+    let garSched = getGarageSchedule(currentProject, window.garageOption, contractDateStr);
+    let totalGarageAmt = garSched ? garSched.totalAmount : 0;
+    let garageCount = garSched ? garSched.items.length : 0;
+    let totalItems = nonMntFlows.length + mntFlows.length + garageCount;
 
     // Calibrated for full-page A4 printing (usable width 190mm, usable height ~280mm)
     let fontSize = '10.5px';
@@ -5224,6 +5399,8 @@ function buildExportPlanHtml(opts) {
         <tr><td colspan="2" class="export-bold" style="text-align: left; border-left: 1.5px solid black; padding: ${cellPadding}; padding-left: 12px;">Date :</td><td colspan="3" style="text-align: left; border-right: 1.5px solid black; padding: ${cellPadding}; padding-left: 14px;">${formatDateExport(contractDateStr || new Date())}</td></tr>
         <tr><td colspan="2" class="export-bold" style="text-align: left; border-left: 1.5px solid black; padding: ${cellPadding}; padding-left: 12px;">Unit Base Price :</td><td colspan="3" style="text-align: left; border-right: 1.5px solid black; padding: ${cellPadding}; padding-left: 14px;">${formatNum(basePriceCache)}</td></tr>
         <tr><td colspan="2" class="export-bold" style="text-align: left; border-left: 1.5px solid black; padding: ${cellPadding}; padding-left: 12px;">Maintenance (8%) :</td><td colspan="3" style="text-align: left; border-right: 1.5px solid black; padding: ${cellPadding}; padding-left: 14px;">${formatNum(mntTotal)}</td></tr>
+        ${totalGarageAmt > 0 ? `<tr><td colspan="2" class="export-bold" style="text-align: left; border-left: 1.5px solid black; padding: ${cellPadding}; padding-left: 12px;">Garage Option :</td><td colspan="3" style="text-align: left; border-right: 1.5px solid black; padding: ${cellPadding}; padding-left: 14px;">${garSched ? garSched.title : ''}</td></tr>
+        <tr><td colspan="2" class="export-bold" style="text-align: left; border-left: 1.5px solid black; padding: ${cellPadding}; padding-left: 12px; color: #1b365d;">Grand Total (Unit+Mnt+Gar) :</td><td colspan="3" class="export-bold" style="text-align: left; border-right: 1.5px solid black; padding: ${cellPadding}; padding-left: 14px; color: #1b365d;">${formatNum(price + mntTotal + totalGarageAmt)} EGP</td></tr>` : ''}
         ${priceRows}
         <tr><td colspan="2" class="export-bold" style="text-align: left; border-left: 1.5px solid black; padding: ${cellPadding}; padding-left: 12px;">Collected Till Delivery:</td><td colspan="3" style="text-align: left; border-right: 1.5px solid black; padding: ${cellPadding}; padding-left: 14px;">${(preDelivPct || 0).toFixed(2)}%</td></tr>
         <tr><td colspan="2" class="export-bold" style="text-align: left; border-left: 1.5px solid black; border-bottom: 1.5px solid black; padding: ${cellPadding}; padding-left: 12px;">Approval Status:</td><td colspan="3" class="export-bold" style="text-align: left; border-right: 1.5px solid black; border-bottom: 1.5px solid black; padding: ${cellPadding}; padding-left: 14px; color: ${approvalColor};">${approvalText}</td></tr>
@@ -5314,6 +5491,37 @@ function buildExportPlanHtml(opts) {
         <td class="export-header-blue" style="border-bottom: 1.5px solid black; padding: ${cellPadding};">${formatNum(totalMntAmt)}</td>
         <td class="export-header-blue" style="border-bottom: 1.5px solid black; border-right: 1.5px solid black; padding: ${cellPadding};"></td>
     </tr>`;
+
+    if (garSched && garSched.items && garSched.items.length > 0) {
+        html += `<tr><td colspan="5" style="height: 4px; border: none; padding: 0;"></td></tr>`;
+        html += `<tr><th colspan="2" class="export-header-blue" style="border-left: 1.5px solid black; border-top: 1.5px solid black; border-bottom: 1.5px solid black; padding: ${cellPadding}; font-size: ${subHeaderFontSize};">Parking / Garage Payments (${garSched.title})</th><th colspan="3" style="border-right: 1.5px solid black; border-top: 1.5px solid black; border-bottom: 1.5px solid black; padding: ${cellPadding};"></th></tr>`;
+        
+        garSched.items.forEach((g, i) => {
+            let isLastG = i === garSched.items.length - 1;
+            let bottomBorder = isLastG ? 'border-bottom: 1.5px solid black;' : 'border-bottom: 1px dotted #888;';
+            html += `<tr>
+                <td colspan="2" style="border-left: 1.5px solid black; border-right: 1px dotted #888; ${bottomBorder} padding: ${cellPadding};">${g.label}</td>
+                <td style="${bottomBorder} border-right: 1px dotted #888; padding: ${cellPadding};">Fixed</td>
+                <td style="${bottomBorder} border-right: 1px dotted #888; padding: ${cellPadding};">${formatNum(g.amount)}</td>
+                <td style="border-right: 1.5px solid black; ${bottomBorder} padding: ${cellPadding};">${formatDateExport(g.date)}</td>
+            </tr>`;
+        });
+        
+        html += `<tr>
+            <td colspan="2" class="export-header-blue" style="border-left: 1.5px solid black; border-bottom: 1.5px solid black; text-align: center; padding: ${cellPadding};">Total Parking / Garage</td>
+            <td class="export-header-blue" style="border-bottom: 1.5px solid black; padding: ${cellPadding};">Fixed</td>
+            <td class="export-header-blue" style="border-bottom: 1.5px solid black; padding: ${cellPadding};">${formatNum(totalGarageAmt)}</td>
+            <td class="export-header-blue" style="border-bottom: 1.5px solid black; border-right: 1.5px solid black; padding: ${cellPadding};"></td>
+        </tr>`;
+        
+        let grandTotal = price + mntTotal + totalGarageAmt;
+        html += `<tr>
+            <td colspan="2" class="export-header-blue" style="background:#1b365d; color:#ffd700; border-left: 1.5px solid black; border-bottom: 1.5px solid black; text-align: center; font-weight:bold; padding: ${cellPadding};">GRAND TOTAL (OFFER + MNT + GARAGE)</td>
+            <td class="export-header-blue" style="background:#1b365d; color:#ffd700; border-bottom: 1.5px solid black; padding: ${cellPadding}; font-weight:bold;">100%</td>
+            <td class="export-header-blue" style="background:#1b365d; color:#ffffff; border-bottom: 1.5px solid black; font-weight:bold; font-size:11px; padding: ${cellPadding};">${formatNum(grandTotal)}</td>
+            <td class="export-header-blue" style="background:#1b365d; color:white; border-bottom: 1.5px solid black; border-right: 1.5px solid black; padding: ${cellPadding};"></td>
+        </tr>`;
+    }
 
     return { html, fontSize };
 }
@@ -5822,6 +6030,19 @@ function exportExcelFallback(offerPrice) {
         ws_data.push(['Total Maintenance:', '', mntPctSum, mntSum, '']);
     }
 
+    let garSched = getGarageSchedule(currentProject, window.garageOption, document.getElementById('contract-date')?.value);
+    if (garSched && garSched.items && garSched.items.length > 0) {
+        ws_data.push(['', '', '', '', '']);
+        ws_data.push(['Parking / Garage Schedule', '', 'Fixed Amenity', '', '']);
+        ws_data.push(['Seq', 'Description', 'Status', 'Amount', 'Date']);
+        garSched.items.forEach(g => {
+            ws_data.push([g.seq, g.label, 'Fixed', Math.round(g.amount), formatDateExport(g.date)]);
+        });
+        ws_data.push(['Total Parking / Garage:', '', 'Fixed', Math.round(garSched.totalAmount), '']);
+        let grandTotal = Math.round(offerPrice + mntTotal + garSched.totalAmount);
+        ws_data.push(['GRAND TOTAL (UNIT + MAINTENANCE + GARAGE):', '', '', grandTotal, '']);
+    }
+
     let wb = XLSX.utils.book_new();
     let ws = XLSX.utils.aoa_to_sheet(ws_data);
     XLSX.utils.book_append_sheet(wb, ws, isComparing ? 'Offer Plan' : 'Payment Plan');
@@ -5924,6 +6145,7 @@ function initSystem() {
     if (flexToggle) {
         flexToggle.value = 'no';
     }
+    updateGarageDropdown(currentProject);
     renderBaseInputs();
     renderCustomInputs();
     calculate();
@@ -6189,3 +6411,9 @@ window.copyFallback = function(text) {
     }
     document.body.removeChild(textarea);
 };
+
+
+// Initialize garage options for current project on boot
+if (typeof updateGarageDropdown === 'function') {
+    updateGarageDropdown(currentProject);
+}
