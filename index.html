@@ -90,7 +90,8 @@
                 <button class="btn btn-outline" onclick="openRatesModal()">⚙️ Discount Rates</button>
                 <button class="btn btn-primary" onclick="exportPDF()">📄 Export PDF</button>
                 <button class="btn btn-primary" onclick="exportExcel()" style="background-color: #217346; color: white; border-color: #217346;">📊 Export Excel</button>
-                <button class="btn btn-secondary" onclick="copyExcelPercentages(this)" style="background-color: #0d6efd; color: white; border-color: #0d6efd;" title="نسخ عمود النسب بدقة متناهية للصقها مباشرة في شيت الـ Calculator بالخلية L16">📋 نسخ نسب الإكسيل</button>
+                <button class="btn btn-secondary" onclick="copyExcelPercentages(this)" style="background-color: #0d6efd; color: white; border-color: #0d6efd;" title="نسخ عمود النسب لجدول الأقساط متوافقاً مع ترتيب شيت الإكسيل الماستر (يملأ الأرباع والسنوات بدقة)">📋 نسخ نسب الإكسيل (شيت ماستر)</button>
+                <button class="btn btn-secondary" onclick="copyRawPercentages(this)" style="background-color: #4f46e5; color: white; border-color: #4f46e5;" title="نسخ نسب الجدول الحالية فقط بشكل متسلسل مباشر">📑 نسخ نسب الجدول المباشرة</button>
                 <button class="btn btn-secondary" onclick="copyFullTableTSV(this)" style="background-color: #17a2b8; color: white; border-color: #17a2b8;" title="نسخ جدول الدفعات والتواريخ بالكامل بصيغة TSV للصقه مباشرة في أي شيت إكسيل بـ Ctrl+V">📊 نسخ جدول الدفعات بالكامل (Excel)</button>
                 <input type="file" id="template-upload" accept=".xlsx, .xlsm" style="display:none;" onchange="handleTemplateUpload(event)">
                 <button class="btn btn-primary" onclick="document.getElementById('template-upload').click()" style="background-color: #107c41; color: white; border-color: #107c41;">📤 Export to Template</button>
@@ -133,10 +134,11 @@
                         <div style="display: grid; grid-template-columns: 1.2fr 1.5fr 0.9fr; gap: 8px; align-items: end;">
                             <div class="input-group">
                                 <label style="font-size: 0.85rem;">نطاق التثبيت</label>
-                                <select id="fixed-inst-scope" onchange="onFixedScopeChange(); delayedCalculate();" style="padding: 8px; font-weight: bold;">
+                                <select id="fixed-inst-scope" onchange="if(window.onFixedScopeChange) window.onFixedScopeChange(); delayedCalculate();" style="padding: 8px; font-weight: bold;">
                                     <option value="all">كل الأقساط (متساوية)</option>
                                     <option value="pre">قبل الاستلام فقط</option>
                                     <option value="post">بعد الاستلام فقط</option>
+                                    <option value="custom">📅 سنين محددة فقط (Custom Selected Years)</option>
                                 </select>
                             </div>
                             <div class="input-group">
@@ -149,6 +151,24 @@
                                     <option value="amt">ج.م (EGP)</option>
                                     <option value="pct">% من السعر</option>
                                 </select>
+                            </div>
+                        </div>
+
+                        <!-- Custom Selected Years Container for Fixed Installments -->
+                        <div id="fixed-inst-custom-years-container" style="display: none; margin-top: 10px; padding: 10px 14px; background: rgba(0,0,0,0.25); border-radius: 6px; border: 1px solid rgba(212, 175, 55, 0.4);">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; flex-wrap: wrap; gap: 8px;">
+                                <label style="font-size: 0.85rem; font-weight: bold; color: var(--gold);">📅 اختر السنين المراد تثبيت أقساطها (أقساط متساوية منتظمة بدون بالون):</label>
+                                <div style="display: flex; gap: 6px;">
+                                    <button type="button" class="btn btn-outline" onclick="selectFixedYearsPreset('1_2')" style="padding: 2px 8px; font-size: 0.75rem; border-color: rgba(212, 175, 55, 0.5); color: var(--gold); cursor: pointer;">السنة 1 و 2 فقط</button>
+                                    <button type="button" class="btn btn-outline" onclick="selectFixedYearsPreset('1_2_3')" style="padding: 2px 8px; font-size: 0.75rem; border-color: rgba(212, 175, 55, 0.5); color: var(--gold); cursor: pointer;">أول 3 سنين</button>
+                                    <button type="button" class="btn btn-outline" onclick="selectFixedYearsPreset('all')" style="padding: 2px 8px; font-size: 0.75rem; border-color: rgba(255,255,255,0.2); cursor: pointer;">تحديد الكل</button>
+                                </div>
+                            </div>
+                            <div id="fixed-inst-custom-years-checkboxes" style="display: flex; gap: 12px; flex-wrap: wrap; padding: 4px 0;">
+                                <!-- Checkboxes populated by JS -->
+                            </div>
+                            <div style="font-size: 0.78rem; color: var(--text-muted); margin-top: 4px;">
+                                * أقساط السنين المحددة تكون ثابتة بالقيمة أعلاه بدون أي زيادة في نهاية السنة، بينما تتوزع باقي السنين بالتساوي لامتصاص باقي السعر بدقة 100%.
                             </div>
                         </div>
 
@@ -563,7 +583,7 @@
         </div>
     </div>
 
-    <script src="app_v46.js?v=20261116_garage_fixed"></script>
+    <script src="app_v46.js?v=20261119_v54_exact_excel_percentage_precision"></script>
 </body>
 </html>
 

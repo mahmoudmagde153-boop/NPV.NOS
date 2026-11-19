@@ -373,10 +373,19 @@ function toggleFixedInst() {
         badge.style.color = chk ? 'var(--gold)' : 'var(--text-muted)';
     }
     
-    if (chk && (!valEl.value || parseFloat(valEl.value) === 0)) {
-        if (typeof globalCustomFlows !== 'undefined' && globalCustomFlows) {
-            let currentInst = globalCustomFlows.find(f => f.isInst && !f.isMnt);
-            if (currentInst) valEl.value = Math.round(currentInst.amount);
+    if (chk) {
+        let scope = document.getElementById('fixed-inst-scope')?.value || 'all';
+        let container = document.getElementById('fixed-inst-custom-years-container');
+        if (container) container.style.display = (scope === 'custom') ? 'block' : 'none';
+        if (scope === 'custom') {
+            let years = parseInt(document.getElementById('duration-years')?.value) || 8;
+            window.renderFixedYearCheckboxes(years);
+        }
+        if (!valEl.value || parseFloat(valEl.value) === 0) {
+            if (typeof globalCustomFlows !== 'undefined' && globalCustomFlows) {
+                let currentInst = globalCustomFlows.find(f => f.isInst && !f.isMnt);
+                if (currentInst) valEl.value = Math.round(currentInst.amount);
+            }
         }
     }
     calculate();
@@ -388,7 +397,111 @@ window.onFixedScopeChange = function() {
     if (label) {
         if (scope === 'pre') label.innerText = 'قسط ما قبل الاستلام';
         else if (scope === 'post') label.innerText = 'قسط ما بعد الاستلام';
+        else if (scope === 'custom') label.innerText = 'قيمة القسط للسنين المحددة';
         else label.innerText = 'قيمة كل قسط';
+    }
+    let container = document.getElementById('fixed-inst-custom-years-container');
+    if (container) {
+        container.style.display = (scope === 'custom') ? 'block' : 'none';
+    }
+    if (scope === 'custom') {
+        let years = parseInt(document.getElementById('duration-years')?.value) || 8;
+        window.renderFixedYearCheckboxes(years);
+    }
+    calculate();
+};
+
+window.renderFixedYearCheckboxes = function(years) {
+    let container = document.getElementById('fixed-inst-custom-years-checkboxes');
+    if (!container) return;
+    
+    let currentChecked = window.getFixedSelectedYears();
+    if (!currentChecked || currentChecked.length === 0) currentChecked = [1, 2];
+    
+    container.innerHTML = '';
+    for (let y = 1; y <= years; y++) {
+        let isChecked = currentChecked.includes(y);
+        let lbl = document.createElement('label');
+        lbl.style.display = 'inline-flex';
+        lbl.style.alignItems = 'center';
+        lbl.style.gap = '5px';
+        lbl.style.fontSize = '0.82rem';
+        lbl.style.cursor = 'pointer';
+        lbl.style.padding = '3px 8px';
+        lbl.style.borderRadius = '4px';
+        lbl.style.background = isChecked ? 'rgba(212, 175, 55, 0.2)' : 'rgba(255,255,255,0.05)';
+        lbl.style.border = isChecked ? '1px solid var(--gold)' : '1px solid rgba(255,255,255,0.1)';
+        lbl.style.color = isChecked ? 'var(--gold)' : 'var(--text)';
+        
+        lbl.innerHTML = `
+            <input type="checkbox" class="fixed-year-chk" value="${y}" ${isChecked ? 'checked' : ''} onchange="window.onFixedYearCheckboxChange(this)">
+            السنة ${y}
+        `;
+        container.appendChild(lbl);
+    }
+};
+
+window.onFixedYearCheckboxChange = function(el) {
+    if (el && el.parentElement) {
+        if (el.checked) {
+            el.parentElement.style.background = 'rgba(212, 175, 55, 0.2)';
+            el.parentElement.style.border = '1px solid var(--gold)';
+            el.parentElement.style.color = 'var(--gold)';
+        } else {
+            el.parentElement.style.background = 'rgba(255,255,255,0.05)';
+            el.parentElement.style.border = '1px solid rgba(255,255,255,0.1)';
+            el.parentElement.style.color = 'var(--text)';
+        }
+    }
+    if (window.delayedCalculate) window.delayedCalculate(100); else calculate();
+};
+
+window.getFixedSelectedYears = function() {
+    let chks = document.querySelectorAll('.fixed-year-chk:checked');
+    if (!chks || chks.length === 0) return [1, 2];
+    return Array.from(chks).map(c => parseInt(c.value)).filter(n => !isNaN(n));
+};
+
+window.selectFixedYearsPreset = function(preset) {
+    let years = parseInt(document.getElementById('duration-years')?.value) || 8;
+    let targetYears = [];
+    if (preset === '1_2') targetYears = [1, 2];
+    else if (preset === '1_2_3') targetYears = [1, 2, 3];
+    else if (preset === 'all') {
+        for (let i = 1; i <= years; i++) targetYears.push(i);
+    }
+    
+    document.querySelectorAll('.fixed-year-chk').forEach(chk => {
+        let y = parseInt(chk.value);
+        chk.checked = targetYears.includes(y);
+        if (chk.parentElement) {
+            if (chk.checked) {
+                chk.parentElement.style.background = 'rgba(212, 175, 55, 0.2)';
+                chk.parentElement.style.border = '1px solid var(--gold)';
+                chk.parentElement.style.color = 'var(--gold)';
+            } else {
+                chk.parentElement.style.background = 'rgba(255,255,255,0.05)';
+                chk.parentElement.style.border = '1px solid rgba(255,255,255,0.1)';
+                chk.parentElement.style.color = 'var(--text)';
+            }
+        }
+    });
+    if (window.delayedCalculate) window.delayedCalculate(100); else calculate();
+};
+
+window.applySuggestedDeliveryPct = function(pct) {
+    if (!window.customMilestonesState) window.customMilestonesState = {};
+    window.customMilestonesState.deliv_val = pct;
+    window.customMilestonesState.deliv_type = 'pct';
+    
+    let delivValEl = document.getElementById('deliv-val');
+    if (delivValEl) delivValEl.value = pct;
+    let delivTypeEl = document.getElementById('deliv-type');
+    if (delivTypeEl) delivTypeEl.value = 'pct';
+    
+    calculate();
+    if (typeof window.showToast === 'function') {
+        window.showToast(`✅ تم تعديل نسبة دفعة الاستلام إلى ${pct}% بنجاح!`);
     }
 };
 
@@ -732,33 +845,26 @@ window.onPaymentFrequencyChange = function() {
     let intraBadge = document.getElementById('intra-year-status-badge');
     let wrapper = document.getElementById('intra-year-controls-wrapper');
     let intraBox = intraToggle ? intraToggle.closest('.custom-controls') : null;
+    let label = document.getElementById('intra-year-val-label');
     
-    if (freqMonths === 6) {
-        if (intraToggle) {
-            intraToggle.disabled = true;
-            intraToggle.checked = false;
+    if (intraToggle) intraToggle.disabled = false;
+    if (intraBox) intraBox.style.opacity = '1';
+    
+    if (label) {
+        label.innerText = (freqMonths === 6) ? 'قسط الفترة النصف سنوية الأولى (H1)' : 'قسط الفترات العادية (أول 3 فترات ربع سنوية)';
+    }
+    
+    if (intraToggle && intraToggle.checked) {
+        if (wrapper) wrapper.style.display = 'block';
+        if (intraBadge) {
+            intraBadge.innerText = 'مفعّل';
+            intraBadge.style.color = 'var(--accent-blue)';
         }
+    } else {
         if (wrapper) wrapper.style.display = 'none';
         if (intraBadge) {
-            intraBadge.innerText = 'غير متاح (الأقساط النصف سنوية متساوية)';
+            intraBadge.innerText = 'غير مفعّل';
             intraBadge.style.color = 'var(--text-muted)';
-        }
-        if (intraBox) intraBox.style.opacity = '0.6';
-    } else {
-        if (intraToggle) intraToggle.disabled = false;
-        if (intraBox) intraBox.style.opacity = '1';
-        if (intraToggle && intraToggle.checked) {
-            if (wrapper) wrapper.style.display = 'block';
-            if (intraBadge) {
-                intraBadge.innerText = 'مفعّل';
-                intraBadge.style.color = 'var(--accent-blue)';
-            }
-        } else {
-            if (wrapper) wrapper.style.display = 'none';
-            if (intraBadge) {
-                intraBadge.innerText = 'غير مفعّل';
-                intraBadge.style.color = 'var(--text-muted)';
-            }
         }
     }
     calculate();
@@ -1036,13 +1142,10 @@ function renderIntraGuidanceBox(g) {
     
     let isToggled = document.getElementById('toggle-intra-year') && document.getElementById('toggle-intra-year').checked;
     
-    if (!g || !g.active || !isToggled || g.freqMonths === 6) {
+    if (!g || !g.active || !isToggled) {
         box.style.display = 'none';
         if (badge) {
-            if (g && g.freqMonths === 6) {
-                badge.innerText = 'غير متاح (الأقساط متساوية)';
-                badge.style.color = 'var(--text-muted)';
-            } else if (!isToggled) {
+            if (!isToggled) {
                 badge.innerText = 'غير مفعّل';
                 badge.style.color = 'var(--text-muted)';
             }
@@ -1968,7 +2071,8 @@ function generateFlowsTemplate(contractDateStr, years, freqMonths, isBase = fals
         
         let delivDate = (!isBase && msState && msState.deliv_date) ? msState.deliv_date : formatDate(addMonths(contractDateStr, 37));
         let delivOverride = getOverridePct('deliv', 0.05);
-        if (delivOverride > 0 || (!isBase && msState && msState.deliv_val && parseFloat(msState.deliv_val) > 0)) {
+        let hasCustomDelivZ = (!isBase && msState && msState.deliv_val !== undefined && msState.deliv_val !== null && msState.deliv_val !== '');
+        if (delivOverride > 0 || hasCustomDelivZ) {
             let dPct = delivOverride > 0 ? delivOverride : (parseFloat(msState.deliv_val) / 100);
             flows.push({ id: 'deliv', label: 'Delivery Payment', date: delivDate, months: getMonthsDiff(delivDate, contractDateStr), isDP: true, defaultPct: dPct });
         } else if (years >= 3) {
@@ -2466,10 +2570,14 @@ function calculateCustomFlows(price, template, options = {}) {
         intraScope = 'all';
     }
     
-    // Semi-Annual installments (freqMonths === 6) are strictly equal regular payments; intra-year shift is quarterly only
-    let hasIntraYearShift = (freqMonths !== 6) && isIntraYearActive && !isNaN(intraValRaw) && intraValRaw > 0;
+    // Intra-year shift supports both Quarterly (Q1-Q3 light + Q4 balloon) and Semi-Annual (H1 light + H2 balloon)
+    let hasIntraYearShift = isIntraYearActive && !isNaN(intraValRaw) && intraValRaw > 0;
 
-    let dynamicInsts = flows.filter(f => (f.isInst || f.isMerged) && !f.isFixedOverride);
+    let allInstFlows = flows.filter(f => (f.isInst || f.isMerged) && !f.isMnt);
+    allInstFlows.forEach((f, idx) => {
+        f._instYear = Math.floor(idx / instsPerYear) + 1;
+    });
+    let dynamicInsts = allInstFlows.filter(f => !f.isFixedOverride);
     
     let isFixedInst = !isPure && document.getElementById('fixed-inst-toggle') && document.getElementById('fixed-inst-toggle').checked;
     let fixedInstScope = document.getElementById('fixed-inst-scope') ? document.getElementById('fixed-inst-scope').value : 'all';
@@ -2545,6 +2653,28 @@ function calculateCustomFlows(price, template, options = {}) {
             actualPostPct = price > 0 ? (totalPostAmt / price) * 100 : 0;
             actualPrePct = price > 0 ? ((nPre * instAmtPre) / price) * 100 : 0;
             distMode = 'custom';
+        } else if (fixedInstScope === 'custom') {
+            let fixedSelectedYears = window.getFixedSelectedYears ? window.getFixedSelectedYears() : [1, 2];
+            let fixedInsts = allInstFlows.filter(f => fixedSelectedYears.includes(f._instYear));
+            let unfixedInsts = allInstFlows.filter(f => !fixedSelectedYears.includes(f._instYear));
+            let nFixed = fixedInsts.length;
+            let nUnfixed = unfixedInsts.length;
+
+            let totalFixedCash = nFixed * fixedAmt;
+            let remForUnfixed = Math.max(0, remAmt - totalFixedCash);
+            let amtPerUnfixed = nUnfixed > 0 ? (remForUnfixed / nUnfixed) : 0;
+
+            let preFixedCount = fixedInsts.filter(f => f.months <= delivMonth).length;
+            let preUnfixedCount = unfixedInsts.filter(f => f.months <= delivMonth).length;
+            let postFixedCount = fixedInsts.filter(f => f.months > delivMonth).length;
+            let postUnfixedCount = unfixedInsts.filter(f => f.months > delivMonth).length;
+
+            let totalPreCash = (preFixedCount * fixedAmt) + (preUnfixedCount * amtPerUnfixed);
+            let totalPostCash = (postFixedCount * fixedAmt) + (postUnfixedCount * amtPerUnfixed);
+
+            actualPrePct = price > 0 ? (totalPreCash / price) * 100 : 0;
+            actualPostPct = price > 0 ? (totalPostCash / price) * 100 : 0;
+            distMode = 'custom';
         } else {
             // Scope === 'all'
             instAmtPre = fixedAmt;
@@ -2610,7 +2740,11 @@ function calculateCustomFlows(price, template, options = {}) {
         remAmt: remAmt,
         price: price,
         actualPrePct: actualPrePct,
-        actualPostPct: actualPostPct
+        actualPostPct: actualPostPct,
+        fixedSelectedYears: (fixedInstScope === 'custom') ? (window.getFixedSelectedYears ? window.getFixedSelectedYears() : [1, 2]) : [],
+        nFixed: (fixedInstScope === 'custom') ? (allInstFlows.filter(fl => (window.getFixedSelectedYears ? window.getFixedSelectedYears() : [1, 2]).includes(fl._instYear)).length) : 0,
+        nUnfixed: (fixedInstScope === 'custom') ? (allInstFlows.filter(fl => !(window.getFixedSelectedYears ? window.getFixedSelectedYears() : [1, 2]).includes(fl._instYear)).length) : 0,
+        amtPerUnfixed: (fixedInstScope === 'custom') ? (allInstFlows.filter(fl => !(window.getFixedSelectedYears ? window.getFixedSelectedYears() : [1, 2]).includes(fl._instYear)).length > 0 ? (Math.max(0, remAmt - (allInstFlows.filter(fl => (window.getFixedSelectedYears ? window.getFixedSelectedYears() : [1, 2]).includes(fl._instYear)).length * fixedAmt)) / allInstFlows.filter(fl => !(window.getFixedSelectedYears ? window.getFixedSelectedYears() : [1, 2]).includes(fl._instYear)).length) : 0) : 0
     };
     
     let accumulatedWithheld = 0;
@@ -2629,13 +2763,40 @@ function calculateCustomFlows(price, template, options = {}) {
 
     flows.forEach(f => {
         if ((f.isInst || f.isMerged) && !f.isFixedOverride) {
-            let isFlowFixedInst = hasFixedInst && !hasMeltActive && ((fixedInstScope === 'all') || (fixedInstScope === 'pre' && f.months <= delivMonth) || (fixedInstScope === 'post' && f.months > delivMonth));
+            let fixedSelectedYears = (fixedInstScope === 'custom') ? (window.getFixedSelectedYears ? window.getFixedSelectedYears() : [1, 2]) : [];
+                        let isFlowFixedInst = hasFixedInst && !hasMeltActive && (
+                (fixedInstScope === 'all') || 
+                (fixedInstScope === 'pre' && f.months <= delivMonth) || 
+                (fixedInstScope === 'post' && f.months > delivMonth) ||
+                (fixedInstScope === 'custom' && fixedSelectedYears.includes(f._instYear))
+            );
             if (isFlowFixedInst) {
                 f._isFixedInst = true;
                 f._isFixedCash = (fixedInstType === 'amt');
+                f._isFixedPct = (fixedInstType === 'pct');
+                if (fixedInstType === 'amt') {
+                    f._exactFixedVal = fixedAmt;
+                } else {
+                    f._exactFixedPct = fixedInstVal;
+                }
                 f.isFixedOverride = true;
+            } else {
+                f._isFixedInst = false;
+                f._isFixedCash = false;
+                f.isFixedOverride = false;
+                delete f._exactFixedVal;
+                delete f._exactFixedPct;
             }
             let baseInstAmt = (f.months <= delivMonth) ? instAmtPre : instAmtPost;
+            if (hasFixedInst && fixedInstScope === 'custom') {
+                let fixedSelectedYearsCalc = window.getFixedSelectedYears ? window.getFixedSelectedYears() : [1, 2];
+                let fixedInstsCalc = allInstFlows.filter(fl => fixedSelectedYearsCalc.includes(fl._instYear));
+                let unfixedInstsCalc = allInstFlows.filter(fl => !fixedSelectedYearsCalc.includes(fl._instYear));
+                let totalFixedCashCalc = fixedInstsCalc.length * fixedAmt;
+                let remForUnfixedCalc = Math.max(0, remAmt - totalFixedCashCalc);
+                let amtPerUnfixedCalc = unfixedInstsCalc.length > 0 ? (remForUnfixedCalc / unfixedInstsCalc.length) : 0;
+                baseInstAmt = isFlowFixedInst ? fixedAmt : amtPerUnfixedCalc;
+            }
             let currentInstAmt = baseInstAmt;
             
             let applyShift = hasIntraYearShift;
@@ -2895,7 +3056,13 @@ function reconcileIntegerInstallments(flows, targetTotalPrice) {
 
         if (!f._isInstZeroShifted) {
             let idealInst = f._instPortionAmt !== undefined ? f._instPortionAmt : Math.max(0, (f.amount || 0) - delivPart);
-            dynInstEntries.push({ flow: f, idealAmt: idealInst, isMerged: true });
+            if (f._isFixedInst) {
+                f._instPortionAmt = Math.round(idealInst);
+                f.amount = delivPart + f._instPortionAmt;
+                fixedInstSum += f._instPortionAmt;
+            } else {
+                dynInstEntries.push({ flow: f, idealAmt: idealInst, isMerged: true });
+            }
         } else {
             f._instPortionAmt = 0;
             f.amount = delivPart;
@@ -2918,13 +3085,15 @@ function reconcileIntegerInstallments(flows, targetTotalPrice) {
     if (dynInstEntries.length > 0) {
         let isStandardUniform = dynInstEntries.every(d => Math.abs(d.idealAmt - dynInstEntries[0].idealAmt) < 0.5);
         if (isStandardUniform) {
-            let uniformAmt = Math.round(dynInstEntries[0].idealAmt);
-            dynInstEntries.forEach(d => {
+            let baseUniform = Math.floor(remForDyn / dynInstEntries.length);
+            let deficit = remForDyn - (baseUniform * dynInstEntries.length);
+            dynInstEntries.forEach((d, idx) => {
+                let instPart = baseUniform + (idx >= (dynInstEntries.length - deficit) ? 1 : 0);
                 if (d.isMerged) {
-                    d.flow._instPortionAmt = uniformAmt;
-                    d.flow.amount = (d.flow._delivPortionAmt || 0) + uniformAmt;
+                    d.flow._instPortionAmt = instPart;
+                    d.flow.amount = (d.flow._delivPortionAmt || 0) + instPart;
                 } else {
-                    d.flow.amount = uniformAmt;
+                    d.flow.amount = instPart;
                 }
             });
         } else {
@@ -3107,7 +3276,8 @@ function applyPerfectPercentages(flows, totalAmt) {
 
         let diffCents = totalCents - sumAssignedCents;
         if (diffCents !== 0) {
-            let adjustable = activeNonMnt.filter(f => f.isInst || f.isMerged);
+            let adjustable = activeNonMnt.filter(f => (f.isInst || f.isMerged) && !f._isFixedInst && !f.isFixedOverride);
+            if (adjustable.length === 0) adjustable = activeNonMnt.filter(f => !f.isDP && !f._isFixedInst && !f.isFixedOverride);
             if (adjustable.length === 0) adjustable = activeNonMnt;
 
             if (diffCents > 0 && adjustable.length > 0) {
@@ -3157,32 +3327,120 @@ function updatePreDeliveryTracker(flows, elementId) {
     return pct;
 }
 
+// ==========================================
+// --- PURE ORIGINAL BASELINE ENGINE ---
+// Calculates the 100% pristine baseline for any duration (8y, 10y, etc.)
+// without any custom milestones, shifts, or overrides.
+// ==========================================
+window.getPureOriginalBaseline = function(proj, years, freqMonths, contractDateStr) {
+    if (!contractDateStr) contractDateStr = formatDate(new Date());
+    years = Math.max(1, Math.min(20, parseInt(years) || 8));
+    freqMonths = (parseInt(freqMonths) === 6 || parseInt(freqMonths) === 3) ? parseInt(freqMonths) : 3;
+    let tpl = generateFlowsTemplate(contractDateStr, years, freqMonths, true, null, true);
+    let samplePrice = 10000000;
+    let flows = calculateBaseFlows(samplePrice, tpl, contractDateStr);
+    let instsPerYear = 12 / freqMonths;
+    let baseInsts = flows.filter(f => (f.isInst || f.isMerged) && !f.isMnt);
+    baseInsts.forEach((f, idx) => {
+        f._instYear = Math.floor(idx / instsPerYear) + 1;
+    });
+    
+    let isZomra = (proj === 'Zomra');
+    let delivMonth = (proj === 'ORB') ? 24 : (isZomra ? 37 : (proj === 'Perla' ? 51 : 48));
+    
+    let totAmt = flows.filter(f => !f.isMnt).reduce((s, f) => s + (f.amount || 0), 0);
+    let preAmt = flows.filter(f => !f.isMnt && f.months <= delivMonth).reduce((s, f) => s + (f.amount || 0), 0);
+    let origPreDelivPct = totAmt > 0 ? (preAmt / totAmt * 100) : 0;
+    
+    let annual = [];
+    for (let y = 1; y <= years; y++) {
+        let mLimit = y * 12;
+        let cumAmt = flows.filter(f => !f.isMnt && (f._instYear ? (f._instYear <= y) : (f.months <= mLimit))).reduce((s, f) => s + (f.amount || 0), 0);
+        annual.push({
+            year: y,
+            cumPct: totAmt > 0 ? (cumAmt / totAmt * 100) : 0
+        });
+    }
+    
+    return {
+        years: years,
+        freqMonths: freqMonths,
+        delivMonth: delivMonth,
+        origPreDelivPct: origPreDelivPct,
+        annual: annual,
+        flows: flows
+    };
+};
+
+window.getOfferCumulativeAnalysis = function(flows, years, proj) {
+    if (!flows || !Array.isArray(flows)) return null;
+    years = Math.max(1, Math.min(20, parseInt(years) || 8));
+    let isZomra = (proj === 'Zomra');
+    let delivMonth = (proj === 'ORB') ? 24 : (isZomra ? 37 : (proj === 'Perla' ? 51 : 48));
+    
+    let totAmt = flows.filter(f => !f.isMnt).reduce((s, f) => s + (f.amount || 0), 0);
+    let preAmt = flows.filter(f => !f.isMnt && f.months <= delivMonth).reduce((s, f) => s + (f.amount || 0), 0);
+    let offerPreDelivPct = totAmt > 0 ? (preAmt / totAmt * 100) : 0;
+    
+    let annual = [];
+    for (let y = 1; y <= years; y++) {
+        let mLimit = y * 12;
+        let cumAmt = flows.filter(f => !f.isMnt && (f._instYear ? (f._instYear <= y) : (f.months <= mLimit))).reduce((s, f) => s + (f.amount || 0), 0);
+        annual.push({
+            year: y,
+            cumPct: totAmt > 0 ? (cumAmt / totAmt * 100) : 0
+        });
+    }
+    
+    return {
+        offerPreDelivPct: offerPreDelivPct,
+        annual: annual
+    };
+};
+
+window.resetToPureBaseline = function() {
+    let yr = parseInt(document.getElementById('duration-years')?.value) || 8;
+    if (typeof window.applyRecYears === 'function') {
+        window.applyRecYears(yr);
+    } else {
+        let fixedToggle = document.getElementById('fixed-inst-toggle');
+        if (fixedToggle) fixedToggle.checked = false;
+        let intraToggle = document.getElementById('toggle-intra-year');
+        if (intraToggle) intraToggle.checked = false;
+        let legacyToggle = document.getElementById('toggle-70-30');
+        if (legacyToggle) legacyToggle.checked = false;
+        window.customMilestonesState = {};
+        calculate();
+    }
+    if (typeof window.showToast === 'function') {
+        window.showToast(`✅ تم استعادة بيمنت الـ ${yr} سنين الأوريجنال الأصلية بنجاح!`);
+    }
+};
+
+window.toggleAnnualMatrixVisibility = function() {
+    let el = document.getElementById('fixed-inst-annual-matrix-wrapper');
+    if (!el) return;
+    el.style.display = (el.style.display === 'none' || !el.style.display) ? 'block' : 'none';
+};
+
 // --- Financial Approval & Risk Assessment Functions ---
-window.approvalBenchmarkMode = '8y';
+window.approvalBenchmarkMode = 'auto';
 
 function getProjectBenchmarks() {
-    if (currentProject === 'Zomra') {
-        return {
-            y8: 46.88,
-            y10: 40.50,
-            delivMonth: 37,
-            fixedDP: 15.0
-        };
-    } else if (currentProject === 'Jirian') {
-        return {
-            y8: 55.00,
-            y10: 46.00,
-            delivMonth: 48,
-            fixedDP: 10.0
-        };
-    } else { // Perla
-        return {
-            y8: 53.55,
-            y10: 47.78,
-            delivMonth: 48,
-            fixedDP: 10.0
-        };
-    }
+    let freqMonths = parseInt(document.getElementById('payment-frequency')?.value) === 2 ? 6 : 3;
+    let contractDateStr = document.getElementById('contract-date')?.value;
+    let b8 = window.getPureOriginalBaseline ? window.getPureOriginalBaseline(currentProject, 8, freqMonths, contractDateStr) : null;
+    let b10 = window.getPureOriginalBaseline ? window.getPureOriginalBaseline(currentProject, 10, freqMonths, contractDateStr) : null;
+    
+    let y8_val = b8 ? b8.origPreDelivPct : (currentProject === 'Zomra' ? 46.88 : (currentProject === 'Jirian' ? 55.00 : 53.55));
+    let y10_val = b10 ? b10.origPreDelivPct : (currentProject === 'Zomra' ? 40.50 : (currentProject === 'Jirian' ? 46.00 : 47.78));
+
+    return {
+        y8: y8_val,
+        y10: y10_val,
+        delivMonth: (currentProject === 'ORB') ? 24 : (currentProject === 'Zomra' ? 37 : (currentProject === 'Perla' ? 51 : 48)),
+        fixedDP: (currentProject === 'Zomra') ? 15.0 : 10.0
+    };
 }
 
 window.setApprovalBenchmark = function(mode) {
@@ -3209,45 +3467,48 @@ window.setApprovalBenchmark = function(mode) {
 };
 
 function getActiveBenchmark(benchmarks) {
-    let mode = window.approvalBenchmarkMode || '8y';
+    let mode = window.approvalBenchmarkMode || 'auto';
+    let currentYears = parseInt(document.getElementById('duration-years')?.value) || 8;
+    let freqMonths = parseInt(document.getElementById('payment-frequency')?.value) === 2 ? 6 : 3;
+    let contractDateStr = document.getElementById('contract-date')?.value;
+    
     if (mode === '8y') {
-        return { pct: benchmarks.y8, label: 'سياسة 8 سنوات الطبيعية' };
+        let b = window.getPureOriginalBaseline ? window.getPureOriginalBaseline(currentProject, 8, freqMonths, contractDateStr) : null;
+        let pct = b ? b.origPreDelivPct : 50.0;
+        return { pct: pct, label: `بيمنت الـ 8 سنوات الأوريجنال (${pct.toFixed(2)}%)`, years: 8, baseline: b };
     }
     if (mode === '10y') {
-        return { pct: benchmarks.y10, label: 'سياسة 10 سنوات الطبيعية' };
+        let b = window.getPureOriginalBaseline ? window.getPureOriginalBaseline(currentProject, 10, freqMonths, contractDateStr) : null;
+        let pct = b ? b.origPreDelivPct : 46.0;
+        return { pct: pct, label: `بيمنت الـ 10 سنوات الأوريجنال (${pct.toFixed(2)}%)`, years: 10, baseline: b };
     }
-    let yrs = parseInt(document.getElementById('duration-years')?.value) || 8;
-    let autoPct = benchmarks.y8;
-    if (yrs === 8) autoPct = benchmarks.y8;
-    else if (yrs === 10) autoPct = benchmarks.y10;
-    else {
-        if (currentProject === 'Zomra') {
-            autoPct = 15.0 + (255.0 / yrs);
-        } else {
-            let totalInst = (yrs * 12 - 6) / 3 + 1;
-            autoPct = 10.0 + (15 * (90.0 / totalInst));
-        }
-    }
-    return { pct: autoPct, label: `طبيعي مدة الخطة (${yrs} سنوات)` };
+    // 'auto' mode: Pure Original Baseline for the EXACT duration of the Offer Plan!
+    let b = window.getPureOriginalBaseline ? window.getPureOriginalBaseline(currentProject, currentYears, freqMonths, contractDateStr) : null;
+    let pct = b ? b.origPreDelivPct : (benchmarks ? benchmarks.y8 : 50.0);
+    return { pct: pct, label: `بيمنت الـ ${currentYears} سنوات الأوريجنال (${pct.toFixed(2)}%)`, years: currentYears, baseline: b };
 }
 
 function updateBenchmarkButtonLabels() {
-    let benchmarks = getProjectBenchmarks();
-    let b8 = document.getElementById('bench-btn-8y');
-    let b10 = document.getElementById('bench-btn-10y');
-    let bAuto = document.getElementById('bench-btn-auto');
-    let mode = window.approvalBenchmarkMode || '8y';
+    let currentYears = parseInt(document.getElementById('duration-years')?.value) || 8;
+    let freqMonths = parseInt(document.getElementById('payment-frequency')?.value) === 2 ? 6 : 3;
+    let contractDateStr = document.getElementById('contract-date')?.value;
+    
+    let b8 = window.getPureOriginalBaseline ? window.getPureOriginalBaseline(currentProject, 8, freqMonths, contractDateStr) : null;
+    let b10 = window.getPureOriginalBaseline ? window.getPureOriginalBaseline(currentProject, 10, freqMonths, contractDateStr) : null;
+    let bAuto = window.getPureOriginalBaseline ? window.getPureOriginalBaseline(currentProject, currentYears, freqMonths, contractDateStr) : null;
+    
+    let p8 = b8 ? b8.origPreDelivPct : 50.0;
+    let p10 = b10 ? b10.origPreDelivPct : 46.0;
+    let pAuto = bAuto ? bAuto.origPreDelivPct : 50.0;
 
-    if (b8) {
-        b8.innerText = (mode === '8y' ? '🔘 ' : '⚪ ') + `سياسة 8 سنوات (${benchmarks.y8.toFixed(2)}%)`;
-    }
-    if (b10) {
-        b10.innerText = (mode === '10y' ? '🔘 ' : '⚪ ') + `سياسة 10 سنوات (${benchmarks.y10.toFixed(2)}%)`;
-    }
-    if (bAuto) {
-        let yrs = parseInt(document.getElementById('duration-years')?.value) || 8;
-        bAuto.innerText = (mode === 'auto' ? '🔘 ' : '⚪ ') + `حسب مدة الخطة (${yrs} سنوات)`;
-    }
+    let btn8 = document.getElementById('bench-btn-8y');
+    let btn10 = document.getElementById('bench-btn-10y');
+    let btnAuto = document.getElementById('bench-btn-auto');
+    let mode = window.approvalBenchmarkMode || 'auto';
+
+    if (btn8) btn8.innerText = (mode === '8y' ? '🔘 ' : '⚪ ') + `أوريجنال 8 سنوات (${p8.toFixed(2)}%)`;
+    if (btn10) btn10.innerText = (mode === '10y' ? '🔘 ' : '⚪ ') + `أوريجنال 10 سنوات (${p10.toFixed(2)}%)`;
+    if (btnAuto) btnAuto.innerText = (mode === 'auto' ? '🔘 ' : '⚪ ') + `حسب مدة الخطة (${currentYears} سنين: ${pAuto.toFixed(2)}%)`;
 }
 
 window.toggleApprovalAudit = function() {
@@ -3435,6 +3696,11 @@ function updateDistUI(distInfo) {
             } else if (fixedInstScope === 'post') {
                 indicator.innerText = `الوضع: تثبيت قسط بعد الاستلام عند ${formatNum(fixedInstVal)} ج.م (قبل الاستلام محسوب بالتساوي)`;
                 indicator.style.color = 'var(--accent-blue)';
+            } else if (fixedInstScope === 'custom') {
+                let fixedYears = window.getFixedSelectedYears ? window.getFixedSelectedYears() : [1, 2];
+                let yearsStr = fixedYears.map(y => `سنة ${y}`).join('، ');
+                indicator.innerText = `الوضع: تثبيت أقساط ${yearsStr} عند ${formatNum(fixedInstVal)} ج.م (باقي السنين محسوبة بالتساوي بدون بالون)`;
+                indicator.style.color = 'var(--gold)';
             } else {
                 indicator.innerText = `الوضع: تثبيت جميع الأقساط عند ${formatNum(fixedInstVal)} ج.م`;
                 indicator.style.color = 'var(--gold)';
@@ -3780,6 +4046,23 @@ function renderFixedGuidanceBox(g) {
                     (${g.actualPrePct.toFixed(2)}% إجمالي / ${(g.nPre > 0 ? g.actualPrePct / g.nPre : 0).toFixed(2)}% لكل قسط) 
                     | عدد: ${g.nPre} قسطاً
                 </div>`;
+        } else if (g.scope === 'custom') {
+            let yearsStr = (g.fixedSelectedYears && g.fixedSelectedYears.length > 0) ? g.fixedSelectedYears.map(y => `سنة ${y}`).join('، ') : 'السنين المحددة';
+            let monthlyFixed = (g.fixedAmt || 0) / freqMonths;
+            let monthlyUnfixed = (g.amtPerUnfixed || 0) / freqMonths;
+            counterpartEl.innerHTML = `
+                <div style="display: flex; flex-direction: column; gap: 4px;">
+                    <div style="color: var(--gold); font-weight: bold; font-size: 0.88rem;">
+                        📌 السنين المثبتة (${yearsStr} — ${g.nFixed} قسطاً): 
+                        <span style="color: #fff;">${formatCurr(g.fixedAmt)}</span> 
+                        <span style="color: #2ecc71; font-size: 0.8rem; margin-right: 4px;">(💡 يعادل ${formatCurr(monthlyFixed)} / شهر)</span>
+                    </div>
+                    <div style="color: var(--accent-blue); font-weight: bold; font-size: 0.88rem;">
+                        ➡️ باقي السنين غير المحددة (${g.nUnfixed} قسطاً بالتساوي بدون بالون): 
+                        <span style="color: #fff;">${formatCurr(g.amtPerUnfixed)}</span> 
+                        <span style="color: #2ecc71; font-size: 0.8rem; margin-right: 4px;">(💡 يعادل ${formatCurr(monthlyUnfixed)} / شهر)</span>
+                    </div>
+                </div>`;
         } else {
             let totalInst = nTotal * g.fixedAmt;
             let monthlyAll = (g.fixedAmt || 0) / freqMonths;
@@ -3801,16 +4084,170 @@ function renderFixedGuidanceBox(g) {
         let totalFixedInst = nTotal * fixedInst;
         let pvFixedInsts = fixedInst * sumAllInstDf;
         
-        if (g.scope !== 'all') {
-            guidanceBox.style.background = 'rgba(46, 204, 113, 0.1)';
-            guidanceBox.style.border = '1px solid rgba(46, 204, 113, 0.3)';
-            guidanceBox.innerHTML = `
-                <div style="color: #2ecc71; font-weight: bold;">
-                    ✅ الخطة متطابقة تماماً بنسبة 100% مع شيت الإكسيل (تم احتساب باقي الأقساط بالـ NPV تلقائياً).
+        let pureBase = window.getPureOriginalBaseline ? window.getPureOriginalBaseline(currentProject, currentYears, freqMonths, contractDateStr) : null;
+        let offerAnalysis = window.getOfferCumulativeAnalysis ? window.getOfferCumulativeAnalysis(globalCustomFlows, currentYears, currentProject) : null;
+
+        let offerPreDelivPct = offerAnalysis ? offerAnalysis.offerPreDelivPct : (window.lastOfferPreDelivPct || 0);
+        let basePreDelivPct = pureBase ? pureBase.origPreDelivPct : (parseFloat(document.getElementById('base-pre-delivery')?.innerText.replace('%', '')) || 50.0);
+        let diffPct = offerPreDelivPct - basePreDelivPct;
+
+        let currentDelivPct = 0;
+        if (typeof globalCustomFlows !== 'undefined' && globalCustomFlows) {
+            let delivFlow = globalCustomFlows.find(f => f.id === 'deliv' || (f.mergedIds && f.mergedIds.includes('deliv')) || (f.label && f.label.includes('Delivery') && !f.isMnt));
+            if (delivFlow) {
+                if (delivFlow._exactFixedPct !== undefined && delivFlow._exactFixedPct !== null) currentDelivPct = delivFlow._exactFixedPct;
+                else if (delivFlow.exactPct !== undefined && delivFlow.exactPct !== null) currentDelivPct = delivFlow.exactPct * 100;
+                else if (delivFlow.defaultPct) currentDelivPct = delivFlow.defaultPct * 100;
+                else if (delivFlow._pctVal) currentDelivPct = delivFlow._pctVal;
+            }
+        }
+        if (currentDelivPct === 0 && window.customMilestonesState && window.customMilestonesState.deliv_val) {
+            currentDelivPct = parseFloat(window.customMilestonesState.deliv_val) || 0;
+        }
+
+        // Annual collection analysis against pure baseline of currentYears
+        let annualRows = [];
+        let hasYearDeficit = false;
+        let deficitYears = [];
+
+        for (let y = 1; y <= currentYears; y++) {
+            let origY = (pureBase && pureBase.annual && pureBase.annual[y - 1]) ? pureBase.annual[y - 1].cumPct : 0;
+            let offerY = (offerAnalysis && offerAnalysis.annual && offerAnalysis.annual[y - 1]) ? offerAnalysis.annual[y - 1].cumPct : 0;
+            let diffY = offerY - origY;
+            if (diffY < -0.15) {
+                hasYearDeficit = true;
+                deficitYears.push({ year: y, diff: diffY, orig: origY, offer: offerY });
+            }
+            annualRows.push({ year: y, origY: origY, offerY: offerY, diffY: diffY });
+        }
+
+        // Build annual comparison matrix HTML
+        let matrixRowsHtml = annualRows.map(r => {
+            let statusBadge = (Math.abs(r.diffY) <= 0.15) 
+                ? '<span style="color:#2ecc71; font-weight:bold;">✅ متطابق</span>'
+                : (r.diffY > 0.15 
+                    ? `<span style="color:#10b981; font-weight:bold;">🟢 أعلى (+${r.diffY.toFixed(2)}%)</span>`
+                    : `<span style="color:#e74c3c; font-weight:bold;">⚠️ أقل (${r.diffY.toFixed(2)}%)</span>`);
+            return `
+                <tr style="border-bottom: 1px solid rgba(255,255,255,0.07); text-align:center;">
+                    <td style="padding: 4px 6px; font-weight:bold; color:var(--gold);">السنة ${r.year}</td>
+                    <td style="padding: 4px 6px; color:#fff;">${r.offerY.toFixed(2)}%</td>
+                    <td style="padding: 4px 6px; color:var(--accent-blue);">${r.origY.toFixed(2)}%</td>
+                    <td style="padding: 4px 6px; color:${r.diffY >= -0.15 ? '#2ecc71' : '#e74c3c'}; font-weight:bold;">${r.diffY >= 0 ? '+' : ''}${r.diffY.toFixed(2)}%</td>
+                    <td style="padding: 4px 6px;">${statusBadge}</td>
+                </tr>
+            `;
+        }).join('');
+
+        let suggestedDelivPct = (currentDelivPct >= diffPct) ? (currentDelivPct - diffPct) : 0.0;
+        let isGuidanceBalanced = Math.abs(diffPct) <= 0.15 && !hasYearDeficit;
+
+        guidanceBox.style.background = isGuidanceBalanced ? 'rgba(46, 204, 113, 0.1)' : 'rgba(230, 126, 34, 0.12)';
+        guidanceBox.style.border = isGuidanceBalanced ? '1px solid rgba(46, 204, 113, 0.3)' : '1px solid rgba(230, 126, 34, 0.4)';
+        guidanceBox.style.padding = '12px 14px';
+        guidanceBox.style.borderRadius = '8px';
+
+        let delivStatusHtml = '';
+        if (diffPct > 0.15) {
+            delivStatusHtml = `
+                <div style="font-size: 0.85rem; line-height: 1.4; color: #eee;">
+                    نسبة التحصيل الحالية قبل الاستلام وصلت إلى <span style="color: #f39c12; font-weight: bold;">${offerPreDelivPct.toFixed(2)}%</span> 
+                    (أعلى من بيمنت الـ ${currentYears} سنين الأوريجنال البالغة <span style="color: var(--accent-blue); font-weight: bold;">${basePreDelivPct.toFixed(2)}%</span> بزيادة <span style="color: #e74c3c; font-weight: bold;">+${diffPct.toFixed(2)}%</span>).
                 </div>
             `;
-            return;
+        } else if (diffPct < -0.15) {
+            delivStatusHtml = `
+                <div style="font-size: 0.85rem; line-height: 1.4; color: #eee;">
+                    نسبة التحصيل الحالية قبل الاستلام وصلت إلى <span style="color: #e74c3c; font-weight: bold;">${offerPreDelivPct.toFixed(2)}%</span> 
+                    (أقل من بيمنت الـ ${currentYears} سنين الأوريجنال البالغة <span style="color: var(--accent-blue); font-weight: bold;">${basePreDelivPct.toFixed(2)}%</span> بنقص <span style="color: #e74c3c; font-weight: bold;">${diffPct.toFixed(2)}%</span>).
+                </div>
+            `;
+        } else {
+            delivStatusHtml = `
+                <div style="font-size: 0.85rem; color: #2ecc71; font-weight: bold;">
+                    ✅ نسبة التحصيل حتى الاستلام (${offerPreDelivPct.toFixed(2)}%) متطابقة تماماً مع بيمنت الـ ${currentYears} سنين الأوريجنال (${basePreDelivPct.toFixed(2)}%).
+                </div>
+            `;
         }
+
+        let annualDeficitWarning = '';
+        if (hasYearDeficit) {
+            annualDeficitWarning = `
+                <div style="margin-top: 6px; padding: 6px 10px; background: rgba(231, 76, 60, 0.15); border-radius: 4px; border: 1px solid rgba(231, 76, 60, 0.3); font-size: 0.83rem; color: #fca5a5;">
+                    ⚠️ <strong>تنبيه التحصيل السنوي:</strong> 
+                    التحصيل التراكمي في (${deficitYears.map(d => `السنة ${d.year}`).join('، ')}) أقل من البيمنت الأوريجنال.
+                </div>
+            `;
+        }
+
+        let optionsHtml = `
+            <div style="margin-top: 10px; padding: 10px; background: rgba(0,0,0,0.3); border-radius: 6px; border: 1px dashed rgba(255,255,255,0.15);">
+                <div style="color: var(--gold); font-weight: bold; font-size: 0.86rem; margin-bottom: 6px;">
+                    🎯 خيارات وبدائل متاحة (اختر ما يناسبك بحرية أو اترك الخطة كما هي):
+                </div>
+                <div style="display: flex; flex-direction: column; gap: 6px;">
+                    ${(currentDelivPct > 0 && Math.abs(diffPct) > 0.15) ? `
+                        <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 6px; background: rgba(255,255,255,0.03); padding: 5px 8px; border-radius: 4px;">
+                            <span style="font-size: 0.82rem; color: #eee;">
+                                <strong>الخيار (1):</strong> ضبط دفعة الاستلام لتصبح <strong>${suggestedDelivPct.toFixed(2)}%</strong> لمعادلة التحصيل قبل الاستلام تماماً.
+                            </span>
+                            <button type="button" class="btn btn-primary" onclick="window.applySuggestedDeliveryPct(${suggestedDelivPct.toFixed(2)})" style="padding: 3px 10px; font-size: 0.78rem; background: var(--accent-blue); border-color: var(--accent-blue); cursor: pointer; font-weight: bold;">
+                                ⚡ تطبيق نسبة الاستلام (${suggestedDelivPct.toFixed(2)}%)
+                            </button>
+                        </div>
+                    ` : ''}
+                    <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 6px; background: rgba(255,255,255,0.03); padding: 5px 8px; border-radius: 4px;">
+                        <span style="font-size: 0.82rem; color: #eee;">
+                            <strong>الخيار (2):</strong> الإبقاء على الخطة الاستثنائية الحالية وتصديرها مباشرة دون أي تعديل.
+                        </span>
+                        <span style="color: #2ecc71; font-weight: bold; font-size: 0.8rem;">متاح للاعتماد ✅</span>
+                    </div>
+                    <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 6px; background: rgba(255,255,255,0.03); padding: 5px 8px; border-radius: 4px;">
+                        <span style="font-size: 0.82rem; color: #eee;">
+                            <strong>الخيار (3):</strong> استعادة بيمنت الـ ${currentYears} سنين الأوريجنال الطبيعية 100% بنقرة واحدة.
+                        </span>
+                        <button type="button" class="btn btn-outline" onclick="window.resetToPureBaseline()" style="padding: 3px 10px; font-size: 0.78rem; border-color: var(--gold); color: var(--gold); cursor: pointer;">
+                            🔄 استعادة الأوريجنال (${currentYears} سنين)
+                        </button>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        guidanceBox.innerHTML = `
+            <div style="display: flex; flex-direction: column; gap: 4px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap;">
+                    <div style="color: ${isGuidanceBalanced ? '#2ecc71' : '#f39c12'}; font-weight: bold; font-size: 0.88rem;">
+                        📊 <strong>مستشار التحصيل مقارنة ببيمنت الـ ${currentYears} سنين الأوريجنال (${basePreDelivPct.toFixed(2)}%):</strong>
+                    </div>
+                    <button type="button" onclick="window.toggleAnnualMatrixVisibility()" style="background: none; border: 1px solid rgba(255,255,255,0.2); color: var(--gold); padding: 2px 8px; border-radius: 4px; font-size: 0.76rem; cursor: pointer;">
+                        🔍 تفاصيل التحصيل السنوي (سنة بسنة)
+                    </button>
+                </div>
+                ${delivStatusHtml}
+                ${annualDeficitWarning}
+                
+                <div id="fixed-inst-annual-matrix-wrapper" style="display: none; margin-top: 8px; overflow-x: auto;">
+                    <table style="width: 100%; border-collapse: collapse; font-size: 0.8rem; background: rgba(0,0,0,0.4); border-radius: 4px;">
+                        <thead>
+                            <tr style="border-bottom: 1px solid rgba(255,255,255,0.15); background: rgba(255,255,255,0.05); color: var(--text-muted); text-align: center;">
+                                <th style="padding: 4px 6px;">السنة</th>
+                                <th style="padding: 4px 6px;">تحصيل العرض الحالي</th>
+                                <th style="padding: 4px 6px;">بيمنت الـ ${currentYears} سنين الأوريجنال</th>
+                                <th style="padding: 4px 6px;">الفرق</th>
+                                <th style="padding: 4px 6px;">الحالة</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${matrixRowsHtml}
+                        </tbody>
+                    </table>
+                </div>
+
+                ${optionsHtml}
+            </div>
+        `;
+        return;
 
         // Check if balanced
         let isBalanced = Math.abs(fixedInst - naturalInst) < 50;
@@ -4421,7 +4858,7 @@ function calculate() {
         if (isLegacy7030 && (!isIntraToggle || isNaN(intraValRaw) || intraValRaw <= 0)) {
             intraValRaw = 70;
         }
-        let hasIntraYearShift = (freqMonths !== 6) && (isIntraToggle || isLegacy7030) && !isNaN(intraValRaw) && intraValRaw > 0;
+        let hasIntraYearShift = (isIntraToggle || isLegacy7030) && !isNaN(intraValRaw) && intraValRaw > 0;
 
         let naturalOfferPrice = 0;
         let hasCustomMsActive = window.customMilestonesState && (window.customMilestonesState.splitDP1 || window.customMilestonesState.splitDP2 || (Array.isArray(window.customMilestonesState.extraPayments) && window.customMilestonesState.extraPayments.length > 0));
@@ -4498,278 +4935,10 @@ function calculate() {
             globalCustomFlows = reconcileIntegerInstallments(globalCustomFlows, effectivePrice);
             globalCustomFlows = applyPerfectPercentages(globalCustomFlows, Math.round(effectivePrice));
             window.globalCustomFlows = globalCustomFlows;
-
-        } else if (targetPv > 0 && !hasTargetPrice && !hasManualDiscount) {
-            // Excel GoalSeek Closed-Loop Analytical Solver (100% Millimeter Parity):
-            // Matches Excel cell M13 = Target_PV / SUM( L_i * PV_Factor_i )
-            // Perfectly solves combinations of fixed cash amounts and percentages without drift.
-            globalCustomFlows = calculateCustomFlows(effectivePrice, customTemplate);
-            let nonMnt = globalCustomFlows.filter(f => !f.isMnt);
-
-            let fixedCashTotal = 0;
-            let fixedCashPvSum = 0;
-            let fixedPctTotal = 0;
-            let fixedPctPvSum = 0;
-            let dynamicFlows = [];
-            let totalDynAmt = 0;
-
-            nonMnt.forEach(f => {
-                let df = f.pvFactor !== undefined ? f.pvFactor : 1.0;
-
-                if (f.isMerged) {
-                    let delivPct = (f._exactMergedDelivPct !== undefined && f._exactMergedDelivPct !== null) ? (f._exactMergedDelivPct / 100.0) : 0.05;
-                    fixedPctTotal += delivPct;
-                    fixedPctPvSum += delivPct * df;
-
-                    let instPart = f._instPortionAmt !== undefined ? f._instPortionAmt : Math.max(0, f.amount - (f._delivPortionAmt || 0));
-                    let isInstFixedCash = f._isFixedCash || (hasFixedInst && !hasMeltActive && ((fixedInstScope === 'all') || (fixedInstScope === 'pre' && f.months <= delivMonth) || (fixedInstScope === 'post' && f.months > delivMonth)));
-                    
-                    if (isInstFixedCash) {
-                        let cashVal = (f._exactFixedVal !== undefined && f._exactFixedVal > 0) ? f._exactFixedVal : (instPart || fixedAmt);
-                        fixedCashTotal += cashVal;
-                        fixedCashPvSum += cashVal * df;
-                    } else if (f._isZeroShifted || instPart === 0) {
-                        // zero
-                    } else {
-                        dynamicFlows.push({ flow: f, weight: instPart, df: df, isMerged: true, delivPct: delivPct });
-                        totalDynAmt += instPart;
-                    }
-                } else if (f._isZeroShifted || f.amount === 0) {
-                    // Zero flow (cancelled/shifted)
-                } else {
-                    let isFixedCash = (f._exactFixedVal !== undefined && f._exactFixedVal > 0) || (f._isFixedCash && f.amount > 0);
-
-                    if (isFixedCash) {
-                        let cashAmt = f._exactFixedVal !== undefined ? f._exactFixedVal : f.amount;
-                        f._isFixedCash = true;
-                        fixedCashTotal += cashAmt;
-                        fixedCashPvSum += cashAmt * df;
-                    } else if (f._exactFixedPct !== undefined && f._exactFixedPct !== null) {
-                        let pct = f._exactFixedPct / 100.0;
-                        fixedPctTotal += pct;
-                        fixedPctPvSum += pct * df;
-                    } else if (f.isFixedOverride && f._exactFixedPct) {
-                        let pct = f._exactFixedPct / 100.0;
-                        fixedPctTotal += pct;
-                        fixedPctPvSum += pct * df;
-                    } else if (!f.isInst && f.defaultPct !== undefined && !f._exactFixedVal) {
-                        let pct = f.defaultPct;
-                        fixedPctTotal += pct;
-                        fixedPctPvSum += pct * df;
-                    } else {
-                        let instAmt = f.amount || 0;
-                        dynamicFlows.push({ flow: f, weight: instAmt, df: df, isMerged: false });
-                        totalDynAmt += instAmt;
-                    }
-                }
-            });
-
-            if (dynamicFlows.length === 0) {
-                let pFromPv = (fixedPctPvSum > 0) ? ((targetPv - fixedCashPvSum) / fixedPctPvSum) : 0;
-                if (pFromPv > 0) {
-                    effectivePrice = pFromPv;
-                } else if (fixedPctTotal < 1.0 && fixedCashTotal > 0) {
-                    effectivePrice = fixedCashTotal / (1.0 - fixedPctTotal);
-                }
-            } else {
-                let W_dyn = 0;
-                if (totalDynAmt > 0) {
-                    dynamicFlows.forEach(d => {
-                        d.normWeight = d.weight / totalDynAmt;
-                        W_dyn += d.normWeight * d.df;
-                    });
-                } else {
-                    let eqW = 1.0 / dynamicFlows.length;
-                    dynamicFlows.forEach(d => {
-                        d.normWeight = eqW;
-                        W_dyn += eqW * d.df;
-                    });
-                }
-
-                let denom = fixedPctPvSum + (1.0 - fixedPctTotal) * W_dyn;
-                let numer = targetPv - fixedCashPvSum + fixedCashTotal * W_dyn;
-
-                if (denom > 0) {
-                    effectivePrice = numer / denom;
-                }
-            }
-            actualPrice = effectivePrice;
-            finalOfferPrice = effectivePrice;
-            window.lastCalculatedPrice = effectivePrice;
-
-            // Re-assign exact amounts and percentages with 100% mathematical consistency
-            let poolDyn = effectivePrice * (1.0 - fixedPctTotal) - fixedCashTotal;
-
-            nonMnt.forEach(f => {
-                let df = f.pvFactor !== undefined ? f.pvFactor : 1.0;
-
-                if (f.isMerged) {
-                    let delivPct = (f._exactMergedDelivPct !== undefined && f._exactMergedDelivPct !== null) ? (f._exactMergedDelivPct / 100.0) : 0.05;
-                    let delivAmt = effectivePrice * delivPct;
-                    f._delivPortionAmt = delivAmt;
-
-                    let isInstFixedCash = f._isFixedCash || (hasFixedInst && !hasMeltActive && ((fixedInstScope === 'all') || (fixedInstScope === 'pre' && f.months <= delivMonth) || (fixedInstScope === 'post' && f.months > delivMonth)));
-                    if (isInstFixedCash) {
-                        let cashVal = (f._exactFixedVal !== undefined && f._exactFixedVal > 0) ? f._exactFixedVal : (f._instPortionAmt || fixedAmt);
-                        f._instPortionAmt = cashVal;
-                        f.amount = cashVal + delivAmt;
-                        f.exactPct = effectivePrice > 0 ? (f.amount / effectivePrice) : 0;
-                        f.pv = f.amount * df;
-                    }
-                } else if (f._isZeroShifted || f.amount === 0) {
-                    f.amount = 0;
-                    f.exactPct = 0;
-                    f.pv = 0;
-                } else {
-                    let isFixedCash = (f._exactFixedVal !== undefined && f._exactFixedVal > 0) || (f._isFixedCash && f.amount > 0);
-
-                    if (isFixedCash) {
-                        let cashAmt = f._exactFixedVal !== undefined ? f._exactFixedVal : f.amount;
-                        f.amount = cashAmt;
-                        f.exactPct = effectivePrice > 0 ? (cashAmt / effectivePrice) : 0;
-                        f.pv = cashAmt * df;
-                    } else if (f._exactFixedPct !== undefined && f._exactFixedPct !== null) {
-                        let pct = f._exactFixedPct / 100.0;
-                        f.amount = effectivePrice * pct;
-                        f.exactPct = pct;
-                        f.pv = f.amount * df;
-                    } else if (f.isFixedOverride && f._exactFixedPct) {
-                        let pct = f._exactFixedPct / 100.0;
-                        f.amount = effectivePrice * pct;
-                        f.exactPct = pct;
-                        f.pv = f.amount * df;
-                    } else if (!f.isInst && f.defaultPct !== undefined && !f._exactFixedVal) {
-                        let pct = f.defaultPct;
-                        f.amount = effectivePrice * pct;
-                        f.exactPct = pct;
-                        f.pv = f.amount * df;
-                    }
-                }
-            });
-
-            dynamicFlows.forEach(d => {
-                let df = d.df;
-                let instAmt = poolDyn * d.normWeight;
-                let instPct = effectivePrice > 0 ? (instAmt / effectivePrice) : 0;
-                if (d.isMerged) {
-                    let delivAmt = effectivePrice * d.delivPct;
-                    d.flow._delivPortionAmt = delivAmt;
-                    d.flow._instPortionAmt = instAmt;
-                    d.flow.amount = instAmt + delivAmt;
-                    d.flow.exactPct = instPct + d.delivPct;
-                    d.flow.pv = d.flow.amount * df;
-                } else {
-                    d.flow.amount = instAmt;
-                    d.flow.exactPct = instPct;
-                    d.flow.pv = instAmt * df;
-                }
-            });
-
-            // Parity Guard: If dynamicFlows is empty (e.g. all installments fixed cash + percentage DP/Deliv),
-            // ensure DP1 absorbs any 0.01 floating drift so sum of non-mnt amounts is 100.00% equal to effectivePrice
-            if (dynamicFlows.length === 0) {
-                let sumNonMnt = nonMnt.reduce((s, f) => s + (f.amount || 0), 0);
-                let diff = effectivePrice - sumNonMnt;
-                if (Math.abs(diff) > 0.001 && Math.abs(diff) < 50) {
-                    let dp1 = nonMnt.find(f => f.id === 'dp1');
-                    if (dp1) {
-                        dp1.amount += diff;
-                        dp1.exactPct = effectivePrice > 0 ? (dp1.amount / effectivePrice) : 0;
-                        dp1.pv = dp1.amount * (dp1.pvFactor || 1.0);
-                    }
-                }
-            }
-
-            // Populate display percentages and smart group matching
-            nonMnt.forEach(f => {
-                if (f._isZeroShifted || f.amount === 0) {
-                    f.exactPct = 0.0;
-                    f._pctVal = 0.0;
-                    f.displayPct = '0.00';
-                } else if (f.isFixedOverride && f._exactFixedPct !== undefined && f._exactFixedPct !== null) {
-                    f._pctVal = Math.round(f._exactFixedPct * 100) / 100;
-                    f.displayPct = f._pctVal.toFixed(2);
-                } else if (!f.isInst && !f.isMerged && f._exactFixedPct !== undefined && f._exactFixedPct !== null) {
-                    f._pctVal = Math.round(f._exactFixedPct * 100) / 100;
-                    f.displayPct = f._pctVal.toFixed(2);
-                } else if (!f.isInst && !f.isMerged && f._exactFixedVal !== undefined && f._exactFixedVal > 0) {
-                    let rawPct = effectivePrice > 0 ? (f.amount / effectivePrice * 100) : 0;
-                    f._pctVal = Math.round(rawPct * 100) / 100;
-                    f.displayPct = f._pctVal.toFixed(2);
-                } else if (!f.isInst && !f.isMerged && f.defaultPct !== undefined && !f._exactFixedVal) {
-                    f._pctVal = Math.round(f.defaultPct * 10000) / 100;
-                    f.displayPct = f._pctVal.toFixed(2);
-                }
-            });
-
-            let activeInsts = nonMnt.filter(f => (f.isInst || f.isMerged) && f.amount > 0 && !f._isZeroShifted);
-            activeInsts.forEach(f => {
-                if (f.isMerged) {
-                    let delivAmt = f._delivPortionAmt !== undefined ? f._delivPortionAmt : (f._savedMergedDelivAmt || 0);
-                    f._instPart = Math.max(0, f.amount - delivAmt);
-                } else {
-                    f._instPart = f.amount;
-                }
-            });
-
-            let grpList = [];
-            activeInsts.forEach(f => {
-                if (f.isFixedOverride && f._exactFixedPct !== undefined) {
-                    grpList.push({ flows: [f], targetVal: f._instPart });
-                    return;
-                }
-                let grp = grpList.find(g => Math.abs(g.targetVal - f._instPart) <= 5);
-                if (grp) {
-                    grp.flows.push(f);
-                } else {
-                    grpList.push({ flows: [f], targetVal: f._instPart });
-                }
-            });
-
-            grpList.forEach(g => {
-                let totalPart = g.flows.reduce((s, f) => s + f._instPart, 0);
-                let avgPart = totalPart / g.flows.length;
-                let uniformRawPct = effectivePrice > 0 ? (avgPart / effectivePrice * 100) : 0;
-                let uniformPctVal = Math.round(uniformRawPct * 100) / 100;
-                let uniformDisplayPct = uniformPctVal.toFixed(2);
-
-                g.flows.forEach(f => {
-                    if (f.isFixedOverride && f._exactFixedPct !== undefined) {
-                        f._pctVal = Math.round(f._exactFixedPct * 100) / 100;
-                        f.displayPct = f._pctVal.toFixed(2);
-                    } else if (f.isMerged) {
-                        let delivPct = (f._exactMergedDelivPct !== undefined && f._exactMergedDelivPct !== null)
-                            ? f._exactMergedDelivPct
-                            : (effectivePrice > 0 ? ((f._delivPortionAmt || 0) / effectivePrice * 100) : 0);
-                        let mergedPctVal = Math.round((delivPct + uniformPctVal) * 100) / 100;
-                        f._pctVal = mergedPctVal;
-                        f.displayPct = mergedPctVal.toFixed(2);
-                    } else {
-                        f._pctVal = uniformPctVal;
-                        f.displayPct = uniformDisplayPct;
-                    }
-                });
-            });
-
-            nonMnt.forEach(f => {
-                if (f.displayPct === undefined || f.displayPct === null) {
-                    let rawPct = effectivePrice > 0 ? (f.amount / effectivePrice * 100) : 0;
-                    f._pctVal = Math.round(rawPct * 100) / 100;
-                    f.displayPct = f._pctVal.toFixed(2);
-                }
-            });
-
-            globalCustomFlows.forEach(f => {
-                if (f.isMnt) {
-                    f.exactPct = 0.04;
-                    f.displayPct = '4.00';
-                }
-            });
-
-            globalCustomFlows = reconcileIntegerInstallments(globalCustomFlows, effectivePrice);
-            globalCustomFlows = applyPerfectPercentages(globalCustomFlows, Math.round(effectivePrice));
-            window.globalCustomFlows = globalCustomFlows;
         } else {
+            effectivePrice = finalOfferPrice;
+            actualPrice = effectivePrice;
+            window.lastCalculatedPrice = effectivePrice;
             globalCustomFlows = calculateCustomFlows(finalOfferPrice, customTemplate);
             globalCustomFlows = reconcileIntegerInstallments(globalCustomFlows, effectivePrice);
             globalCustomFlows = applyPerfectPercentages(globalCustomFlows, Math.round(effectivePrice));
@@ -5422,7 +5591,9 @@ function buildExportPlanHtml(opts) {
     nonMntFlows.forEach(f => {
         let grpName = '';
         if (f.months <= 1 && f.isDP) grpName = 'Down Payment';
-        else {
+        else if (f._instYear) {
+            grpName = 'Year ' + f._instYear;
+        } else {
             let y = Math.floor(f.months / 12) + 1;
             grpName = 'Year ' + y;
         }
@@ -5708,6 +5879,9 @@ function exportPDF() {
 
         html2pdf().set(opt).from(element).save().then(function() {
             restoreStyles();
+            if (typeof showToast === 'function') {
+                showToast('✅ تم تصدير ملف الـ PDF (' + pdfFileName + ') بنجاح في Downloads! يمكنك نقله لمجلد خطط السداد بضغطة واحدة من سطح المكتب.');
+            }
         }).catch(function(err) {
             console.error('PDF Export Error:', err);
             restoreStyles();
@@ -5797,7 +5971,9 @@ async function populateTemplateWorkbook(workbook, offerPrice) {
     nonMntFlows.forEach(f => {
         let grpName = '';
         if (f.months <= 1 && f.isDP) grpName = 'Down Payment';
-        else {
+        else if (f._instYear) {
+            grpName = 'Year ' + f._instYear;
+        } else {
             let y = Math.ceil(f.months / 12);
             if (y < 1) y = 1;
             grpName = 'Year ' + y;
@@ -5846,7 +6022,7 @@ async function populateTemplateWorkbook(workbook, offerPrice) {
             itemCounter++;
             let isFirst = j === 0;
             let itemAmt = Math.round(item.amount || 0);
-            let exactRatio = (!item || item._isZeroShifted || !item.amount || item.amount <= 0) ? 0.0 : (offerPrice > 0 ? (itemAmt / offerPrice) : 0);
+            let exactRatio = (!item || item._isZeroShifted || !item.amount || item.amount <= 0) ? 0.0 : (offerPrice > 0 ? (itemAmt / offerPrice) : 0.0);
             
             if (rowIdx >= totalRowIdx) {
                 ws.spliceRows(totalRowIdx, 0, []);
@@ -5993,13 +6169,15 @@ function exportExcelFallback(offerPrice) {
     nonMntFlows.forEach(f => {
         let grpName = '';
         if (f.months <= 1 && f.isDP) grpName = 'Down Payment';
-        else {
+        else if (f._instYear) {
+            grpName = 'Year ' + f._instYear;
+        } else {
             let y = Math.ceil(f.months / 12);
             if (y < 1) y = 1;
             grpName = 'Year ' + y;
         }
         let itemAmt = Math.round(f.amount || 0);
-        let exactRatio = (!f || f._isZeroShifted || !f.amount || f.amount <= 0) ? 0.0 : (offerPrice > 0 ? (itemAmt / offerPrice) : 0);
+        let exactRatio = (!f || f._isZeroShifted || !f.amount || f.amount <= 0) ? 0.0 : ((f._pctVal !== undefined && f._pctVal !== null) ? (f._pctVal / 100.0) : (f.displayPct ? (parseFloat(f.displayPct) / 100.0) : (offerPrice > 0 ? (itemAmt / offerPrice) : 0)));
         let row = [
             grpName,
             f.label,
@@ -6071,7 +6249,9 @@ function exportExcelFallback(offerPrice) {
         baseNonMnt.forEach(f => {
             let grpName = '';
             if (f.months <= 1 && f.isDP) grpName = 'Down Payment';
-            else {
+            else if (f._instYear) {
+                grpName = 'Year ' + f._instYear;
+            } else {
                 let y = Math.ceil(f.months / 12);
                 if (y < 1) y = 1;
                 grpName = 'Year ' + y;
@@ -6244,52 +6424,117 @@ window.showToast = function(msg, isSuccess = true) {
     }, 3200);
 };
 
-window.getExcelPercentagesText = function() {
+window.getExcelPercentagesText = function(isRawActiveOnly = false) {
     if (!window.globalCustomFlows || window.globalCustomFlows.length === 0) {
         return '';
     }
     let nonMnt = window.globalCustomFlows.filter(f => !f.isMnt);
-    let totalNonMntAmt = nonMnt.reduce((s, f) => s + Math.round(f.amount || 0), 0);
-    let offerPrice = totalNonMntAmt > 0 ? totalNonMntAmt : (window.lastCalculatedPrice || basePriceCache || 0);
-
+    let freqMonths = parseInt(document.getElementById('payment-frequency')?.value) === 2 ? 6 : 3;
     let isZomra = (currentProject === 'Zomra');
-    let rowCount = isZomra ? 43 : 42;
-    let excelRatios = new Array(rowCount).fill(0.0);
+    let totalTemplateRows = isZomra ? 43 : 42;
 
-    // Map every flow strictly according to its calculated cash amount relative to total offer price
-    for (let i = 0; i < rowCount; i++) {
+    let formatFlowPct = (f) => {
+        if (!f || f._isZeroShifted || !f.amount || f.amount <= 0) return '0%';
+        let offerPrice = window.lastCalculatedPrice || basePriceCache || 0;
+        let amt = Math.round(f.amount || 0);
+        if (offerPrice <= 0 || amt <= 0) return '0%';
+
+        // Check clean fixed percentage match (e.g. DP = 10% or fixed pct = 5%)
+        if (f._exactFixedPct !== undefined && f._exactFixedPct !== null && amt === Math.round(offerPrice * (f._exactFixedPct / 100.0))) {
+            return (Math.round(f._exactFixedPct * 100) / 100).toFixed(2) + '%';
+        }
+        if (f.defaultPct !== undefined && !f._exactFixedVal && amt === Math.round(offerPrice * f.defaultPct)) {
+            return (Math.round(f.defaultPct * 10000) / 100).toFixed(2) + '%';
+        }
+
+        let exactPct = (amt / offerPrice) * 100;
+        let cleanRound = Math.round(exactPct * 100) / 100;
+        if (Math.abs(exactPct - cleanRound) < 1e-7) {
+            return cleanRound.toFixed(2) + '%';
+        }
+
+        // Return high-precision percentage (8 decimal places) so Excel formulas (=G*F) resolve to exact pound amounts without rounding loss
+        return exactPct.toFixed(8) + '%';
+    };
+
+    if (isRawActiveOnly) {
+        // Direct sequential list of active rows only
+        return nonMnt.map(formatFlowPct).join('\r\n');
+    }
+
+    if (freqMonths === 6) {
+        // Semi-Annual aligned with Master Excel Sheet (4 rows per year: Q1=0%, Q2=H1, Q3=0%, Q4=H2)
+        // Row 11: DP1
+        // Row 12: DP2 (or Additional / Contract)
+        let dpFlows = nonMnt.filter(f => !f.isInst && !f.isMerged);
+        let instFlows = nonMnt.filter(f => f.isInst || f.isMerged);
+
+        let result = [];
+        // DP1
+        result.push(dpFlows[0] ? formatFlowPct(dpFlows[0]) : '0%');
+        // DP2 / Addl
+        result.push(dpFlows[1] ? formatFlowPct(dpFlows[1]) : '0%');
+        if (isZomra && dpFlows.length > 2) {
+            result.push(formatFlowPct(dpFlows[2]));
+        }
+
+        // Years 1 to 10 (4 quarters per year)
+        for (let y = 1; y <= 10; y++) {
+            let yearInsts = instFlows.filter(f => f._instYear === y);
+            let h1 = yearInsts[0] || null;
+            let h2 = yearInsts[1] || null;
+
+            // Q1: 0%
+            result.push('0%');
+            // Q2: H1 installment
+            result.push(h1 ? formatFlowPct(h1) : '0%');
+            // Q3: 0%
+            result.push('0%');
+            // Q4: H2 installment
+            result.push(h2 ? formatFlowPct(h2) : '0%');
+        }
+
+        return result.slice(0, totalTemplateRows).join('\r\n');
+    }
+
+    // Default Quarterly (4 quarters per year matching 42/43 template rows)
+    let result = [];
+    for (let i = 0; i < totalTemplateRows; i++) {
         if (i < nonMnt.length) {
-            let f = nonMnt[i];
-            if (!f || f._isZeroShifted || !f.amount || f.amount <= 0) {
-                excelRatios[i] = 0.0;
-            } else if (f.isFixedOverride && f._exactFixedPct !== undefined && f._exactFixedPct !== null) {
-                excelRatios[i] = f._exactFixedPct / 100.0;
-            } else {
-                let amt = Math.round(f.amount || 0);
-                excelRatios[i] = (amt > 0 && offerPrice > 0) ? (amt / offerPrice) : 0.0;
-            }
+            result.push(formatFlowPct(nonMnt[i]));
         } else {
-            excelRatios[i] = 0.0;
+            result.push('0%');
         }
     }
+    return result.join('\r\n');
+};
 
-    // Mathematical guarantee: strict 100.00% normalization
-    let sumR = excelRatios.reduce((s, v) => s + v, 0);
-    if (sumR > 0 && Math.abs(1.0 - sumR) > 1e-12) {
-        for (let i = rowCount - 1; i >= 0; i--) {
-            if (excelRatios[i] > 0) {
-                excelRatios[i] += (1.0 - sumR);
-                break;
-            }
-        }
+window.copyRawPercentages = function(btn) {
+    if (!btn && window.event && window.event.currentTarget) {
+        btn = window.event.currentTarget;
     }
-
-    return excelRatios.map(r => {
-        if (r <= 0) return '0%';
-        let pct = r * 100;
-        let str = pct.toFixed(8).replace(/\.?0+$/, '');
-        return str + '%';
-    }).join('\r\n');
+    let textToCopy = window.getExcelPercentagesText(true);
+    if (!textToCopy) {
+        window.showToast('⚠️ لا توجد بيانات جدول لنسخها حالياً.', false);
+        return;
+    }
+    let lines = textToCopy.split('\r\n').filter(Boolean);
+    let originalBtnText = btn ? btn.innerHTML : '';
+    if (btn) {
+        btn.innerHTML = '✓ تم نسخ النسب المباشرة!';
+        btn.style.backgroundColor = '#198754';
+        setTimeout(() => {
+            btn.innerHTML = originalBtnText;
+            btn.style.backgroundColor = '';
+        }, 2200);
+    }
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(textToCopy).then(() => {
+            window.showToast(`📋 تم نسخ ${lines.length} نسبة مباشرة (بدون فواصل أصفار) بنجاح!`, true);
+        }).catch(() => {
+            window.showToast('❌ تعذر النسخ للحافظة تلقائياً.', false);
+        });
+    }
 };
 
 window.copyExcelPercentages = function(btn) {
@@ -6358,11 +6603,21 @@ window.copyFullTableTSV = function(btn) {
     let headers = ["الدفعة", "التاريخ", "النسبة %", "المبلغ (ج.م)", "القيمة الحالية NPV (ج.م)"];
     let rows = [headers.join('\t')];
     window.globalCustomFlows.forEach(f => {
+        let offerPrice = window.lastCalculatedPrice || basePriceCache || 0;
+        let amt = Math.round(f.amount || 0);
+        let pctStr = (f.displayPct || 0) + '%';
+        if (offerPrice > 0 && amt > 0) {
+            let exactPct = (amt / offerPrice) * 100;
+            let cleanRound = Math.round(exactPct * 100) / 100;
+            if (Math.abs(exactPct - cleanRound) >= 1e-7) {
+                pctStr = exactPct.toFixed(8) + '%';
+            }
+        }
         rows.push([
             f.label,
             f.date,
-            (f.displayPct || 0) + '%',
-            Math.round(f.amount || 0),
+            pctStr,
+            amt,
             Math.round(f.pv || 0)
         ].join('\t'));
     });
