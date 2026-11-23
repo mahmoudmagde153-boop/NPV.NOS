@@ -1,590 +1,1556 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
+
 <html lang="en" dir="ltr">
+
 <head>
 
-    <meta charset="UTF-8">
+<meta charset="UTF-8">
+
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+
     <meta http-equiv="Pragma" content="no-cache">
+
     <meta http-equiv="Expires" content="0">
+
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Nations of Sky - NPV System</title>
-    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="index.css?v=20261101_v3">
+
+    <title>Nations of Sky — Deal & NPV Application Studio</title>
+
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+
+    <link rel="stylesheet" href="index.css?v=20261123_v64_order_studio">
+
     
+
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+
     <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
+
     <script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.3.0/exceljs.min.js"></script>
+
 </head>
+
 <body>
 
-    <header class="main-header">
-        <h1 style="color:var(--gold); margin:0;">Nations of Sky</h1>
-        <h2 style="margin:0; font-size:1.2rem; color:var(--text)">Advanced NPV System</h2>
-        <div style="margin-top: 8px; display: inline-flex; align-items: center; gap: 8px; background: rgba(30, 41, 59, 0.85); border: 1px solid #10b981; border-radius: 20px; padding: 4px 14px; font-size: 0.85rem; color: #10b981; font-weight: 600;">
-            <span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:#10b981; box-shadow: 0 0 8px #10b981;"></span>
-            v2026.11.13_v46 - تحديث زمرة الشامل (أقساط 2.65625% واستلام 7.65625% متطابق 100% مع الإكسيل)</div>
-    </header>
-    <div style="background: linear-gradient(90deg, #064e3b, #047857); border: 2px solid #10b981; color: #ffffff; padding: 10px 18px; border-radius: 8px; margin: 12px auto; max-width: 1000px; text-align: center; font-size: 0.92rem; font-weight: bold; box-shadow: 0 4px 12px rgba(0,0,0,0.3);">
-        🚀 تم تحديث النظام بالكامل (v46) | أقساط زمرة الربع سنوية: <span style="color:#fde047;">747,964 ج.م (2.65625%)</span> — دفعة وقسط الاستلام: <span style="color:#fde047;">2,155,897 ج.م (7.65625%)</span> متطابق بالمليم مع شيت الإكسيل!
-    </div>
+<body>
 
-    <div class="project-selector">
-        <button class="tab-btn active" onclick="setProject('Zomra')">Project Zomra</button>
-        <button class="tab-btn" onclick="setProject('Perla')">Project Perla</button>
-        <button class="tab-btn" onclick="setProject('ORB')">Project ORB</button>
-        <button class="tab-btn" onclick="setProject('Jirian')">Project Jirian</button>
-    </div>
-
-    <div class="dashboard-container">
-        
-        <!-- Controls Header -->
-        <div class="controls-header">
-            <div class="header-inputs">
-                <div class="input-group">
-                    <label>Base Price (EGP)</label>
-                    <input type="number" id="base-price" value="28158648" oninput="delayedCalculate()">
-                </div>
-                <div class="input-group">
-                    <label>Contract Date</label>
-                    <input type="date" id="contract-date" onchange="calculate()">
-                </div>
-                <div class="input-group">
-                    <label>Duration (Years)</label>
-                    <input type="number" id="duration-years" value="8" min="1" max="10" oninput="delayedCalculate()">
-                </div>
-                <div class="input-group">
-                    <label>Flexible Option</label>
-                    <select id="flexible-toggle" onchange="calculate()">
-                        <option value="yes">Yes</option>
-                        <option value="no" selected>No</option>
-                    </select>
-                </div>
-                <div class="input-group">
-                    <label>Payment Frequency</label>
-                    <select id="payment-frequency" onchange="onPaymentFrequencyChange()">
-                        <option value="4">Quarterly (3 Months)</option>
-                        <option value="2">Semi-Annual (6 Months)</option>
-                    </select>
-                </div>
-                <div class="input-group">
-                    <label>Client Name (Optional)</label>
-                    <input type="text" id="client-name" placeholder="اسم العميل (اختياري)" oninput="updateExportHeaderInfo()">
-                </div>
-                <div class="input-group">
-                    <label>Unit No (Optional)</label>
-                    <input type="text" id="unit-number" placeholder="رقم الوحدة (اختياري)" oninput="updateExportHeaderInfo()">
-                </div>
-                <div class="input-group" id="garage-control-group">
-                    <label id="garage-label" style="font-weight: bold; color: var(--gold);">🚗 Garage Option (جراج)</label>
-                    <select id="garage-option" onchange="onGarageOptionChange(); delayedCalculate();" style="font-weight: bold; border-color: rgba(212, 175, 55, 0.4);">
-                        <option value="none">❌ بدون جراج (Excluded)</option>
-                    </select>
-                </div>
+    <!-- TOP EXECUTIVE APP HEADER -->
+    <header class="studio-header main-header">
+        <div class="studio-brand">
+            <div class="studio-logo-icon">🏛️</div>
+            <div>
+                <div class="studio-brand-title">Nations of Sky</div>
+                <div class="studio-brand-subtitle">Deal & NPV Application Studio</div>
             </div>
-            
-            <div class="header-actions">
-                <label style="display: flex; align-items: center; gap: 6px; font-size: 0.82rem; cursor: pointer; color: var(--gold); font-weight: bold; padding: 6px 10px; border-radius: 6px; background: rgba(212, 175, 55, 0.1); border: 1px solid rgba(212, 175, 55, 0.3); white-space: nowrap;">
-                    <input type="checkbox" id="compare-base-export-toggle" onchange="delayedCalculate()" style="cursor: pointer; width: 16px; height: 16px; accent-color: var(--gold);">
-                    📑 مقارنة بالأساسية (صفحة منفصلة)
-                </label>
-                <button class="btn btn-outline" onclick="openRatesModal()">⚙️ Discount Rates</button>
-                <button class="btn btn-primary" onclick="exportPDF()">📄 Export PDF</button>
-                <button class="btn btn-primary" onclick="exportExcel()" style="background-color: #217346; color: white; border-color: #217346;">📊 Export Excel</button>
-                <button class="btn btn-secondary" onclick="copyExcelPercentages(this)" style="background-color: #0d6efd; color: white; border-color: #0d6efd;" title="نسخ عمود النسب لجدول الأقساط متوافقاً مع ترتيب شيت الإكسيل الماستر (يملأ الأرباع والسنوات بدقة)">📋 نسخ نسب الإكسيل (شيت ماستر)</button>
-                <button class="btn btn-secondary" onclick="copyRawPercentages(this)" style="background-color: #4f46e5; color: white; border-color: #4f46e5;" title="نسخ نسب الجدول الحالية فقط بشكل متسلسل مباشر">📑 نسخ نسب الجدول المباشرة</button>
-                <button class="btn btn-secondary" onclick="copyFullTableTSV(this)" style="background-color: #17a2b8; color: white; border-color: #17a2b8;" title="نسخ جدول الدفعات والتواريخ بالكامل بصيغة TSV للصقه مباشرة في أي شيت إكسيل بـ Ctrl+V">📊 نسخ جدول الدفعات بالكامل (Excel)</button>
-                <input type="file" id="template-upload" accept=".xlsx, .xlsm" style="display:none;" onchange="handleTemplateUpload(event)">
-                <button class="btn btn-primary" onclick="document.getElementById('template-upload').click()" style="background-color: #107c41; color: white; border-color: #107c41;">📤 Export to Template</button>
+            <div class="studio-system-badge">
+                <span class="live-dot"></span>
+                <span>متصل بالماستر v46 | مطابقة شيتات الإكسيل 100%</span>
             </div>
         </div>
 
-        <div class="panels-wrapper">
-            <!-- Custom Offer Panel (Left) -->
-            <div class="panel">
-                <div class="panel-header" style="justify-content: space-between;">
-                    <h2 style="color:var(--gold)">Custom Offer</h2>
-                    <button class="btn btn-outline" onclick="resetCustomInputs()" style="padding: 4px 10px; font-size: 0.9rem;">🔄 Reset</button>
-                </div>
-                
-                <div class="custom-controls" id="custom-inputs">
-                    <!-- Injected dynamically based on project -->
-                </div>
-                
-                <div class="custom-controls" style="margin-top: 15px;">
-                    <div class="input-group">
-                        <label>Installments Count (Override)</label>
-                        <input type="number" id="custom-inst-count" placeholder="Auto" oninput="delayedCalculate()">
-                    </div>
-                    <div class="input-group">
-                        <label>First Inst. Date (Optional)</label>
-                        <input type="date" id="first-inst-date" onchange="calculate()">
-                    </div>
-                </div>
+        <div class="project-selector">
+            <button class="tab-btn active" onclick="setProject('Zomra')">🏢 زمرة — Zomra</button>
+            <button class="tab-btn" onclick="setProject('Perla')">💎 بيرلا — Perla</button>
+            <button class="tab-btn" onclick="setProject('ORB')">🌐 أورب — ORB</button>
+            <button class="tab-btn" onclick="setProject('Jirian')">🏛️ جيريان — Jirian</button>
+        </div>
 
-                <div class="custom-controls" style="margin-top: 15px; grid-template-columns: 1fr; background: rgba(212, 175, 55, 0.08); border-left: 4px solid var(--gold); padding: 12px; border-radius: 8px;">
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
-                        <label style="color:var(--gold); display: flex; align-items: center; gap: 8px; font-size: 1rem; font-weight: bold; cursor: pointer;">
-                            <input type="checkbox" id="fixed-inst-toggle" onchange="toggleFixedInst(); delayedCalculate();" style="width: 18px; height: 18px; cursor: pointer;"> 
-                            🎯 تثبيت قيمة القسط (Fix Installment)
-                        </label>
-                        <span id="fixed-inst-status-badge" style="font-size: 0.8rem; background: rgba(255,255,255,0.1); padding: 2px 8px; border-radius: 12px; color: var(--text-muted);">غير مفعّل</span>
-                    </div>
+        <div class="studio-top-actions">
+            <div class="view-mode-pill">
+                <button type="button" class="mode-btn active" id="mode-sales-btn" onclick="setStudioMode('sales')" title="عرض مبسط ومنظم للطلب دون تشتت">⚡ وضع المبيعات المنظم</button>
+                <button type="button" class="mode-btn" id="mode-manager-btn" onclick="setStudioMode('manager')" title="عرض كافة الأدوات والتحليلات دفعة واحدة">🔬 وضع التحليل الموسع</button>
+            </div>
+            <button class="btn btn-outline" onclick="openRatesModal()" style="font-size:0.85rem; padding: 6px 12px;">⚙️ Rates</button>
+            <button class="btn btn-outline" onclick="resetCustomInputs()" style="font-size:0.85rem; padding: 6px 12px; color: #f59e0b; border-color: rgba(245,158,11,0.4);">🔄 طلب جديد</button>
+        </div>
+    </header>
 
-                    <div id="fixed-inst-controls-wrapper" style="display: none; margin-top: 10px;">
-                        <div style="display: grid; grid-template-columns: 1.2fr 1.5fr 0.9fr; gap: 8px; align-items: end;">
-                            <div class="input-group">
-                                <label style="font-size: 0.85rem;">نطاق التثبيت</label>
-                                <select id="fixed-inst-scope" onchange="if(window.onFixedScopeChange) window.onFixedScopeChange(); delayedCalculate();" style="padding: 8px; font-weight: bold;">
-                                    <option value="all">كل الأقساط (متساوية)</option>
-                                    <option value="pre">قبل الاستلام فقط</option>
-                                    <option value="post">بعد الاستلام فقط</option>
-                                    <option value="custom">📅 سنين محددة فقط (Custom Selected Years)</option>
-                                </select>
-                            </div>
-                            <div class="input-group">
-                                <label style="font-size: 0.85rem;" id="fixed-inst-val-label">قيمة كل قسط</label>
-                                <input type="number" id="fixed-inst-val" oninput="delayedCalculate()" placeholder="أدخل القسط..." style="font-size: 1.05rem; padding: 8px; font-weight: bold;">
-                            </div>
-                            <div class="input-group">
-                                <label style="font-size: 0.85rem;">النوع</label>
-                                <select id="fixed-inst-type" onchange="delayedCalculate();" style="padding: 8px;">
-                                    <option value="amt">ج.م (EGP)</option>
-                                    <option value="pct">% من السعر</option>
-                                </select>
-                            </div>
-                        </div>
+    <!-- MAIN DEAL STUDIO CONTAINER -->
+    <main class="dashboard-container deal-studio-container">
+        
+        <div class="deal-studio-grid">
+            
+            <!-- LEFT COLUMN: DEAL BUILDER WORKSPACE -->
+            <div class="deal-builder-column">
 
-                        <!-- Custom Selected Years Container for Fixed Installments -->
-                        <div id="fixed-inst-custom-years-container" style="display: none; margin-top: 10px; padding: 10px 14px; background: rgba(0,0,0,0.25); border-radius: 6px; border: 1px solid rgba(212, 175, 55, 0.4);">
-                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; flex-wrap: wrap; gap: 8px;">
-                                <label style="font-size: 0.85rem; font-weight: bold; color: var(--gold);">📅 اختر السنين المراد تثبيت أقساطها (أقساط متساوية منتظمة بدون بالون):</label>
-                                <div style="display: flex; gap: 6px;">
-                                    <button type="button" class="btn btn-outline" onclick="selectFixedYearsPreset('1_2')" style="padding: 2px 8px; font-size: 0.75rem; border-color: rgba(212, 175, 55, 0.5); color: var(--gold); cursor: pointer;">السنة 1 و 2 فقط</button>
-                                    <button type="button" class="btn btn-outline" onclick="selectFixedYearsPreset('1_2_3')" style="padding: 2px 8px; font-size: 0.75rem; border-color: rgba(212, 175, 55, 0.5); color: var(--gold); cursor: pointer;">أول 3 سنين</button>
-                                    <button type="button" class="btn btn-outline" onclick="selectFixedYearsPreset('all')" style="padding: 2px 8px; font-size: 0.75rem; border-color: rgba(255,255,255,0.2); cursor: pointer;">تحديد الكل</button>
-                                </div>
-                            </div>
-                            <div id="fixed-inst-custom-years-checkboxes" style="display: flex; gap: 12px; flex-wrap: wrap; padding: 4px 0;">
-                                <!-- Checkboxes populated by JS -->
-                            </div>
-                            <div style="font-size: 0.78rem; color: var(--text-muted); margin-top: 4px;">
-                                * أقساط السنين المحددة تكون ثابتة بالقيمة أعلاه بدون أي زيادة في نهاية السنة، بينما تتوزع باقي السنين بالتساوي لامتصاص باقي السعر بدقة 100%.
-                            </div>
-                        </div>
-
-                        <!-- Real-time Monthly Equivalent Hint -->
-                        <div id="fixed-inst-monthly-hint" style="margin-top: 6px; font-size: 0.84rem; color: #2ecc71; font-weight: bold; background: rgba(46, 204, 113, 0.1); padding: 4px 10px; border-radius: 6px; border: 1px solid rgba(46, 204, 113, 0.25); display: none;"></div>
-
-                        <!-- Calculated Counterpart Info -->
-                        <div id="fixed-inst-counterpart-info" style="margin-top: 8px; font-size: 0.85rem; padding: 6px 10px; border-radius: 6px; background: rgba(255, 255, 255, 0.05); display: none;">
-                            <!-- Injected via JS -->
-                        </div>
-
-                        <!-- Smart Feasibility & Guidance Alert Box -->
-                        <div id="fixed-inst-guidance-box" style="margin-top: 8px; font-size: 0.85rem; padding: 8px 10px; border-radius: 6px; display: none;">
-                            <!-- Injected via JS with action buttons -->
-                        </div>
-                    </div>
-                </div>
-
-                <div class="custom-controls" style="margin-top: 10px; grid-template-columns: 1fr; background: rgba(33, 150, 243, 0.05); border: 1px solid rgba(33, 150, 243, 0.3); border-radius: 8px; padding: 12px;">
-                    <div style="display: flex; justify-content: space-between; align-items: center;">
-                        <label style="display: flex; align-items: center; gap: 8px; font-size: 0.95rem; font-weight: bold; cursor: pointer; color: var(--accent-blue);">
-                            <input type="checkbox" id="toggle-intra-year" onchange="onIntraYearToggle()">
-                            ⚡ نمط أقساط السنة (قسط خفيف + ترحيل الباقي لنهاية السنة / Balloon)
-                        </label>
-                        <span id="intra-year-status-badge" style="font-size: 0.8rem; color: var(--text-muted);">غير مفعل</span>
-                    </div>
-
-                    <!-- Hidden toggle-70-30 for compatibility -->
-                    <input type="checkbox" id="toggle-70-30" style="display:none;" onchange="calculate()">
-
-                    <div id="intra-year-controls-wrapper" style="display: none; margin-top: 12px; border-top: 1px dashed rgba(255,255,255,0.15); padding-top: 10px;">
-                        <div style="display: grid; grid-template-columns: 1.2fr 1fr 1fr; gap: 10px; align-items: end;">
-                            <div class="input-group">
-                                <label id="intra-year-val-label" style="font-size: 0.85rem;">قسط الفترات العادية (أول 3 فترات ربع سنوية)</label>
-                                <div style="display: flex; gap: 6px;">
-                                    <input type="number" id="intra-year-val" placeholder="مثال: 200000" oninput="delayedCalculate()">
-                                    <select id="intra-year-type" onchange="onIntraYearTypeChange()" style="width: 85px;">
-                                        <option value="amt">ج.م</option>
-                                        <option value="pct">%</option>
-                                    </select>
-                                </div>
-                            </div>
-                            <div class="input-group">
-                                <label style="font-size: 0.85rem;">نطاق التطبيق (Scope)</label>
-                                <select id="intra-year-scope" onchange="if(window.onIntraYearScopeChange) window.onIntraYearScopeChange(); delayedCalculate();">
-                                    <option value="all">كل السنين (All Years)</option>
-                                    <option value="pre">قبل الاستلام فقط (Pre-Delivery)</option>
-                                    <option value="post">بعد الاستلام فقط (Post-Delivery)</option>
-                                    <option value="custom">📅 سنين محددة فقط (Custom Selected Years)</option>
-                                </select>
-                            </div>
-                            <div style="display: flex; gap: 6px; flex-direction: column;">
-                                <label style="font-size: 0.82rem; color: var(--text-muted);">نماذج سريعة (Presets):</label>
-                                <div style="display: flex; gap: 5px; flex-wrap: wrap;">
-                                    <button type="button" class="btn btn-outline" onclick="applyIntraPreset('70_30')" style="padding: 4px 8px; font-size: 0.78rem; border-color: rgba(33, 150, 243, 0.4);">70% - 30%</button>
-                                    <button type="button" class="btn btn-outline" onclick="applyIntraPreset('amt_200k')" style="padding: 4px 8px; font-size: 0.78rem; border-color: rgba(33, 150, 243, 0.4);">200 ألف</button>
-                                    <button type="button" class="btn btn-outline" onclick="applyIntraPreset('amt_100k')" style="padding: 4px 8px; font-size: 0.78rem; border-color: rgba(33, 150, 243, 0.4);">100 ألف</button>
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- Custom Selected Years Container for Balloon -->
-                        <div id="intra-custom-years-container" style="display: none; margin-top: 12px; padding: 10px 14px; background: rgba(0,0,0,0.25); border-radius: 6px; border: 1px solid rgba(33, 150, 243, 0.35);">
-                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; flex-wrap: wrap; gap: 8px;">
-                                <label style="font-size: 0.85rem; font-weight: bold; color: var(--accent-blue);">📅 اختر السنين التي يُطبق عليها القسط الخفيف وترحيل الباقي لنهاية السنة (Balloon):</label>
-                                <div style="display: flex; gap: 6px;">
-                                    <button type="button" class="btn btn-outline" onclick="selectIntraYearsPreset('1_2')" style="padding: 2px 8px; font-size: 0.75rem; border-color: rgba(33, 150, 243, 0.4);">السنة 1 و 2 فقط</button>
-                                    <button type="button" class="btn btn-outline" onclick="selectIntraYearsPreset('1_2_3')" style="padding: 2px 8px; font-size: 0.75rem; border-color: rgba(33, 150, 243, 0.4);">أول 3 سنين</button>
-                                    <button type="button" class="btn btn-outline" onclick="selectIntraYearsPreset('all')" style="padding: 2px 8px; font-size: 0.75rem; border-color: rgba(255,255,255,0.2);">تحديد الكل</button>
-                                </div>
-                            </div>
-                            <div id="intra-custom-years-checkboxes" style="display: flex; gap: 12px; flex-wrap: wrap; padding: 4px 0;">
-                                <!-- Checkboxes populated by JS -->
-                            </div>
-                            <div style="font-size: 0.78rem; color: var(--text-muted); margin-top: 4px;">
-                                * السنين غير المحددة تستمر بأقساط متساوية منتظمة، ويتحمل آخر ربع في السنين المحددة فقط باقي رصيد السنة.
-                            </div>
-                        </div>
-
-                        <div id="intra-year-guidance-box" style="margin-top: 10px; font-size: 0.85rem; padding: 8px 12px; border-radius: 6px; background: rgba(0,0,0,0.2); border-left: 3px solid var(--accent-blue); display: none;">
-                            <!-- Injected via JS -->
-                        </div>
-                    </div>
-                </div>
-
-                <div class="custom-controls" style="margin-top: 10px; grid-template-columns: 1fr;">
-                    <label style="display: flex; align-items: center; gap: 8px; font-size: 0.95rem; cursor: pointer;">
-                        <input type="checkbox" id="merge-delivery-toggle" onchange="calculate()" checked>
-                        دمج القسط مع دفعة الاستلام (Merge Installment with Delivery)
-                    </label>
-                </div>
-
-                <!-- Melt Milestone Payments Card -->
-                <div class="custom-controls" style="margin-top: 15px; grid-template-columns: 1fr; background: rgba(56, 189, 248, 0.05); border: 1.5px solid rgba(56, 189, 248, 0.35); border-radius: 8px; padding: 14px;">
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; flex-wrap: wrap; gap: 8px;">
-                        <div style="display: flex; align-items: center; gap: 8px;">
-                            <span style="font-size: 1.2rem;">🌊</span>
-                            <span style="font-weight: bold; color: var(--accent-blue); font-size: 0.98rem;">تسييح الدفعات على الأقساط (Melt Milestone Payments)</span>
-                        </div>
-                        <button type="button" class="btn btn-outline" onclick="resetMeltPayments()" style="padding: 3px 10px; font-size: 0.78rem; border-color: rgba(255,255,255,0.25);">↩️ إلغاء التسييح واستعادة الدفعات</button>
-                    </div>
-
-                    <div style="font-size: 0.82rem; color: var(--text-muted); margin-bottom: 10px; line-height: 1.4;">
-                        اختر أي دفعة لإلغائها وتسييح قيمتها إما على <strong>أقساط ما قبل الاستلام فقط</strong> للحفاظ على نسبة الاعتماد والتحصيل، أو على <strong>جميع الأقساط بالتساوي</strong> لتخفيف العبء المالي.
-                    </div>
-
-                    <!-- Milestone melt rows container -->
-                    <div id="melt-controls-container" style="display: flex; flex-direction: column; gap: 8px;">
-                        <!-- Injected dynamically via renderMeltControls() -->
-                    </div>
-
-                    <div id="melt-impact-summary" style="margin-top: 10px; font-size: 0.83rem; padding: 8px 12px; border-radius: 6px; background: rgba(0,0,0,0.25); border-left: 3px solid var(--accent-blue); display: none; line-height: 1.5;">
-                        <!-- Impact text injected via JS -->
-                    </div>
-                </div>
-
-                <!-- Custom Installment Shift / Zero Card -->
-                <div class="custom-controls" style="margin-top: 15px; grid-template-columns: 1fr; background: rgba(168, 85, 247, 0.05); border: 1.5px solid rgba(168, 85, 247, 0.35); border-radius: 8px; padding: 14px;">
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; flex-wrap: wrap; gap: 8px;">
-                        <div style="display: flex; align-items: center; gap: 8px;">
-                            <span style="font-size: 1.2rem;">🔀</span>
-                            <span style="font-weight: bold; color: #a855f7; font-size: 0.98rem;">تصفير وترحيل أقساط محددة (Zero & Shift Installments)</span>
-                        </div>
-                        <button type="button" class="btn btn-outline" onclick="resetInstallmentShifts()" style="padding: 3px 10px; font-size: 0.78rem; border-color: rgba(255,255,255,0.25);">↩️ إلغاء ترحيل الأقساط</button>
-                    </div>
-
-                    <div style="font-size: 0.82rem; color: var(--text-muted); margin-bottom: 10px; line-height: 1.4;">
-                        اختر أي قسط لتصفيره (0 ج.م)، وحدد وجهة الترحيل: إما <strong>تلقائياً على باقي الأقساط التالية لحد تحت</strong> دون المساس بالأقساط المثبتة أو أقساط السنين المخففة، أو <strong>تحديد أقساط بعينها بالرقم</strong> (مثل 12، 16).
-                    </div>
-
-                    <div style="display: grid; grid-template-columns: 1fr 1.3fr 1fr auto; gap: 10px; align-items: end;">
-                        <div class="input-group">
-                            <label style="font-size: 0.85rem; font-weight: bold; color: #a855f7;">الأقساط المراد تصفيرها</label>
-                            <input type="text" id="zero-inst-ids" placeholder="مثال: 4 أو 4, 8" oninput="delayedCalculate()">
-                            <span style="font-size: 0.72rem; color: var(--text-muted); margin-top: 3px;">اكتب رقم القسط (مثل: 4)</span>
-                        </div>
-                        <div class="input-group">
-                            <label style="font-size: 0.85rem; font-weight: bold; color: var(--accent-blue);">وجهة الترحيل (أين يذهب المبلغ؟)</label>
-                            <select id="inst-shift-dest-mode" onchange="onShiftDestModeChange(); delayedCalculate();" style="padding: 8px; font-weight: bold;">
-                                <option value="all" selected>🌐 توزيع بالتساوي على جميع الأقساط (قبل وبعد التصفير)</option>
-                                <option value="down">⬇️ ترحيل على باقي الأقساط التالية لحد تحت</option>
-                                <option value="specific">🎯 ترحيل على أقساط محددة بالرقم (مثال: 5، 6)</option>
-                                <option value="balloon">🎈 ترحيل على بالون نهاية السنة (Balloon)</option>
-                            </select>
-                            <span id="dest-mode-desc" style="font-size: 0.72rem; color: var(--text-muted); margin-top: 3px;">يوزع المبلغ بالتساوي على جميع الأقساط المتبقية في الخطة (قبل وبعد التصفير)</span>
-                        </div>
-                        <div class="input-group" id="target-inst-ids-wrapper" style="display: none;">
-                            <label style="font-size: 0.85rem; font-weight: bold; color: #2ecc71;">الأقساط المستهدفة بالرقم</label>
-                            <input type="text" id="target-inst-ids" placeholder="مثال: 12, 16" oninput="delayedCalculate()">
-                            <span style="font-size: 0.72rem; color: var(--text-muted); margin-top: 3px;">أرقام الأقساط مفصولة بفواصل</span>
-                        </div>
+                <!-- STEP 1: DEAL & UNIT SPECIFICATIONS -->
+                <section class="deal-card">
+                    <div class="deal-card-header">
+                        <div class="deal-step-badge">1</div>
                         <div>
-                            <button type="button" class="btn btn-primary" onclick="applyInstallmentShift(); calculate();" style="padding: 9px 16px; font-size: 0.85rem; background: #a855f7; border-color: #a855f7; font-weight: bold; cursor: pointer;">تطبيق الترحيل 🔀</button>
+                            <h3 class="deal-card-title">1. مواصفات الوحدة والتعاقد — Deal Specs</h3>
+                            <p class="deal-card-subtitle">حدد السعر الأساسي، مدة السداد، دورية الأقساط، وبيانات العميل</p>
                         </div>
                     </div>
+                    <div class="deal-specs-grid">
+                        
+                <div class="input-group">
 
-                    <div id="inst-shift-status-box" style="margin-top: 10px; font-size: 0.85rem; padding: 8px 12px; border-radius: 6px; background: rgba(168, 85, 247, 0.12); border-left: 3px solid #a855f7; display: none; line-height: 1.5;">
-                        <!-- Injected via JS -->
-                    </div>
+                    <label>Base Price (EGP)</label>
+
+                    <input type="number" id="base-price" value="28158648" oninput="delayedCalculate()">
+
                 </div>
 
-                <div class="custom-controls" style="margin-top: 15px; grid-template-columns: 1fr; background: rgba(212, 175, 55, 0.05); border: 1px solid rgba(212, 175, 55, 0.3); border-radius: 8px; padding: 12px;">
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-                        <span style="font-weight: bold; color: var(--gold); font-size: 0.95rem;">⚖️ توزيع الأقساط (Installment Distribution)</span>
-                        <span id="inst-pool-badge" style="font-size: 0.8rem; background: rgba(255,255,255,0.1); padding: 2px 8px; border-radius: 12px; color: var(--text-muted);">المتاح للأقساط: 85%</span>
-                    </div>
+                <div class="input-group">
 
-                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px;">
-                        <div class="input-group">
-                            <label style="font-size: 0.85rem;">قبل الاستلام (Pre-Delivery %)</label>
-                            <input type="number" step="0.01" id="pre-deliv-inst-pct" placeholder="Auto" oninput="onPreDelivPctInput()">
-                        </div>
-                        <div class="input-group">
-                            <label style="font-size: 0.85rem;">بعد الاستلام (Post-Delivery %)</label>
-                            <input type="number" step="0.01" id="post-deliv-inst-pct" placeholder="Auto" oninput="onPostDelivPctInput()">
-                        </div>
-                    </div>
+                    <label>Contract Date</label>
 
-                    <div style="display: flex; gap: 6px; flex-wrap: wrap;">
-                        <button type="button" class="btn btn-outline" onclick="setDistPreset('front')" style="padding: 3px 8px; font-size: 0.8rem; border-color: rgba(212, 175, 55, 0.4);">⚡ Front-Loaded (تحميل قبل)</button>
-                        <button type="button" class="btn btn-outline" onclick="setDistPreset('back')" style="padding: 3px 8px; font-size: 0.8rem; border-color: rgba(212, 175, 55, 0.4);">⏳ Back-Loaded (تحميل بعد)</button>
-                        <button type="button" class="btn btn-outline" onclick="setDistPreset('equal')" style="padding: 3px 8px; font-size: 0.8rem; border-color: rgba(212, 175, 55, 0.4);">🔄 متساوي (Equal)</button>
-                        <button type="button" class="btn btn-outline" onclick="resetDistPreset()" style="padding: 3px 8px; font-size: 0.8rem; border-color: rgba(255, 255, 255, 0.2);">↩️ افتراضي</button>
-                    </div>
-                    <div id="dist-mode-indicator" style="margin-top: 6px; font-size: 0.78rem; color: var(--text-muted);">
-                        الوضع: تلقائي (تحميل أي دفعة ملغية على ما قبل الاستلام)
-                    </div>
+                    <input type="date" id="contract-date" onchange="calculate()">
+
                 </div>
 
-                <!-- Manual Discount / Increase Card -->
-                <div id="manual-discount-card" class="custom-controls" style="margin-top: 15px; grid-template-columns: 1fr; background: rgba(46, 204, 113, 0.05); border-left: 4px solid #2ecc71; padding: 15px; border-radius: 8px; transition: all 0.3s ease;">
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-                        <h3 id="manual-discount-title" style="margin: 0; color: #2ecc71; font-size: 1.05rem; display: flex; align-items: center; gap: 6px;">
-                            <span id="manual-discount-icon">🏷️</span> <span id="manual-discount-header-text">تعديل يدوي مباشر (خصم / زيادة) (Manual Adjustment)</span>
-                        </h3>
-                        <button type="button" class="btn btn-outline" onclick="clearManualDiscount()" style="padding: 2px 8px; font-size: 0.78rem; border-color: rgba(255,255,255,0.2);">إلغاء التعديل</button>
-                    </div>
-                    <div style="display: grid; grid-template-columns: 1fr 1.2fr 0.8fr; gap: 10px; align-items: end;">
-                        <div class="input-group">
-                            <label style="font-size: 0.85rem;">نوع الإجراء</label>
-                            <select id="manual-discount-action" onchange="if(window.onManualActionChange) window.onManualActionChange(); delayedCalculate();" style="padding: 8px; font-weight: 500;">
-                                <option value="discount" selected>🏷️ خصم (Discount -)</option>
-                                <option value="increase">📈 زيادة / Overprice (+)</option>
-                            </select>
-                        </div>
-                        <div class="input-group">
-                            <label id="manual-discount-val-label" style="font-size: 0.85rem;">قيمة الخصم</label>
-                            <input type="number" step="0.01" id="manual-discount-val" placeholder="مثال: 5 أو 500000" oninput="delayedCalculate()">
-                        </div>
-                        <div class="input-group">
-                            <label style="font-size: 0.85rem;">الوحدة</label>
-                            <select id="manual-discount-type" onchange="delayedCalculate()" style="padding: 8px;">
-                                <option value="pct">% نسبة مئوية</option>
-                                <option value="amt">ج.م مبلغ مباشر</option>
-                            </select>
-                        </div>
-                    </div>
-                    <div id="manual-discount-info" style="margin-top: 8px; font-size: 0.85rem; color: #2ecc71; display: none;"></div>
+                <div class="input-group">
+
+                    <label>Duration (Years)</label>
+
+                    <input type="number" id="duration-years" value="8" min="1" max="10" oninput="delayedCalculate()">
+
                 </div>
 
-                <div class="custom-controls" style="margin-top: 15px; grid-template-columns: 1fr; background: rgba(33, 150, 243, 0.05); border-left: 4px solid var(--accent-blue); padding: 15px; border-radius: 8px;">
+                <div class="input-group">
+
+                    <label>Flexible Option</label>
+
+                    <select id="flexible-toggle" onchange="calculate()">
+
+                        <option value="yes">Yes</option>
+
+                        <option value="no" selected>No</option>
+
+                    </select>
+
+                </div>
+
+                <div class="input-group">
+
+                    <label>Payment Frequency</label>
+
+                    <select id="payment-frequency" onchange="onPaymentFrequencyChange()">
+
+                        <option value="4">Quarterly (3 Months)</option>
+
+                        <option value="2">Semi-Annual (6 Months)</option>
+
+                    </select>
+
+                </div>
+
+                <div class="input-group">
+
+                    <label>Client Name (Optional)</label>
+
+                    <input type="text" id="client-name" placeholder="اسم العميل (اختياري)" oninput="updateExportHeaderInfo()">
+
+                </div>
+
+                <div class="input-group">
+
+                    <label>Unit No (Optional)</label>
+
+                    <input type="text" id="unit-number" placeholder="رقم الوحدة (اختياري)" oninput="updateExportHeaderInfo()">
+
+                </div>
+
+                <div class="input-group" id="garage-control-group">
+
+                    <label id="garage-label" style="font-weight: bold; color: var(--gold);">🚗 Garage Option (جراج)</label>
+
+                    <select id="garage-option" onchange="onGarageOptionChange(); delayedCalculate();" style="font-weight: bold; border-color: rgba(212, 175, 55, 0.4);">
+
+                        <option value="none">❌ بدون جراج (Excluded)</option>
+
+                    </select>
+
+                </div>
+
+
+                    </div>
+                </section>
+
+                <!-- STEP 2: PAYMENT PLAN & SMART FACILITIES -->
+                <section class="deal-card">
+                    <div class="deal-card-header" style="justify-content: space-between; flex-wrap: wrap; gap: 10px;">
+                        <div style="display: flex; align-items: center; gap: 12px;">
+                            <div class="deal-step-badge">2</div>
+                            <div>
+                                <h3 class="deal-card-title">2. طريقة السداد والحلول الذكية — Payment Facilities</h3>
+                                <p class="deal-card-subtitle">اختر طريقة السداد المطلوبة أو استعن بمستشار الذكاء الاصطناعي وبحوث العمليات</p>
+                            </div>
+                        </div>
+                        <div id="active-plan-badge" class="active-plan-indicator">
+                            الخطة النشطة: <span id="active-plan-name">الخطة القياسية المرنة</span>
+                        </div>
+                    </div>
+
+                    <!-- PAYMENT MODE TAB BAR -->
+                    <div class="payment-tabs-bar">
+                        <button type="button" class="pm-tab-btn active" id="pm-btn-standard" onclick="switchPaymentMode('standard')">
+                            🟢 الخطة القياسية المرنة
+                        </button>
+                        <button type="button" class="pm-tab-btn" id="pm-btn-target" onclick="switchPaymentMode('target')">
+                            🎯 السعر المستهدف وبحوث العمليات AI
+                        </button>
+                        <button type="button" class="pm-tab-btn" id="pm-btn-fixed" onclick="switchPaymentMode('fixed')">
+                            💵 تثبيت القسط
+                        </button>
+                        <button type="button" class="pm-tab-btn" id="pm-btn-balloon" onclick="switchPaymentMode('balloon')">
+                            🎈 بالون وترحيل سنوي (70/30)
+                        </button>
+                        <button type="button" class="pm-tab-btn" id="pm-btn-zero" onclick="switchPaymentMode('zero')">
+                            🔀 تصفير وترحيل أقساط
+                        </button>
+                        <button type="button" class="pm-tab-btn" id="pm-btn-manual" onclick="switchPaymentMode('manual')">
+                            🏷️ خصم / زيادة يدوية
+                        </button>
+                        <button type="button" class="pm-tab-btn" id="pm-btn-all" onclick="switchPaymentMode('all')">
+                            📋 عرض شامل لكافة الخيارات
+                        </button>
+                    </div>
+
+                    <!-- PAYMENT MODULE CONTAINERS -->
+                    <div class="payment-modules-wrapper">
+                        <!-- Module 1: Standard & Milestones -->
+                        <div class="pm-module-card active" id="pm-card-standard">
+                            <div class="pm-module-header">
+                                <span class="pm-icon">🟢</span>
+                                <div>
+                                    <div class="pm-title">الخطة القياسية والمرنة (Standard Plan & Milestone Bulks)</div>
+                                    <div class="pm-desc">تعديل نسب الدفعة المقدمة، الاستلام، ودفعات الصيانة</div>
+                                </div>
+                            </div>
+                                            <div class="custom-controls" id="custom-inputs">
+
+                    <!-- Injected dynamically based on project -->
+
+                </div>
+
+                
+
+                                            <div class="custom-controls" style="margin-top: 15px;">
+
+                    <div class="input-group">
+
+                        <label>Installments Count (Override)</label>
+
+                        <input type="number" id="custom-inst-count" placeholder="Auto" oninput="delayedCalculate()">
+
+                    </div>
+
+                    <div class="input-group">
+
+                        <label>First Inst. Date (Optional)</label>
+
+                        <input type="date" id="first-inst-date" onchange="calculate()">
+
+                    </div>
+
+                </div>
+                    <!-- OR Milestones & Down Payments Optimizer -->
+                    <div style="margin-top: 12px; border-top: 1px dashed rgba(16, 185, 129, 0.35); padding-top: 10px;">
+                        <button type="button" class="btn" onclick="window.runORForMilestones()" style="width: 100%; background: linear-gradient(135deg, #059669, #047857); color: white; border: 1px solid rgba(255,255,255,0.3); border-radius: 6px; padding: 8px 14px; font-weight: bold; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; box-shadow: 0 3px 10px rgba(5, 150, 105, 0.25);">
+                            <span>⚡ بحوث العمليات (OR): اقتراح سيناريوهات للدفعات والمقدمات الذكية</span>
+                        </button>
+                        <div id="or-milestones-results" style="display: none; margin-top: 10px;"></div>
+                    </div>
+
+
+
+
+                        </div>
+
+                        <!-- Module 2: Target Price & AI OR -->
+                        <div class="pm-module-card" id="pm-card-target">
+                            <div class="pm-module-header">
+                                <span class="pm-icon">🎯</span>
+                                <div>
+                                    <div class="pm-title">السعر المستهدف ومستشار بحوث العمليات (Target Price & AI Facilities)</div>
+                                    <div class="pm-desc">حدد الميزانية المستهدفة للعميل وسيقوم مستشار الذكاء الاصطناعي بتوليد حلول دقيقة بنسبة 100% فوراً</div>
+                                </div>
+                            </div>
+                                            <div class="custom-controls" style="margin-top: 15px; grid-template-columns: 1fr; background: rgba(33, 150, 243, 0.05); border-left: 4px solid var(--accent-blue); padding: 15px; border-radius: 8px;">
+
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+
                         <h3 style="margin: 0; color: var(--accent-blue); font-size: 1.1rem;">🎯 Smart Solver (Target Price)</h3>
+
                         <button onclick="clearTargetPrice()" style="background: transparent; border: 1px solid var(--accent-blue); color: var(--accent-blue); border-radius: 4px; padding: 2px 8px; font-size: 0.8rem; cursor: pointer;">مسح السعر المستهدف</button>
+
                     </div>
+
                     <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; align-items: end;">
+
                         <div class="input-group">
+
                             <label>Target Price</label>
+
                             <input type="number" id="target-price-val" placeholder="e.g. 50000000" oninput="onTargetPriceChange(); delayedCalculate();">
+
                         </div>
+
                         <div class="input-group">
+
                             <label>Discount/Inc %</label>
+
                             <input type="number" step="0.01" id="target-pct-val" placeholder="e.g. -5 for 5% discount" oninput="onTargetPctChange(); delayedCalculate();">
+
                         </div>
+
                     </div>
+
                     
+
                     <div id="target-price-guidance-box" style="margin-top: 10px; padding: 10px 14px; border-radius: 6px; font-size: 0.88rem; display: none; line-height: 1.5;"></div>
+                    <!-- OR Target Price Optimizer -->
+                    <div style="margin-top: 12px; border-top: 1px dashed rgba(2, 132, 199, 0.35); padding-top: 10px;">
+                        <button type="button" class="btn" onclick="window.runORForTargetPrice()" style="width: 100%; background: linear-gradient(135deg, #0284c7, #0369a1); color: white; border: 1px solid rgba(255,255,255,0.3); border-radius: 6px; padding: 8px 14px; font-weight: bold; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; box-shadow: 0 3px 10px rgba(2, 132, 199, 0.25);">
+                            <span>⚡ بحوث العمليات (OR): اقتراح سيناريوهات للوصول للسعر والخصم المستهدف</span>
+                        </button>
+                        <div id="or-target-price-results" style="display: none; margin-top: 10px;"></div>
+                    </div>
+
                 </div>
+
+
+
+                <!-- Operations Research AI Optimization Card -->
+
+
+                                            <div id="or-optimization-card" class="custom-controls" style="margin-top: 15px; grid-template-columns: 1fr; background: rgba(59, 130, 246, 0.05); border: 1.5px solid #3b82f6; border-radius: 8px; padding: 14px;">
+
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; flex-wrap: wrap; gap: 8px;">
+
+                        <div style="display: flex; align-items: center; gap: 8px;">
+
+                            <span style="font-size: 1.25rem;">🤖</span>
+
+                            <h3 style="margin: 0; color: #38bdf8; font-size: 1.05rem;">مستشار بحوث العمليات والذكاء الاصطناعي (OR Smart Facilities)</h3>
+
+                        </div>
+
+                        <button type="button" class="btn btn-primary" onclick="generateAndRenderORFacilities()" style="padding: 6px 14px; font-size: 0.85rem; background: #3b82f6; border: none; font-weight: bold; cursor: pointer; border-radius: 4px;">
+
+                            ⚡ توليد تسهيلات سداد ذكية (OR Scenarios)
+
+                        </button>
+
+                    </div>
+
+                    <div style="font-size: 0.82rem; color: var(--text-muted); line-height: 1.4; margin-bottom: 8px;">
+
+                        نمذجة رياضية متقدمة (Operations Research &amp; Constrained Optimization) تقدم حلول سداد وتسهيلات تفيد العميل والسيلز والشركة، مع الالتزام التام بنسب الإكسيل اليومية، وضمان عدم تجاوز حدود التحصيل، وحفظ 100% من القيمة الحالية (NPV).
+
+                    </div>
+
+                    <div id="or-facilities-results-container" style="display: none; margin-top: 10px;"></div>
+
+                </div>
+
+
 
                 <!-- Financial Approval Status Card -->
-                <div id="approval-status-card" class="custom-controls" style="margin-top: 15px; grid-template-columns: 1fr; padding: 14px 16px; border-radius: 8px; border: 1.5px solid var(--border); background: rgba(255, 255, 255, 0.03); transition: all 0.3s ease;">
+
+
+                        </div>
+
+                        <!-- Module 3: Fixed Installment -->
+                        <div class="pm-module-card" id="pm-card-fixed">
+                            <div class="pm-module-header">
+                                <span class="pm-icon">💵</span>
+                                <div>
+                                    <div class="pm-title">تثبيت قيمة القسط (Fixed Installments)</div>
+                                    <div class="pm-desc">تحديد قسط شهري أو ربع سنوي ثابت مع إعادة توجيه الفروق تلقائياً</div>
+                                </div>
+                            </div>
+                                            <div class="custom-controls" style="margin-top: 15px; grid-template-columns: 1fr; background: rgba(212, 175, 55, 0.08); border-left: 4px solid var(--gold); padding: 12px; border-radius: 8px;">
+
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+
+                        <label style="color:var(--gold); display: flex; align-items: center; gap: 8px; font-size: 1rem; font-weight: bold; cursor: pointer;">
+
+                            <input type="checkbox" id="fixed-inst-toggle" onchange="toggleFixedInst(); delayedCalculate();" style="width: 18px; height: 18px; cursor: pointer;"> 
+
+                            🎯 تثبيت قيمة القسط (Fix Installment)
+
+                        </label>
+
+                        <span id="fixed-inst-status-badge" style="font-size: 0.8rem; background: rgba(255,255,255,0.1); padding: 2px 8px; border-radius: 12px; color: var(--text-muted);">غير مفعّل</span>
+
+                    </div>
+
+
+
+                    <div id="fixed-inst-controls-wrapper" style="display: none; margin-top: 10px;">
+
+                        <div style="display: grid; grid-template-columns: 1.2fr 1.5fr 0.9fr; gap: 8px; align-items: end;">
+
+                            <div class="input-group">
+
+                                <label style="font-size: 0.85rem;">نطاق التثبيت</label>
+
+                                <select id="fixed-inst-scope" onchange="if(window.onFixedScopeChange) window.onFixedScopeChange(); delayedCalculate();" style="padding: 8px; font-weight: bold;">
+
+                                    <option value="all">كل الأقساط (متساوية)</option>
+
+                                    <option value="pre">قبل الاستلام فقط</option>
+
+                                    <option value="post">بعد الاستلام فقط</option>
+
+                                    <option value="custom">📅 سنين محددة فقط (Custom Selected Years)</option>
+
+                                    <option value="specific_inst">🎯 قسط / أقساط محددة برقم القسط (Specific Installments)</option>
+
+                                </select>
+
+                            </div>
+
+                            <div class="input-group">
+
+                                <label style="font-size: 0.85rem;" id="fixed-inst-val-label">قيمة كل قسط</label>
+
+                                <input type="number" id="fixed-inst-val" oninput="delayedCalculate()" placeholder="أدخل القسط..." style="font-size: 1.05rem; padding: 8px; font-weight: bold;">
+
+                            </div>
+
+                            <div class="input-group">
+
+                                <label style="font-size: 0.85rem;">النوع</label>
+
+                                <select id="fixed-inst-type" onchange="delayedCalculate();" style="padding: 8px;">
+
+                                    <option value="amt">ج.م (EGP)</option>
+
+                                    <option value="pct">% من السعر</option>
+
+                                </select>
+
+                            </div>
+
+                        </div>
+
+
+
+                        <!-- Specific Selected Installments Container for Fixed Installments -->
+
+                        <div id="fixed-inst-specific-insts-container" style="display: none; margin-top: 10px; padding: 10px 14px; background: rgba(0,0,0,0.25); border-radius: 6px; border: 1px solid rgba(212, 175, 55, 0.4);">
+
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; flex-wrap: wrap; gap: 8px;">
+
+                                <label style="font-size: 0.85rem; font-weight: bold; color: var(--gold);">🎯 اختر رقم القسط / الأقساط المراد تثبيت قيمتها:</label>
+
+                                <div style="display: flex; gap: 6px;">
+
+                                    <button type="button" class="btn btn-outline" onclick="selectFixedInstPreset('first1')" style="padding: 2px 8px; font-size: 0.75rem; border-color: rgba(212, 175, 55, 0.5); color: var(--gold); cursor: pointer;">أول قسط</button>
+
+                                    <button type="button" class="btn btn-outline" onclick="selectFixedInstPreset('first2')" style="padding: 2px 8px; font-size: 0.75rem; border-color: rgba(212, 175, 55, 0.5); color: var(--gold); cursor: pointer;">أول قسطين</button>
+
+                                    <button type="button" class="btn btn-outline" onclick="selectFixedInstPreset('year1')" style="padding: 2px 8px; font-size: 0.75rem; border-color: rgba(212, 175, 55, 0.5); color: var(--gold); cursor: pointer;">أول سنة</button>
+
+                                    <button type="button" class="btn btn-outline" onclick="selectFixedInstPreset('none')" style="padding: 2px 8px; font-size: 0.75rem; border-color: rgba(255,255,255,0.2); cursor: pointer;">مسح التحديد</button>
+
+                                </div>
+
+                            </div>
+
+                            <div id="fixed-inst-specific-insts-checkboxes" style="display: flex; gap: 8px; flex-wrap: wrap; padding: 4px 0; max-height: 140px; overflow-y: auto;">
+
+                                <!-- Installment checkboxes populated by JS -->
+
+                            </div>
+
+                            <div style="font-size: 0.78rem; color: var(--text-muted); margin-top: 4px;">
+
+                                * الأقساط المحددة برقمها أعلاه تثبت بالقيمة المدخلة، ويتم ترحيل الفارق حسب الوجهة المختارة بالأسفل بدقة تامة.
+
+                            </div>
+
+                        </div>
+
+
+
+                        <!-- Custom Selected Years Container for Fixed Installments -->
+
+                        <div id="fixed-inst-custom-years-container" style="display: none; margin-top: 10px; padding: 10px 14px; background: rgba(0,0,0,0.25); border-radius: 6px; border: 1px solid rgba(212, 175, 55, 0.4);">
+
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; flex-wrap: wrap; gap: 8px;">
+
+                                <label style="font-size: 0.85rem; font-weight: bold; color: var(--gold);">📅 اختر السنين المراد تثبيت أقساطها (أقساط متساوية منتظمة بدون بالون):</label>
+
+                                <div style="display: flex; gap: 6px;">
+
+                                    <button type="button" class="btn btn-outline" onclick="selectFixedYearsPreset('1_2')" style="padding: 2px 8px; font-size: 0.75rem; border-color: rgba(212, 175, 55, 0.5); color: var(--gold); cursor: pointer;">السنة 1 و 2 فقط</button>
+
+                                    <button type="button" class="btn btn-outline" onclick="selectFixedYearsPreset('1_2_3')" style="padding: 2px 8px; font-size: 0.75rem; border-color: rgba(212, 175, 55, 0.5); color: var(--gold); cursor: pointer;">أول 3 سنين</button>
+
+                                    <button type="button" class="btn btn-outline" onclick="selectFixedYearsPreset('all')" style="padding: 2px 8px; font-size: 0.75rem; border-color: rgba(255,255,255,0.2); cursor: pointer;">تحديد الكل</button>
+
+                                </div>
+
+                            </div>
+
+                            <div id="fixed-inst-custom-years-checkboxes" style="display: flex; gap: 12px; flex-wrap: wrap; padding: 4px 0;">
+
+                                <!-- Checkboxes populated by JS -->
+
+                            </div>
+
+                            <div style="font-size: 0.78rem; color: var(--text-muted); margin-top: 4px;">
+
+                                * أقساط السنين المحددة تكون ثابتة بالقيمة أعلاه بدون أي زيادة في نهاية السنة، بينما يتم تحميل الفرق حسب الوجهة المختارة بالأسفل.
+
+                            </div>
+
+                        </div>
+
+
+
+                        <!-- Target Destination of Fixed Difference -->
+
+                        <div id="fixed-inst-shift-target-wrapper" style="margin-top: 10px; padding: 10px 14px; background: rgba(0,0,0,0.22); border-radius: 6px; border: 1px dashed rgba(212, 175, 55, 0.45);">
+
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; flex-wrap: wrap; gap: 6px;">
+
+                                <label style="font-size: 0.85rem; font-weight: bold; color: var(--gold); display: flex; align-items: center; gap: 6px;">
+
+                                    ⚖️ وجهة تحميل / ترحيل فرق التثبيت:
+
+                                </label>
+
+                                <select id="fixed-inst-target-mode" onchange="if(window.onFixedTargetModeChange) window.onFixedTargetModeChange(); delayedCalculate();" style="padding: 6px 10px; font-size: 0.82rem; font-weight: bold; border-radius: 4px; background: #1a1e29; color: var(--gold); border: 1px solid rgba(212, 175, 55, 0.5); cursor: pointer;">
+
+                                    <option value="all_remaining">🔄 توزيع بالتساوي على باقي الأقساط (الافتراضي)</option>
+
+                                    <option value="single_inst">🎯 ترحيل الفرق بالكامل على رقم قسط معين</option>
+
+                                    <option value="specific_insts">📋 ترحيل الفرق على أرقام أقساط معينة</option>
+
+                                    <option value="specific_years">📅 تحميل الفرق على سنة / سنين محددة</option>
+
+                                    <option value="delivery_milestone">🏢 تحميل الفرق على دفعة الاستلام (Delivery)</option>
+
+                                </select>
+
+                            </div>
+
+
+
+                            <!-- Single Target Installment Container -->
+
+                            <div id="fixed-inst-single-target-wrapper" style="display: none; margin-top: 8px; padding-top: 8px; border-top: 1px dotted rgba(212, 175, 55, 0.3);">
+
+                                <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+
+                                    <label style="font-size: 0.82rem; color: #38bdf8; font-weight: bold;">🎯 اختر رقم القسط الذي سيتحمل كامل الفرق:</label>
+
+                                    <select id="fixed-inst-single-target-select" onchange="delayedCalculate()" style="padding: 4px 10px; font-size: 0.85rem; font-weight: bold; border-radius: 4px; background: #1a1e29; color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.5); cursor: pointer;">
+
+                                        <!-- Populated via JS -->
+
+                                    </select>
+
+                                </div>
+
+                            </div>
+
+
+
+                            <!-- Specific Target Installments Container -->
+
+                            <div id="fixed-inst-target-insts-container" style="display: none; margin-top: 8px; padding-top: 8px; border-top: 1px dotted rgba(212, 175, 55, 0.3);">
+
+                                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; flex-wrap: wrap; gap: 6px;">
+
+                                    <span style="font-size: 0.8rem; color: #38bdf8; font-weight: bold;">📋 اختر أرقام الأقساط التي ستتحمل الفرق بالتساوي فيما بينها:</span>
+
+                                    <div style="display: flex; gap: 6px;">
+
+                                        <button type="button" class="btn btn-outline" onclick="selectFixedTargetInstsPreset('remaining')" style="padding: 2px 8px; font-size: 0.72rem; border-color: rgba(56, 189, 248, 0.5); color: #38bdf8; cursor: pointer;">تحديد الباقي</button>
+
+                                        <button type="button" class="btn btn-outline" onclick="selectFixedTargetInstsPreset('none')" style="padding: 2px 8px; font-size: 0.72rem; border-color: rgba(255,255,255,0.2); cursor: pointer;">مسح</button>
+
+                                    </div>
+
+                                </div>
+
+                                <div id="fixed-inst-target-insts-checkboxes" style="display: flex; gap: 8px; flex-wrap: wrap; padding: 4px 0; max-height: 120px; overflow-y: auto;">
+
+                                    <!-- Target Installments Checkboxes populated by JS -->
+
+                                </div>
+
+                            </div>
+
+
+
+                            <!-- Specific Target Years Checkboxes Container -->
+
+                            <div id="fixed-inst-target-years-container" style="display: none; margin-top: 8px; padding-top: 8px; border-top: 1px dotted rgba(212, 175, 55, 0.3);">
+
+                                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; flex-wrap: wrap; gap: 6px;">
+
+                                    <span style="font-size: 0.8rem; color: #38bdf8; font-weight: bold;">🎯 اختر السنة/السنين التي ستتحمل الفرق (باقي السنين تظل عند قسطها الأصلي دون زيادة):</span>
+
+                                    <div style="display: flex; gap: 6px;" id="fixed-inst-target-presets">
+
+                                        <!-- Presets populated by JS -->
+
+                                    </div>
+
+                                </div>
+
+                                <div id="fixed-inst-target-years-checkboxes" style="display: flex; gap: 10px; flex-wrap: wrap; padding: 4px 0;">
+
+                                    <!-- Target Checkboxes populated by JS -->
+
+                                </div>
+
+                            </div>
+
+
+
+                            <div id="fixed-inst-target-note" style="font-size: 0.77rem; color: var(--text-muted); margin-top: 5px;">
+
+                                * يتوزع فرق التثبيت بالتساوي على جميع السنين غير المثبتة.
+
+                            </div>
+
+                        </div>
+
+
+
+                        <!-- Real-time Monthly Equivalent Hint -->
+
+                        <div id="fixed-inst-monthly-hint" style="margin-top: 6px; font-size: 0.84rem; color: #2ecc71; font-weight: bold; background: rgba(46, 204, 113, 0.1); padding: 4px 10px; border-radius: 6px; border: 1px solid rgba(46, 204, 113, 0.25); display: none;"></div>
+
+
+
+                        <!-- Calculated Counterpart Info -->
+
+                        <div id="fixed-inst-counterpart-info" style="margin-top: 8px; font-size: 0.85rem; padding: 6px 10px; border-radius: 6px; background: rgba(255, 255, 255, 0.05); display: none;">
+
+                            <!-- Injected via JS -->
+
+                        </div>
+
+
+
+                        <!-- Smart Feasibility & Guidance Alert Box -->
+
+                        <div id="fixed-inst-guidance-box" style="margin-top: 8px; font-size: 0.85rem; padding: 8px 10px; border-radius: 6px; display: none;">
+
+                            <!-- Injected via JS with action buttons -->
+
+                        </div>
+                        <!-- OR Fixed Installment Optimizer -->
+                        <div style="margin-top: 12px; border-top: 1px dashed rgba(212, 175, 55, 0.35); padding-top: 10px;">
+                            <button type="button" class="btn" onclick="window.runORForFixedInst()" style="width: 100%; background: linear-gradient(135deg, #d97706, #b45309); color: white; border: 1px solid rgba(255,255,255,0.3); border-radius: 6px; padding: 8px 14px; font-weight: bold; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; box-shadow: 0 3px 10px rgba(217, 119, 6, 0.25);">
+                                <span>⚡ بحوث العمليات (OR): اقتراح سيناريوهات لتثبيت وترحيل الأقساط</span>
+                            </button>
+                            <div id="or-fixed-inst-results" style="display: none; margin-top: 10px;"></div>
+                        </div>
+
+                    </div>
+
+                </div>
+
+
+
+
+                                            <div class="custom-controls" style="margin-top: 10px; grid-template-columns: 1fr; background: rgba(37, 99, 235, 0.08); border: 1.5px solid #2563eb; border-radius: 8px; padding: 14px;">
+
                     <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
-                        <div style="display: flex; align-items: center; gap: 8px;">
-                            <span style="font-size: 1.25rem;">🛡️</span>
-                            <span style="font-weight: bold; font-size: 0.98rem; color: var(--gold);">موقف الاعتماد المالي (Approval Status)</span>
-                        </div>
-                        
-                        <!-- Manual Approval Decision Toggle -->
-                        <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
-                            <label id="manual-approval-toggle-wrapper" style="display: inline-flex; align-items: center; gap: 8px; cursor: pointer; background: rgba(46, 204, 113, 0.12); padding: 5px 14px; border-radius: 20px; border: 1.5px solid #27ae60; user-select: none; transition: all 0.2s;">
-                                <input type="checkbox" id="manual-disapproval-toggle" onchange="toggleManualApproval()" style="width: 17px; height: 17px; cursor: pointer; accent-color: #e74c3c;">
-                                <span id="manual-disapproval-label" style="font-size: 0.88rem; font-weight: bold; color: #2ecc71;">
-                                    ✅ العرض موافق عليه (APPROVED) — انقر للتحديد كـ "غير موافق"
-                                </span>
+
+                        <div style="display: flex; align-items: center; gap: 10px;">
+
+                            <label style="display: flex; align-items: center; gap: 8px; font-size: 1rem; font-weight: bold; cursor: pointer; color: #60a5fa;">
+
+                                <input type="checkbox" id="toggle-intra-year" onchange="onIntraYearToggle()" style="transform: scale(1.15);">
+
+                                ⚡ ترحيل الأقساط السنوية (قسط خفيف + بالون نهاية السنة)
+
                             </label>
+
+                            <span id="intra-year-status-badge" style="font-size: 0.82rem; padding: 2px 8px; border-radius: 4px; background: rgba(255,255,255,0.08); color: var(--text-muted); font-weight: bold;">غير مفعّل</span>
+
                         </div>
-                    </div>
 
-                    <!-- Main Dynamic Status Banner -->
-                    <div id="approval-badge-container" style="margin-top: 10px;">
-                        <!-- Injected dynamically via renderApprovalStatus -->
-                    </div>
-
-                    <!-- Collapsible Audit Breakdown -->
-                    <div id="approval-audit-details" style="display: none; margin-top: 12px; padding: 12px 14px; border-radius: 6px; font-size: 0.85rem; line-height: 1.5;"></div>
-                </div>
-
-                <div class="summary-box" style="margin-top: 15px;">
-                    <div class="summary-item">
-                        <span class="summary-label">Total Amount</span>
-                        <span class="summary-value" id="offer-total-amt" style="color:var(--accent-blue)">0</span>
-                    </div>
-                    <div class="summary-item">
-                        <span class="summary-label">Total PV</span>
-                        <span class="summary-value" id="offer-total-pv" style="color:var(--gold)">0</span>
-                    </div>
-                    <div class="summary-item" id="offer-garage-summary-item" style="display: none;">
-                        <span class="summary-label">🚗 Total Garage</span>
-                        <span class="summary-value" id="offer-total-garage" style="color:#2ecc71; font-weight: bold;">0</span>
-                    </div>
-                    <div class="summary-item" id="offer-grand-total-summary-item" style="display: none; grid-column: 1 / -1; padding-top: 8px; border-top: 1.5px solid var(--gold); justify-content: space-between; align-items: center;">
-                        <span class="summary-label" style="font-weight: bold; color: var(--gold);">Grand Total (Unit + Mnt + Garage)</span>
-                        <span class="summary-value" id="offer-grand-total-amt" style="color:var(--gold); font-weight: bold; font-size: 1.15rem;">0</span>
-                    </div>
-                    <div class="summary-item" style="grid-column: 1 / -1; padding-top: 10px; border-top: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center;">
-                        <span class="summary-label">Collected Pre-Delivery</span>
                         <div style="display: flex; align-items: center; gap: 8px;">
-                            <span class="summary-value" id="offer-pre-delivery" style="color:var(--accent-blue)">0%</span>
-                            <span id="offer-pre-deliv-approval-badge" style="font-size: 0.78rem; font-weight: bold; padding: 2px 8px; border-radius: 12px;"></span>
+
+                            <button type="button" id="btn-quick-7030" onclick="window.apply7030Preset()" style="background: linear-gradient(135deg, #1d4ed8, #2563eb); color: white; border: 1px solid rgba(255,255,255,0.3); border-radius: 6px; padding: 6px 16px; font-size: 0.88rem; font-weight: bold; cursor: pointer; box-shadow: 0 3px 8px rgba(37,99,235,0.35); transition: all 0.2s;" title="تطبيق نمط 70% / 30% السنوي فوراً بنقرة واحدة">
+
+                                🎯 تفعيل نمط 70% / 30% السنوي (Balloon 70/30)
+
+                            </button>
+
+                        </div>
+
+                    </div>
+
+
+
+                    <!-- Hidden toggle-70-30 for compatibility -->
+
+                    <input type="checkbox" id="toggle-70-30" style="display:none;" onchange="calculate()">
+
+
+
+                    <div id="intra-year-controls-wrapper" style="display: none; margin-top: 12px; border-top: 1px dashed rgba(255,255,255,0.15); padding-top: 10px;">
+
+                        <div style="display: grid; grid-template-columns: 1.2fr 1fr 1fr; gap: 10px; align-items: end;">
+
+                            <div class="input-group">
+
+                                <label id="intra-year-val-label" style="font-size: 0.85rem;">قسط الفترات العادية (أول 3 فترات ربع سنوية)</label>
+
+                                <div style="display: flex; gap: 6px;">
+
+                                    <input type="number" id="intra-year-val" placeholder="مثال: 200000" oninput="delayedCalculate()">
+
+                                    <select id="intra-year-type" onchange="onIntraYearTypeChange()" style="width: 85px;">
+
+                                        <option value="amt">ج.م</option>
+
+                                        <option value="pct">%</option>
+
+                                    </select>
+
+                                </div>
+
+                            </div>
+
+                            <div class="input-group">
+
+                                <label style="font-size: 0.85rem;">نطاق التطبيق (Scope)</label>
+
+                                <select id="intra-year-scope" onchange="if(window.onIntraYearScopeChange) window.onIntraYearScopeChange(); delayedCalculate();">
+
+                                    <option value="all">كل السنين (All Years)</option>
+
+                                    <option value="pre">قبل الاستلام فقط (Pre-Delivery)</option>
+
+                                    <option value="post">بعد الاستلام فقط (Post-Delivery)</option>
+
+                                    <option value="custom">📅 سنين محددة فقط (Custom Selected Years)</option>
+
+                                </select>
+
+                            </div>
+
+                            <div style="display: flex; gap: 6px; flex-direction: column;">
+
+                                <label style="font-size: 0.82rem; color: var(--text-muted);">نماذج سريعة (Presets):</label>
+
+                                <div style="display: flex; gap: 5px; flex-wrap: wrap;">
+
+                                    <button type="button" class="btn btn-outline" onclick="applyIntraPreset('70_30')" style="padding: 4px 8px; font-size: 0.78rem; border-color: rgba(33, 150, 243, 0.4);">70% - 30%</button>
+
+                                    <button type="button" class="btn btn-outline" onclick="applyIntraPreset('amt_200k')" style="padding: 4px 8px; font-size: 0.78rem; border-color: rgba(33, 150, 243, 0.4);">200 ألف</button>
+
+                                    <button type="button" class="btn btn-outline" onclick="applyIntraPreset('amt_100k')" style="padding: 4px 8px; font-size: 0.78rem; border-color: rgba(33, 150, 243, 0.4);">100 ألف</button>
+
+                                </div>
+
+                            </div>
+
+                        </div>
+
+
+
+                        <!-- Custom Selected Years Container for Balloon -->
+
+                        <div id="intra-custom-years-container" style="display: none; margin-top: 12px; padding: 10px 14px; background: rgba(0,0,0,0.25); border-radius: 6px; border: 1px solid rgba(33, 150, 243, 0.35);">
+
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; flex-wrap: wrap; gap: 8px;">
+
+                                <label style="font-size: 0.85rem; font-weight: bold; color: var(--accent-blue);">📅 اختر السنين التي يُطبق عليها القسط الخفيف وترحيل الباقي لنهاية السنة (Balloon):</label>
+
+                                <div style="display: flex; gap: 6px;">
+
+                                    <button type="button" class="btn btn-outline" onclick="selectIntraYearsPreset('1_2')" style="padding: 2px 8px; font-size: 0.75rem; border-color: rgba(33, 150, 243, 0.4);">السنة 1 و 2 فقط</button>
+
+                                    <button type="button" class="btn btn-outline" onclick="selectIntraYearsPreset('1_2_3')" style="padding: 2px 8px; font-size: 0.75rem; border-color: rgba(33, 150, 243, 0.4);">أول 3 سنين</button>
+
+                                    <button type="button" class="btn btn-outline" onclick="selectIntraYearsPreset('all')" style="padding: 2px 8px; font-size: 0.75rem; border-color: rgba(255,255,255,0.2);">تحديد الكل</button>
+
+                                </div>
+
+                            </div>
+
+                            <div id="intra-custom-years-checkboxes" style="display: flex; gap: 12px; flex-wrap: wrap; padding: 4px 0;">
+
+                                <!-- Checkboxes populated by JS -->
+
+                            </div>
+
+                            <div style="font-size: 0.78rem; color: var(--text-muted); margin-top: 4px;">
+
+                                * السنين غير المحددة تستمر بأقساط متساوية منتظمة، ويتحمل آخر ربع في السنين المحددة فقط باقي رصيد السنة.
+
+                            </div>
+
+                        </div>
+
+
+
+                        <div id="intra-year-guidance-box" style="margin-top: 10px; font-size: 0.85rem; padding: 8px 12px; border-radius: 6px; background: rgba(0,0,0,0.2); border-left: 3px solid var(--accent-blue); display: none;">
+
+                            <!-- Injected via JS -->
+
+                        </div>
+
+                    </div>
+
+                </div>
+
+
+
+                <div class="custom-controls" style="margin-top: 10px; grid-template-columns: 1fr;">
+
+                    <label style="display: flex; align-items: center; gap: 8px; font-size: 0.95rem; cursor: pointer;">
+
+                        <input type="checkbox" id="merge-delivery-toggle" onchange="calculate()" checked>
+
+                        دمج القسط مع دفعة الاستلام (Merge Installment with Delivery)
+
+                    </label>
+
+                </div>
+
+
+
+                <!-- Melt Milestone Payments Card -->
+
+
+                        </div>
+
+                        <!-- Module 4: Balloon 70/30 -->
+                        <div class="pm-module-card" id="pm-card-balloon">
+                            <div class="pm-module-header">
+                                <span class="pm-icon">🎈</span>
+                                <div>
+                                    <div class="pm-title">أقساط بالون وترحيل سنوي (Balloon 70/30 Plans)</div>
+                                    <div class="pm-desc">تقليل قيمة الأقساط العادية وترحيل الفروق لآخر قسط في كل سنة أو للاستلام</div>
+                                </div>
+                            </div>
+                                            <div class="custom-controls" style="margin-top: 15px; grid-template-columns: 1fr; background: rgba(56, 189, 248, 0.05); border: 1.5px solid rgba(56, 189, 248, 0.35); border-radius: 8px; padding: 14px;">
+
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; flex-wrap: wrap; gap: 8px;">
+
+                        <div style="display: flex; align-items: center; gap: 8px;">
+
+                            <span style="font-size: 1.2rem;">🌊</span>
+
+                            <span style="font-weight: bold; color: var(--accent-blue); font-size: 0.98rem;">تسييح الدفعات على الأقساط (Melt Milestone Payments)</span>
+
+                        </div>
+
+                        <button type="button" class="btn btn-outline" onclick="resetMeltPayments()" style="padding: 3px 10px; font-size: 0.78rem; border-color: rgba(255,255,255,0.25);">↩️ إلغاء التسييح واستعادة الدفعات</button>
+
+                    </div>
+
+
+
+                    <div style="font-size: 0.82rem; color: var(--text-muted); margin-bottom: 10px; line-height: 1.4;">
+
+                        اختر أي دفعة لإلغائها وتسييح قيمتها إما على <strong>أقساط ما قبل الاستلام فقط</strong> للحفاظ على نسبة الاعتماد والتحصيل، أو على <strong>جميع الأقساط بالتساوي</strong> لتخفيف العبء المالي.
+
+                    </div>
+
+
+
+                    <!-- Milestone melt rows container -->
+
+                    <div id="melt-controls-container" style="display: flex; flex-direction: column; gap: 8px;">
+
+                        <!-- Injected dynamically via renderMeltControls() -->
+
+                    </div>
+
+
+
+                    <div id="melt-impact-summary" style="margin-top: 10px; font-size: 0.83rem; padding: 8px 12px; border-radius: 6px; background: rgba(0,0,0,0.25); border-left: 3px solid var(--accent-blue); display: none; line-height: 1.5;">
+
+                        <!-- Impact text injected via JS -->
+
+                    </div>
+                    <!-- OR Balloon Shift Optimizer -->
+                    <div style="margin-top: 12px; border-top: 1px dashed rgba(37, 99, 235, 0.35); padding-top: 10px;">
+                        <button type="button" class="btn" onclick="window.runORForBalloonShift()" style="width: 100%; background: linear-gradient(135deg, #1d4ed8, #2563eb); color: white; border: 1px solid rgba(255,255,255,0.3); border-radius: 6px; padding: 8px 14px; font-weight: bold; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; box-shadow: 0 3px 10px rgba(37, 99, 235, 0.25);">
+                            <span>⚡ بحوث العمليات (OR): اقتراح سيناريوهات لأنماط ترحيل الأقساط والبالون (70/30)</span>
+                        </button>
+                        <div id="or-balloon-shift-results" style="display: none; margin-top: 10px;"></div>
+                    </div>
+
+                </div>
+
+
+
+                <!-- Custom Installment Shift / Zero Card -->
+
+
+                        </div>
+
+                        <!-- Module 5: Zero Shift -->
+                        <div class="pm-module-card" id="pm-card-zero">
+                            <div class="pm-module-header">
+                                <span class="pm-icon">🔀</span>
+                                <div>
+                                    <div class="pm-title">تصفير وترحيل أقساط محددة (Zero & Shift Specific Installments)</div>
+                                    <div class="pm-desc">تصفير أقساط بعينها بناءً على طلب العميل وتوزيع قيمتها على فترات لاحقة</div>
+                                </div>
+                            </div>
+                                            <div class="custom-controls" style="margin-top: 15px; grid-template-columns: 1fr; background: rgba(168, 85, 247, 0.05); border: 1.5px solid rgba(168, 85, 247, 0.35); border-radius: 8px; padding: 14px;">
+
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; flex-wrap: wrap; gap: 8px;">
+
+                        <div style="display: flex; align-items: center; gap: 8px;">
+
+                            <span style="font-size: 1.2rem;">🔀</span>
+
+                            <span style="font-weight: bold; color: #a855f7; font-size: 0.98rem;">تصفير وترحيل أقساط محددة (Zero & Shift Installments)</span>
+
+                        </div>
+
+                        <button type="button" class="btn btn-outline" onclick="resetInstallmentShifts()" style="padding: 3px 10px; font-size: 0.78rem; border-color: rgba(255,255,255,0.25);">↩️ إلغاء ترحيل الأقساط</button>
+
+                    </div>
+
+
+
+                    <div style="font-size: 0.82rem; color: var(--text-muted); margin-bottom: 10px; line-height: 1.4;">
+
+                        اختر أي قسط لتصفيره (0 ج.م)، وحدد وجهة الترحيل: إما <strong>تلقائياً على باقي الأقساط التالية لحد تحت</strong> دون المساس بالأقساط المثبتة أو أقساط السنين المخففة، أو <strong>تحديد أقساط بعينها بالرقم</strong> (مثل 12، 16).
+
+                    </div>
+
+
+
+                    <div style="display: grid; grid-template-columns: 1fr 1.3fr 1fr auto; gap: 10px; align-items: end;">
+
+                        <div class="input-group">
+
+                            <label style="font-size: 0.85rem; font-weight: bold; color: #a855f7;">الأقساط المراد تصفيرها</label>
+
+                            <input type="text" id="zero-inst-ids" placeholder="مثال: 4 أو 4, 8" oninput="delayedCalculate()">
+
+                            <span style="font-size: 0.72rem; color: var(--text-muted); margin-top: 3px;">اكتب رقم القسط (مثل: 4)</span>
+
+                        </div>
+
+                        <div class="input-group">
+
+                            <label style="font-size: 0.85rem; font-weight: bold; color: var(--accent-blue);">وجهة الترحيل (أين يذهب المبلغ؟)</label>
+
+                            <select id="inst-shift-dest-mode" onchange="onShiftDestModeChange(); delayedCalculate();" style="padding: 8px; font-weight: bold;">
+
+                                <option value="all" selected>🌐 توزيع بالتساوي على جميع الأقساط (قبل وبعد التصفير)</option>
+
+                                <option value="down">⬇️ ترحيل على باقي الأقساط التالية لحد تحت</option>
+
+                                <option value="specific">🎯 ترحيل على أقساط محددة بالرقم (مثال: 5، 6)</option>
+
+                                <option value="balloon">🎈 ترحيل على بالون نهاية السنة (Balloon)</option>
+
+                            </select>
+
+                            <span id="dest-mode-desc" style="font-size: 0.72rem; color: var(--text-muted); margin-top: 3px;">يوزع المبلغ بالتساوي على جميع الأقساط المتبقية في الخطة (قبل وبعد التصفير)</span>
+
+                        </div>
+
+                        <div class="input-group" id="target-inst-ids-wrapper" style="display: none;">
+
+                            <label style="font-size: 0.85rem; font-weight: bold; color: #2ecc71;">الأقساط المستهدفة بالرقم</label>
+
+                            <input type="text" id="target-inst-ids" placeholder="مثال: 12, 16" oninput="delayedCalculate()">
+
+                            <span style="font-size: 0.72rem; color: var(--text-muted); margin-top: 3px;">أرقام الأقساط مفصولة بفواصل</span>
+
+                        </div>
+
+                        <div>
+
+                            <button type="button" class="btn btn-primary" onclick="applyInstallmentShift(); calculate();" style="padding: 9px 16px; font-size: 0.85rem; background: #a855f7; border-color: #a855f7; font-weight: bold; cursor: pointer;">تطبيق الترحيل 🔀</button>
+
+                        </div>
+
+                    </div>
+
+
+
+                    <div id="inst-shift-status-box" style="margin-top: 10px; font-size: 0.85rem; padding: 8px 12px; border-radius: 6px; background: rgba(168, 85, 247, 0.12); border-left: 3px solid #a855f7; display: none; line-height: 1.5;">
+
+                        <!-- Injected via JS -->
+
+                    </div>
+
+                </div>
+
+
+
+                <div class="custom-controls" style="margin-top: 15px; grid-template-columns: 1fr; background: rgba(212, 175, 55, 0.05); border: 1px solid rgba(212, 175, 55, 0.3); border-radius: 8px; padding: 12px;">
+
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+
+                        <span style="font-weight: bold; color: var(--gold); font-size: 0.95rem;">⚖️ توزيع الأقساط (Installment Distribution)</span>
+
+                        <span id="inst-pool-badge" style="font-size: 0.8rem; background: rgba(255,255,255,0.1); padding: 2px 8px; border-radius: 12px; color: var(--text-muted);">المتاح للأقساط: 85%</span>
+
+                    </div>
+
+
+
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px;">
+
+                        <div class="input-group">
+
+                            <label style="font-size: 0.85rem;">قبل الاستلام (Pre-Delivery %)</label>
+
+                            <input type="number" step="0.01" id="pre-deliv-inst-pct" placeholder="Auto" oninput="onPreDelivPctInput()">
+
+                        </div>
+
+                        <div class="input-group">
+
+                            <label style="font-size: 0.85rem;">بعد الاستلام (Post-Delivery %)</label>
+
+                            <input type="number" step="0.01" id="post-deliv-inst-pct" placeholder="Auto" oninput="onPostDelivPctInput()">
+
+                        </div>
+
+                    </div>
+
+
+
+                    <div style="display: flex; gap: 6px; flex-wrap: wrap;">
+
+                        <button type="button" class="btn btn-outline" onclick="setDistPreset('front')" style="padding: 3px 8px; font-size: 0.8rem; border-color: rgba(212, 175, 55, 0.4);">⚡ Front-Loaded (تحميل قبل)</button>
+
+                        <button type="button" class="btn btn-outline" onclick="setDistPreset('back')" style="padding: 3px 8px; font-size: 0.8rem; border-color: rgba(212, 175, 55, 0.4);">⏳ Back-Loaded (تحميل بعد)</button>
+
+                        <button type="button" class="btn btn-outline" onclick="setDistPreset('equal')" style="padding: 3px 8px; font-size: 0.8rem; border-color: rgba(212, 175, 55, 0.4);">🔄 متساوي (Equal)</button>
+
+                        <button type="button" class="btn btn-outline" onclick="resetDistPreset()" style="padding: 3px 8px; font-size: 0.8rem; border-color: rgba(255, 255, 255, 0.2);">↩️ افتراضي</button>
+
+                    </div>
+
+                    <div id="dist-mode-indicator" style="margin-top: 6px; font-size: 0.78rem; color: var(--text-muted);">
+
+                        الوضع: تلقائي (تحميل أي دفعة ملغية على ما قبل الاستلام)
+
+                    </div>
+                    <!-- OR Zero & Shift Optimizer -->
+                    <div style="margin-top: 12px; border-top: 1px dashed rgba(168, 85, 247, 0.35); padding-top: 10px;">
+                        <button type="button" class="btn" onclick="window.runORForZeroShift()" style="width: 100%; background: linear-gradient(135deg, #7c3aed, #9333ea); color: white; border: 1px solid rgba(255,255,255,0.3); border-radius: 6px; padding: 8px 14px; font-weight: bold; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; box-shadow: 0 3px 10px rgba(124, 58, 237, 0.25);">
+                            <span>⚡ بحوث العمليات (OR): اقتراح سيناريوهات لتصفير وترحيل الأقساط المحددة</span>
+                        </button>
+                        <div id="or-zero-shift-results" style="display: none; margin-top: 10px;"></div>
+                    </div>
+
+                </div>
+
+
+
+                <!-- Manual Discount / Increase Card -->
+
+
+                        </div>
+
+                        <!-- Module 6: Manual Adjustment -->
+                        <div class="pm-module-card" id="pm-card-manual">
+                            <div class="pm-module-header">
+                                <span class="pm-icon">🏷️</span>
+                                <div>
+                                    <div class="pm-title">تعديل يدوي مباشر (Manual Discount or Surcharge)</div>
+                                    <div class="pm-desc">تطبيق خصم أو زيادة يدوية مباشرة بالقيمة أو النسبة</div>
+                                </div>
+                            </div>
+                                            <div id="manual-discount-card" class="custom-controls" style="margin-top: 15px; grid-template-columns: 1fr; background: rgba(46, 204, 113, 0.05); border-left: 4px solid #2ecc71; padding: 15px; border-radius: 8px; transition: all 0.3s ease;">
+
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+
+                        <h3 id="manual-discount-title" style="margin: 0; color: #2ecc71; font-size: 1.05rem; display: flex; align-items: center; gap: 6px;">
+
+                            <span id="manual-discount-icon">🏷️</span> <span id="manual-discount-header-text">تعديل يدوي مباشر (خصم / زيادة) (Manual Adjustment)</span>
+
+                        </h3>
+
+                        <button type="button" class="btn btn-outline" onclick="clearManualDiscount()" style="padding: 2px 8px; font-size: 0.78rem; border-color: rgba(255,255,255,0.2);">إلغاء التعديل</button>
+
+                    </div>
+
+                    <div style="display: grid; grid-template-columns: 1fr 1.2fr 0.8fr; gap: 10px; align-items: end;">
+
+                        <div class="input-group">
+
+                            <label style="font-size: 0.85rem;">نوع الإجراء</label>
+
+                            <select id="manual-discount-action" onchange="if(window.onManualActionChange) window.onManualActionChange(); delayedCalculate();" style="padding: 8px; font-weight: 500;">
+
+                                <option value="discount" selected>🏷️ خصم (Discount -)</option>
+
+                                <option value="increase">📈 زيادة / Overprice (+)</option>
+
+                            </select>
+
+                        </div>
+
+                        <div class="input-group">
+
+                            <label id="manual-discount-val-label" style="font-size: 0.85rem;">قيمة الخصم</label>
+
+                            <input type="number" step="0.01" id="manual-discount-val" placeholder="مثال: 5 أو 500000" oninput="delayedCalculate()">
+
+                        </div>
+
+                        <div class="input-group">
+
+                            <label style="font-size: 0.85rem;">الوحدة</label>
+
+                            <select id="manual-discount-type" onchange="delayedCalculate()" style="padding: 8px;">
+
+                                <option value="pct">% نسبة مئوية</option>
+
+                                <option value="amt">ج.م مبلغ مباشر</option>
+
+                            </select>
+
+                        </div>
+
+                    </div>
+
+                    <div id="manual-discount-info" style="margin-top: 8px; font-size: 0.85rem; color: #2ecc71; display: none;"></div>
+
+                </div>
+
+
+
+
                         </div>
                     </div>
-                    <div class="summary-item" style="grid-column: 1 / -1; padding-top: 8px; border-top: 1px dashed var(--border); display: flex; justify-content: space-between; align-items: center;">
-                        <span class="summary-label">Average Monthly Eq. (ما يعادل القسط شهرياً)</span>
-                        <span class="summary-value" id="offer-monthly-avg" style="color:#2ecc71; font-weight: bold; font-size: 0.95rem;">0 ج.م / شهر</span>
+                </section>
+
+                <!-- STEP 3: SCHEDULE TABLE & ACTIONS -->
+                <section class="deal-card">
+                    <div class="deal-card-header" style="justify-content: space-between; flex-wrap: wrap; gap: 10px;">
+                        <div style="display: flex; align-items: center; gap: 12px;">
+                            <div class="deal-step-badge">3</div>
+                            <div>
+                                <h3 class="deal-card-title">3. جدول الأقساط والتدفقات المالية — Schedule</h3>
+                                <p class="deal-card-subtitle">الكشف المالي الكامل للأقساط والدفعات وتواريخ الاستحقاق</p>
+                            </div>
+                        </div>
+                        <div class="schedule-toolbar">
+                            <button type="button" class="btn btn-secondary toolbar-btn" onclick="copyRawPercentages(this)" title="نسخ نسب الجدول الحالية فقط بشكل متسلسل مباشر">📑 نسخ نسب الجدول</button>
+                            <button type="button" class="btn btn-secondary toolbar-btn" onclick="copyExcelPercentages(this)" style="background-color: #0d6efd; color: white;" title="نسخ عمود النسب لجدول الأقساط متوافقاً مع ترتيب شيت الإكسيل الماستر">📋 نسخ نسب الإكسيل (ماستر)</button>
+                            <button type="button" class="btn btn-secondary toolbar-btn" onclick="copyFullTableTSV(this)" style="background-color: #17a2b8; color: white;" title="نسخ جدول الدفعات والتواريخ بالكامل">📊 نسخ جدول الدفعات</button>
+                            <button type="button" class="btn btn-outline toolbar-btn" id="base-plan-toggle-btn" onclick="toggleBasePlanComparison()" style="border-color: var(--gold); color: var(--gold);">👁️ مقارنة بخطة الأساس</button>
+                        </div>
                     </div>
-                </div>
-                
-                <div class="diff-box" id="pv-difference" style="margin-top: 15px;">
-                    <!-- Difference injected here -->
-                </div>
+
+                    <div style="display: flex; justify-content: flex-end; align-items: center; margin-bottom: 8px;">
+                        
 
                 <div style="display: flex; gap: 10px; margin-top: 15px; justify-content: flex-end; align-items: center; flex-wrap: wrap;">
+
                     <div id="table-pct-balance-indicator" style="margin-left: auto; font-size: 0.9rem; font-weight: bold;">
+
                         <!-- Live % Sum Indicator injected via JS -->
+
                     </div>
+
                     <button id="balance-100-btn" onclick="balanceRemainingTo100()" style="display:none !important;"></button>
+
                     <button onclick="applyTableEdits()" style="background:var(--accent-blue); color:white; padding:10px 15px; border-radius:4px; font-weight:bold; cursor:pointer; border:none; box-shadow: 0 4px 6px rgba(0,0,0,0.3);">احسب بعد تعديل الجدول</button>
+
                     <button onclick="resetTableEdits()" style="background:#e74c3c; color:white; padding:10px 15px; border-radius:4px; font-weight:bold; cursor:pointer; border:none; box-shadow: 0 4px 6px rgba(0,0,0,0.3);">إلغاء كل التعديلات</button>
+
                 </div>
 
-                <div class="table-container" style="margin-top:15px; max-height:400px; overflow-y:auto;">
+
+
+
+                    </div>
+
+                                    <div class="table-container" style="margin-top:15px; max-height:400px; overflow-y:auto;">
+
                     <table>
-                        <thead>
-                            <tr>
-                                <th>Payment Type</th>
-                                <th>Date</th>
-                                <th>%</th>
-                                <th>Amount (EGP)</th>
-                                <th>PV</th>
-                            </tr>
-                        </thead>
-                        <tbody id="offer-tbody"></tbody>
-                    </table>
-                </div>
-            </div>
 
-            <!-- Base Plan Panel (Right) -->
-            <div class="panel">
-                <div class="panel-header">
+                        <thead>
+
+                            <tr>
+
+                                <th>Payment Type</th>
+
+                                <th>Date</th>
+
+                                <th>%</th>
+
+                                <th>Amount (EGP)</th>
+
+                                <th>PV</th>
+
+                            </tr>
+
+                        </thead>
+
+                        <tbody id="offer-tbody"></tbody>
+
+                    </table>
+
+                </div>
+
+
+
+                    <!-- BASE PLAN COLLAPSIBLE DRAWER -->
+                    <div id="base-plan-drawer" class="base-plan-drawer" style="display: none; margin-top: 20px; border-top: 2px dashed rgba(251,191,36,0.3); padding-top: 15px;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                            <h4 style="color: var(--gold); margin: 0; font-size: 1.1rem; display: flex; align-items: center; gap: 8px;">
+                                <span>📋 خطة الأساس للمشروع (Baseline Reference Plan)</span>
+                            </h4>
+                            <button type="button" class="btn btn-outline" onclick="toggleBasePlanComparison()" style="padding: 2px 10px; font-size: 0.8rem;">✕ إغلاق المقارنة</button>
+                        </div>
+                                        <div class="panel-header">
+
                     <h2 style="color:var(--gold)">Base Plan (Baseline)</h2>
+
                 </div>
+
                 
+
                 <div class="custom-controls" id="base-inputs" style="margin-top: 15px; background-color: #fce4d6; padding: 15px; border-radius: 8px;">
+
                     <!-- Baseline settings injected dynamically -->
+
                 </div>
+
+
 
                 <div class="summary-box" style="margin-top: 15px;">
+
                     <div class="summary-item">
+
                         <span class="summary-label">Total Amount</span>
+
                         <span class="summary-value" id="base-total-amt">0</span>
+
                     </div>
+
                     <div class="summary-item">
+
                         <span class="summary-label">Total PV</span>
+
                         <span class="summary-value" id="base-total-pv">0</span>
+
                     </div>
+
                     <div class="summary-item" style="grid-column: 1 / -1; padding-top: 10px; border-top: 1px solid var(--border);">
+
                         <span class="summary-label">Collected Pre-Delivery</span>
+
                         <span class="summary-value" id="base-pre-delivery" style="color:var(--accent-blue)">0%</span>
+
                     </div>
+
                     <div class="summary-item" style="grid-column: 1 / -1; padding-top: 8px; border-top: 1px dashed var(--border); display: flex; justify-content: space-between; align-items: center;">
+
                         <span class="summary-label">Average Monthly Eq. (ما يعادل القسط شهرياً)</span>
+
                         <span class="summary-value" id="base-monthly-avg" style="color:#2ecc71; font-weight: bold; font-size: 0.95rem;">0 ج.م / شهر</span>
+
                     </div>
+
                 </div>
+
+
 
                 <div class="table-container" style="margin-top:15px; max-height: 520px; overflow-y:auto;">
+
                     <table>
+
                         <thead>
+
                             <tr>
+
                                 <th>Payment Type</th>
+
                                 <th>Date</th>
+
                                 <th>%</th>
+
                                 <th>Amount</th>
+
                                 <th>PV</th>
+
                             </tr>
+
                         </thead>
+
                         <tbody id="base-tbody"></tbody>
+
                     </table>
+
                 </div>
+
+
+                    </div>
+                </section>
+
             </div>
+
+            <!-- RIGHT COLUMN: STICKY EXECUTIVE ORDER SUMMARY DRAWER -->
+            <aside class="deal-summary-drawer">
+                <div class="summary-drawer-card">
+                    
+                    <div class="summary-drawer-header">
+                        <div class="summary-drawer-badge">🏷️ ملخص الطلب والصفقة</div>
+                        <div class="summary-project-tag" id="drawer-project-tag">Project Zomra</div>
+                    </div>
+
+                    <!-- HERO PRICE CARD -->
+                    <div class="hero-price-box">
+                        <div class="hero-price-label">إجمالي سعر الوحدة (Final Price)</div>
+                        <div class="hero-price-amount" id="offer-total-amt">0</div>
+                                        <div class="diff-box" id="pv-difference" style="margin-top: 15px;">
+
+                    <!-- Difference injected here -->
+
+                </div>
+
+
+                    </div>
+
+                    <!-- APPROVAL STATUS CARD -->
+                    <div class="summary-approval-box">
+                                        <div id="approval-status-card" class="custom-controls" style="margin-top: 15px; grid-template-columns: 1fr; padding: 14px 16px; border-radius: 8px; border: 1.5px solid var(--border); background: rgba(255, 255, 255, 0.03); transition: all 0.3s ease;">
+
+                    <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+
+                        <div style="display: flex; align-items: center; gap: 8px;">
+
+                            <span style="font-size: 1.25rem;">🛡️</span>
+
+                            <span style="font-weight: bold; font-size: 0.98rem; color: var(--gold);">موقف الاعتماد المالي (Approval Status)</span>
+
+                        </div>
+
+                        
+
+                        <!-- Manual Approval Decision Toggle -->
+
+                        <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+
+                            <label id="manual-approval-toggle-wrapper" style="display: inline-flex; align-items: center; gap: 8px; cursor: pointer; background: rgba(46, 204, 113, 0.12); padding: 5px 14px; border-radius: 20px; border: 1.5px solid #27ae60; user-select: none; transition: all 0.2s;">
+
+                                <input type="checkbox" id="manual-disapproval-toggle" onchange="toggleManualApproval()" style="width: 17px; height: 17px; cursor: pointer; accent-color: #e74c3c;">
+
+                                <span id="manual-disapproval-label" style="font-size: 0.88rem; font-weight: bold; color: #2ecc71;">
+
+                                    ✅ العرض موافق عليه (APPROVED) — انقر للتحديد كـ "غير موافق"
+
+                                </span>
+
+                            </label>
+
+                        </div>
+
+                    </div>
+
+
+
+                    <!-- Main Dynamic Status Banner -->
+
+                    <div id="approval-badge-container" style="margin-top: 10px;">
+
+                        <!-- Injected dynamically via renderApprovalStatus -->
+
+                    </div>
+
+
+
+                    <!-- Collapsible Audit Breakdown -->
+
+                    <div id="approval-audit-details" style="display: none; margin-top: 12px; padding: 12px 14px; border-radius: 6px; font-size: 0.85rem; line-height: 1.5;"></div>
+
+                </div>
+
+
+
+
+                    </div>
+
+                    <!-- PAYMENT METRICS BREAKDOWN -->
+                    <div class="summary-metrics-container">
+                                        <div class="summary-box" style="margin-top: 15px;">
+
+                    
+
+                    <div class="summary-item">
+
+                        <span class="summary-label">Total PV</span>
+
+                        <span class="summary-value" id="offer-total-pv" style="color:var(--gold)">0</span>
+
+                    </div>
+
+                    <div class="summary-item" id="offer-garage-summary-item" style="display: none;">
+
+                        <span class="summary-label">🚗 Total Garage</span>
+
+                        <span class="summary-value" id="offer-total-garage" style="color:#2ecc71; font-weight: bold;">0</span>
+
+                    </div>
+
+                    <div class="summary-item" id="offer-grand-total-summary-item" style="display: none; grid-column: 1 / -1; padding-top: 8px; border-top: 1.5px solid var(--gold); justify-content: space-between; align-items: center;">
+
+                        <span class="summary-label" style="font-weight: bold; color: var(--gold);">Grand Total (Unit + Mnt + Garage)</span>
+
+                        <span class="summary-value" id="offer-grand-total-amt" style="color:var(--gold); font-weight: bold; font-size: 1.15rem;">0</span>
+
+                    </div>
+
+                    <div class="summary-item" style="grid-column: 1 / -1; padding-top: 10px; border-top: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center;">
+
+                        <span class="summary-label">Collected Pre-Delivery</span>
+
+                        <div style="display: flex; align-items: center; gap: 8px;">
+
+                            <span class="summary-value" id="offer-pre-delivery" style="color:var(--accent-blue)">0%</span>
+
+                            <span id="offer-pre-deliv-approval-badge" style="font-size: 0.78rem; font-weight: bold; padding: 2px 8px; border-radius: 12px;"></span>
+
+                        </div>
+
+                    </div>
+
+                    <div class="summary-item" style="grid-column: 1 / -1; padding-top: 8px; border-top: 1px dashed var(--border); display: flex; justify-content: space-between; align-items: center;">
+
+                        <span class="summary-label">Average Monthly Eq. (ما يعادل القسط شهرياً)</span>
+
+                        <span class="summary-value" id="offer-monthly-avg" style="color:#2ecc71; font-weight: bold; font-size: 0.95rem;">0 ج.م / شهر</span>
+
+                    </div>
+
+                </div>
+
+
+                    </div>
+
+                    <!-- INSTANT ACTION BUTTONS -->
+                    <div class="summary-actions-group">
+                        <button type="button" class="btn btn-primary action-btn-pdf" onclick="exportPDF()">
+                            <span>📄 تصدير عرض أسعار PDF (جاهز للعميل)</span>
+                        </button>
+                        
+                        <div class="summary-actions-grid">
+                            <button type="button" class="btn action-btn-excel" onclick="exportExcel()">
+                                📊 تصدير Excel
+                            </button>
+                            <input type="file" id="template-upload" accept=".xlsx, .xlsm" style="display:none;" onchange="handleTemplateUpload(event)">
+                            <button type="button" class="btn action-btn-template" onclick="document.getElementById('template-upload').click()">
+                                📤 Export Template
+                            </button>
+                        </div>
+
+                        <label class="compare-toggle-label">
+                            <input type="checkbox" id="compare-base-export-toggle" onchange="delayedCalculate()" style="cursor: pointer; width: 16px; height: 16px; accent-color: var(--gold);">
+                            <span>📑 مقارنة بالأساسية في تقرير الـ PDF</span>
+                        </label>
+
+                        <button type="button" class="btn btn-outline action-btn-reset" onclick="resetCustomInputs()">
+                            🔄 تفريغ وبدء عرض جديد
+                        </button>
+                    </div>
+
+                </div>
+            </aside>
+
         </div>
 
-    </div>
+    </main>
 
-    <!-- Rates Modal -->
-    <div class="modal-overlay" id="rates-modal">
+        <div class="modal-overlay" id="rates-modal">
+
         <div class="modal-content">
+
             <h3 style="color:var(--gold); margin-top:0;">Discount Rates Settings</h3>
+
             <p style="font-size: 0.9rem; margin-bottom: 15px;">Modify rates per year (applies globally).</p>
+
             <div id="rates-container" style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+
                 <!-- Injected via JS -->
+
             </div>
+
             <div style="margin-top: 20px; display: flex; gap: 10px; justify-content: flex-end;">
+
                 <button class="btn btn-outline" onclick="closeRatesModal()">Cancel</button>
+
                 <button class="btn btn-primary" onclick="saveRates()">Save Rates</button>
+
             </div>
+
         </div>
+
     </div>
+
+
 
     <!-- Hidden Export Template -->
+
     <div id="export-wrapper" style="position: absolute; left: -9999px; top: 0; background: #ffffff; padding: 0; width: 680px; box-sizing: border-box; color: #000000; font-family: Calibri, 'Segoe UI', Arial, sans-serif; direction: ltr;">
+
         <style>
+
             .export-table-cls, #export-table, #export-table-base { width: 100%; max-width: 100%; margin: 0 auto; border-collapse: collapse; text-align: center; border: 1.5px solid #000000; line-height: 1.25; box-sizing: border-box; table-layout: fixed; }
+
             .export-table-cls th, .export-table-cls td, #export-table th, #export-table td, #export-table-base th, #export-table-base td { border: 1px solid #000000; font-weight: normal; word-wrap: break-word; overflow-wrap: break-word; }
+
             .export-header-blue { background-color: #b8d5f0 !important; font-weight: 600 !important; color: #000000 !important; }
+
             .export-sub-blue { background-color: #b8d5f0 !important; font-weight: 600 !important; color: #000000 !important; }
+
             .export-bold { font-weight: 600 !important; }
+
             .html2pdf__page-break { page-break-before: always !important; break-before: page !important; }
+
         </style>
-        <div id="export-container">
+
+
+            <div id="export-container">
+
             <div id="export-offer-page">
+
                 <table id="export-table" class="export-table-cls">
+
                     <!-- Generated via JS for offer plan -->
+
                 </table>
+
             </div>
+
             <div id="export-base-page" style="display: none;">
+
                 <div class="html2pdf__page-break" style="page-break-before: always; break-before: page; height: 10px; margin: 0; padding: 0;"></div>
+
                 <table id="export-table-base" class="export-table-cls" style="margin-top: 15px;">
+
                     <!-- Generated via JS for base plan -->
+
                 </table>
+
             </div>
+
         </div>
+
     </div>
 
-    <script src="app_v46.js?v=20261119_v54_exact_excel_percentage_precision"></script>
+
+
+    <script src="app_v46.js?v=20261123_v64_order_studio"></script>
+
 </body>
+
 </html>
 
 
@@ -614,3 +1580,120 @@
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    
+    <!-- ORDER STUDIO CONTROLLER SCRIPT -->
+    <script>
+        // STUDIO MODE & TAB SWITCHER CONTROLLER
+        let studioMode = 'sales'; // 'sales' or 'manager'
+        let currentPaymentMode = 'standard';
+
+        function setStudioMode(mode) {
+            studioMode = mode;
+            let salesBtn = document.getElementById('mode-sales-btn');
+            let mgrBtn = document.getElementById('mode-manager-btn');
+            if (salesBtn && mgrBtn) {
+                salesBtn.classList.toggle('active', mode === 'sales');
+                mgrBtn.classList.toggle('active', mode === 'manager');
+            }
+            if (mode === 'manager') {
+                document.querySelectorAll('.pm-module-card').forEach(c => c.classList.add('active'));
+                document.querySelectorAll('.pm-tab-btn').forEach(b => b.classList.add('manager-all'));
+                let allBtn = document.getElementById('pm-btn-all');
+                if (allBtn) allBtn.classList.add('active');
+            } else {
+                document.querySelectorAll('.pm-tab-btn').forEach(b => b.classList.remove('manager-all'));
+                switchPaymentMode(currentPaymentMode || 'standard');
+            }
+        }
+
+        function switchPaymentMode(mode) {
+            currentPaymentMode = mode;
+            let tabs = {
+                'standard': { btn: 'pm-btn-standard', card: 'pm-card-standard', label: 'الخطة القياسية المرنة' },
+                'target': { btn: 'pm-btn-target', card: 'pm-card-target', label: 'السعر المستهدف وبحوث العمليات (AI OR)' },
+                'fixed': { btn: 'pm-btn-fixed', card: 'pm-card-fixed', label: 'تثبيت قيمة القسط' },
+                'balloon': { btn: 'pm-btn-balloon', card: 'pm-card-balloon', label: 'أقساط بالون وترحيل سنوي 70/30' },
+                'zero': { btn: 'pm-btn-zero', card: 'pm-card-zero', label: 'تصفير وترحيل أقساط محددة' },
+                'manual': { btn: 'pm-btn-manual', card: 'pm-card-manual', label: 'تعديل يدوي مباشر' }
+            };
+
+            // Update Tab Buttons
+            document.querySelectorAll('.pm-tab-btn').forEach(b => b.classList.remove('active'));
+            let activeBtn = document.getElementById(tabs[mode] ? tabs[mode].btn : (mode === 'all' ? 'pm-btn-all' : 'pm-btn-standard'));
+            if (activeBtn) activeBtn.classList.add('active');
+
+            // Update Active Plan Label
+            let planNameEl = document.getElementById('active-plan-name');
+            if (planNameEl) planNameEl.innerText = tabs[mode] ? tabs[mode].label : (mode === 'all' ? 'عرض شامل لكافة الخيارات' : 'الخطة القياسية');
+
+            // Show / Hide Cards
+            if (mode === 'all' || studioMode === 'manager') {
+                document.querySelectorAll('.pm-module-card').forEach(c => c.classList.add('active'));
+            } else {
+                document.querySelectorAll('.pm-module-card').forEach(c => c.classList.remove('active'));
+                let targetCard = document.getElementById(tabs[mode] ? tabs[mode].card : 'pm-card-standard');
+                if (targetCard) targetCard.classList.add('active');
+            }
+        }
+
+        function toggleBasePlanComparison() {
+            let drawer = document.getElementById('base-plan-drawer');
+            let btn = document.getElementById('base-plan-toggle-btn');
+            if (drawer) {
+                let isHidden = drawer.style.display === 'none' || !drawer.style.display;
+                drawer.style.display = isHidden ? 'block' : 'none';
+                if (btn) btn.innerText = isHidden ? '✕ إخفاء خطة الأساس' : '👁️ مقارنة بخطة الأساس';
+                if (isHidden) {
+                    drawer.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                }
+            }
+        }
+
+        // Sync drawer project badge with current project
+        const origSetProject = window.setProject;
+        window.setProject = function(p) {
+            if (origSetProject) origSetProject(p);
+            let tag = document.getElementById('drawer-project-tag');
+            if (tag) tag.innerText = 'Project ' + (window.currentProject || p);
+        };
+
+        // Initialize on load
+        window.addEventListener('DOMContentLoaded', () => {
+            switchPaymentMode('standard');
+            let tag = document.getElementById('drawer-project-tag');
+            if (tag && window.currentProject) tag.innerText = 'Project ' + window.currentProject;
+        });
+    </script>
+
+</body>
+</html>
