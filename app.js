@@ -1,3 +1,14 @@
+
+if (typeof window.getFreqMonths !== 'function') {
+    window.getFreqMonths = function(elOrId = 'payment-frequency') {
+        let el = (typeof elOrId === 'string') ? document.getElementById(elOrId) : elOrId;
+        let v = el ? parseInt(el.value) : 4;
+        if (v === 1 || v === 12) return 12;
+        if (v === 2 || v === 6) return 6;
+        return 3;
+    };
+}
+
 let currentProject = 'Zomra';
 
 let typingTimer;
@@ -153,7 +164,7 @@ function updateFixedInstMonthlyHint() {
 
     let type = document.getElementById('fixed-inst-type')?.value || 'amt';
 
-    let freqMonths = parseInt(document.getElementById('payment-frequency')?.value) === 2 ? 6 : 3;
+    let freqMonths = window.getFreqMonths('payment-frequency');
 
     let basePrice = basePriceCache || 5000000;
 
@@ -595,6 +606,8 @@ function setProject(proj) {
 
         else if (pLower.includes('jirian')) currentProject = 'Jirian';
 
+        else if (pLower.includes('sky')) currentProject = 'Sky Ridge';
+
         else currentProject = proj;
 
     }
@@ -611,7 +624,7 @@ function setProject(proj) {
 
         };
 
-    } else if (currentProject === 'Perla' || currentProject === 'ORB') {
+    } else if (currentProject === 'Perla' || currentProject === 'ORB' || currentProject === 'Sky Ridge') {
 
         discountRates = {
 
@@ -637,22 +650,22 @@ function setProject(proj) {
 
     if (basePriceInput) {
 
+        let durEl = document.getElementById('duration-years');
         if (currentProject === 'ORB') {
-
             basePriceInput.value = '15300000';
-
+            if (durEl) durEl.value = '8';
         } else if (currentProject === 'Perla') {
-
             basePriceInput.value = '30631636';
-
+            if (durEl) durEl.value = '8';
         } else if (currentProject === 'Zomra') {
-
             basePriceInput.value = '28158648';
-
+            if (durEl) durEl.value = '8';
         } else if (currentProject === 'Jirian') {
-
             basePriceInput.value = '50000000';
-
+            if (durEl) durEl.value = '8';
+        } else if (currentProject === 'Sky Ridge') {
+            basePriceInput.value = '170000';
+            if (durEl) durEl.value = '6';
         }
 
     }
@@ -801,58 +814,236 @@ function toggleFixedInst() {
 
 
 
+
+// ============================================================================
+// MULTI-YEAR TIERS & ANNUAL COLLECTION PLAN MATCHING SYSTEM
+// ============================================================================
+window._fixedMultiYearsState = {};
+
+window.renderFixedMultiYearsGrid = function(years) {
+    let durYears = parseInt(years) || parseInt(document.getElementById('duration-years')?.value) || 8;
+    let grid = document.getElementById('fixed-inst-multi-years-grid');
+    if (!grid) return;
+    
+    let html = '';
+    for (let y = 1; y <= durYears; y++) {
+        let existingVal = window._fixedMultiYearsState && window._fixedMultiYearsState[y] ? window._fixedMultiYearsState[y].val : '';
+        let existingType = window._fixedMultiYearsState && window._fixedMultiYearsState[y] ? window._fixedMultiYearsState[y].type : 'amt';
+        html += `
+            <div style="background: rgba(255,255,255,0.04); padding: 6px 8px; border-radius: 5px; border: 1px solid rgba(168, 85, 247, 0.3);">
+                <div style="font-size: 0.8rem; font-weight: bold; color: #c084fc; margin-bottom: 3px;">سنة ${y} (Year ${y})</div>
+                <div style="display: flex; gap: 4px;">
+                    <input type="number" id="fixed-multi-val-${y}" value="${existingVal}" placeholder="فارغ..." oninput="onFixedMultiYearInput(${y})" style="width: 100%; min-width: 0; padding: 4px; font-size: 0.82rem; font-weight: bold;">
+                    <select id="fixed-multi-type-${y}" onchange="onFixedMultiYearInput(${y})" style="padding: 4px; font-size: 0.75rem; width: 60px;">
+                        <option value="amt" ${existingType === 'amt' ? 'selected' : ''}>ج.م</option>
+                        <option value="pct" ${existingType === 'pct' ? 'selected' : ''}>%</option>
+                    </select>
+                </div>
+            </div>
+        `;
+    }
+    grid.innerHTML = html;
+};
+
+window.onFixedMultiYearInput = function(y) {
+    if (!window._fixedMultiYearsState) window._fixedMultiYearsState = {};
+    let valEl = document.getElementById(`fixed-multi-val-${y}`);
+    let typeEl = document.getElementById(`fixed-multi-type-${y}`);
+    let val = valEl ? parseFloat(valEl.value) : NaN;
+    let type = typeEl ? typeEl.value : 'amt';
+    if (!isNaN(val) && val > 0) {
+        window._fixedMultiYearsState[y] = { val: val, type: type };
+    } else {
+        delete window._fixedMultiYearsState[y];
+    }
+    delayedCalculate();
+};
+
+window.applyFixedMultiPreset = function(preset) {
+    let durYears = parseInt(document.getElementById('duration-years')?.value) || 8;
+    if (!window._fixedMultiYearsState) window._fixedMultiYearsState = {};
+    if (preset === 'clear') {
+        window._fixedMultiYearsState = {};
+    } else if (preset === 'y1_2') {
+        window._fixedMultiYearsState[1] = { val: 100000, type: 'amt' };
+        window._fixedMultiYearsState[2] = { val: 100000, type: 'amt' };
+        for (let y = 3; y <= durYears; y++) {
+            delete window._fixedMultiYearsState[y];
+        }
+    }
+    window.renderFixedMultiYearsGrid(durYears);
+    delayedCalculate();
+};
+
+window.getFixedMultiYearsValues = function() {
+    return window._fixedMultiYearsState || {};
+};
+
+window.renderAnnualCollectionTable = function(flows, price, years, freqMonths, contractDateStr) {
+    let tbody = document.getElementById('annual-collection-tbody');
+    let badgeYears = document.getElementById('annual-plan-years-badge');
+    let matchBadge = document.getElementById('annual-collection-match-status');
+    if (!tbody || !flows || flows.length === 0) return;
+
+    let durYears = parseInt(years) || 8;
+    if (badgeYears) badgeYears.innerText = durYears;
+
+    let effPrice = Math.round(price || 0);
+    let freq = parseInt(freqMonths) || 3;
+    let instsPerYear = Math.round(12 / freq);
+
+    // Standard annual targets based on selected duration
+    let isZomra = (currentProject === 'Zomra');
+    let isSkyRidge = (currentProject === 'Sky Ridge');
+    let totalDpPct = 0.10; // 10% standard down payment
+    let delivPct = isZomra ? 0.05 : 0.0;
+    let delivMonth = (isSkyRidge ? 6 : (currentProject === 'ORB' ? 24 : (isZomra ? 37 : (currentProject === 'Perla' ? 51 : 48))));
+    let _delivFlowObj = (flows || []).find(f => f.id === 'deliv' || (f.mergedIds && f.mergedIds.includes('deliv')) || (f.label && f.label.includes('Delivery') && !f.isMnt));
+    let delivYear = (_delivFlowObj && _delivFlowObj._instYear) ? _delivFlowObj._instYear : Math.max(1, Math.ceil(delivMonth / 12));
+
+    let standardRemInstPct = (1.0 - totalDpPct - delivPct) / (durYears * instsPerYear);
+
+    let rowsHtml = '';
+    let grandTargetAmt = 0;
+    let grandRegAmt = 0;
+    let grandBalloonAmt = 0;
+    let grandActualAmt = 0;
+    let allMatched = true;
+
+    for (let y = 1; y <= durYears; y++) {
+        let stdPct_y = (y === 1 ? totalDpPct : 0) + (y === delivYear ? delivPct : 0) + (instsPerYear * standardRemInstPct);
+        let targetAmt_y = Math.round(effPrice * stdPct_y);
+        grandTargetAmt += targetAmt_y;
+
+        // Group actual flows for Year y
+        let flowsInYear = flows.filter(f => !f.isMnt && (f._instYear === y || (f.isDP && y === 1) || (f.isFinishing && y === 1)));
+        
+        let regInsts_y = 0;
+        let balloon_y = 0;
+        let totalActual_y = 0;
+
+        flowsInYear.forEach(f => {
+            let amt = f.amount || 0;
+            totalActual_y += amt;
+            if (f._isYearEndBalloon && f._balloonPortionAmt) {
+                balloon_y += f._balloonPortionAmt;
+                regInsts_y += Math.max(0, amt - f._balloonPortionAmt);
+            } else {
+                regInsts_y += amt;
+            }
+        });
+
+        grandRegAmt += regInsts_y;
+        grandBalloonAmt += balloon_y;
+        grandActualAmt += totalActual_y;
+
+        let diff = Math.round(totalActual_y - targetAmt_y);
+        let isMatch = Math.abs(diff) <= 5;
+        if (!isMatch) allMatched = false;
+
+        let actPct_y = effPrice > 0 ? (totalActual_y / effPrice) * 100 : 0;
+        let stdPctDisp = (stdPct_y * 100).toFixed(2);
+
+        // Date range
+        let startD = addMonths(contractDateStr, (y - 1) * 12);
+        let endD = addMonths(contractDateStr, y * 12);
+
+        rowsHtml += `
+            <tr style="border-bottom: 1px solid rgba(255,255,255,0.06);">
+                <td style="padding: 8px; font-weight: bold; color: var(--gold);">سنة ${y}</td>
+                <td style="padding: 8px; font-size: 0.8rem; color: var(--text-muted);">${formatDate(startD)} → ${formatDate(endD)}</td>
+                <td style="padding: 8px; font-weight: bold;">${stdPctDisp}%</td>
+                <td style="padding: 8px; font-weight: bold; color: var(--gold);">${formatCurr(targetAmt_y)}</td>
+                <td style="padding: 8px;">${formatCurr(regInsts_y)}</td>
+                <td style="padding: 8px; color: #38bdf8; font-weight: bold;">${balloon_y > 0 ? formatCurr(balloon_y) : '-'}</td>
+                <td style="padding: 8px; font-weight: bold; color: var(--accent-blue);">${formatCurr(totalActual_y)} (${actPct_y.toFixed(2)}%)</td>
+                <td style="padding: 8px;">
+                    ${isMatch ? 
+                        '<span style="background: rgba(46,204,113,0.15); color: #2ecc71; padding: 2px 8px; border-radius: 10px; font-weight: bold; font-size: 0.8rem; border: 1px solid rgba(46,204,113,0.3);">✔ متطابق 100%</span>' : 
+                        `<span style="background: rgba(234,179,8,0.15); color: #eab308; padding: 2px 8px; border-radius: 10px; font-weight: bold; font-size: 0.8rem; border: 1px solid rgba(234,179,8,0.3);">${diff > 0 ? '+' : ''}${formatCurr(diff)}</span>`
+                    }
+                </td>
+            </tr>
+        `;
+    }
+
+    // Totals row
+    let totDiff = grandActualAmt - grandTargetAmt;
+    let isTotMatch = Math.abs(totDiff) <= 5;
+    rowsHtml += `
+        <tr style="background: rgba(0,0,0,0.5); border-top: 2px solid var(--gold); font-weight: bold;">
+            <td style="padding: 10px; color: var(--gold);">الإجمالي</td>
+            <td style="padding: 10px; color: var(--text-muted);">${durYears} سنوات</td>
+            <td style="padding: 10px; color: var(--gold);">100.00%</td>
+            <td style="padding: 10px; color: var(--gold);">${formatCurr(grandTargetAmt)}</td>
+            <td style="padding: 10px;">${formatCurr(grandRegAmt)}</td>
+            <td style="padding: 10px; color: #38bdf8;">${grandBalloonAmt > 0 ? formatCurr(grandBalloonAmt) : '-'}</td>
+            <td style="padding: 10px; color: var(--accent-blue);">${formatCurr(grandActualAmt)} (100%)</td>
+            <td style="padding: 10px;">
+                ${isTotMatch ? 
+                    '<span style="background: rgba(46,204,113,0.2); color: #2ecc71; padding: 3px 10px; border-radius: 12px; font-weight: bold; border: 1px solid #2ecc71;">✔ 100% متطابق</span>' : 
+                    `<span style="background: rgba(234,179,8,0.2); color: #eab308; padding: 3px 10px; border-radius: 12px; font-weight: bold;">${formatCurr(totDiff)}</span>`
+                }
+            </td>
+        </tr>
+    `;
+
+    tbody.innerHTML = rowsHtml;
+
+    if (matchBadge) {
+        if (allMatched) {
+            matchBadge.innerHTML = `✔ 100% متطابق مع التحصيل السنوي لخطة الـ ${durYears} سنوات`;
+            matchBadge.style.background = 'rgba(46, 204, 113, 0.15)';
+            matchBadge.style.color = '#2ecc71';
+            matchBadge.style.borderColor = 'rgba(46, 204, 113, 0.4)';
+        } else {
+            matchBadge.innerHTML = `مخصص (فروق مرحلة بين السنوات)`;
+            matchBadge.style.background = 'rgba(56, 189, 248, 0.15)';
+            matchBadge.style.color = '#38bdf8';
+            matchBadge.style.borderColor = 'rgba(56, 189, 248, 0.4)';
+        }
+    }
+};
+
+
 window.onFixedScopeChange = function() {
-
     let scope = document.getElementById('fixed-inst-scope') ? document.getElementById('fixed-inst-scope').value : 'all';
-
     let label = document.getElementById('fixed-inst-val-label');
+    let singleValGroup = document.getElementById('fixed-inst-single-val-group');
+    let splitContainer = document.getElementById('fixed-inst-split-pre-post-container');
+    let multiContainer = document.getElementById('fixed-inst-multi-years-container');
+    let customYearsContainer = document.getElementById('fixed-inst-custom-years-container');
+    let specificInstsContainer = document.getElementById('fixed-inst-specific-insts-container');
+
+    if (splitContainer) splitContainer.style.display = (scope === 'split_pre_post') ? 'block' : 'none';
+    if (multiContainer) multiContainer.style.display = (scope === 'by_years_multi') ? 'block' : 'none';
+    if (customYearsContainer) customYearsContainer.style.display = (scope === 'custom') ? 'block' : 'none';
+    if (specificInstsContainer) specificInstsContainer.style.display = (scope === 'specific_inst') ? 'block' : 'none';
+
+    let hideSingle = (scope === 'split_pre_post' || scope === 'by_years_multi');
+    if (singleValGroup) singleValGroup.style.display = hideSingle ? 'none' : '';
+    let valInputGroup = document.getElementById('fixed-inst-val')?.closest('.input-group');
+    if (valInputGroup) valInputGroup.style.display = hideSingle ? 'none' : '';
 
     if (label) {
-
         if (scope === 'pre') label.innerText = 'قسط ما قبل الاستلام';
-
         else if (scope === 'post') label.innerText = 'قسط ما بعد الاستلام';
-
-        else if (scope === 'custom') label.innerText = 'قيمة القسط للسنين المحددة';
-
+        else if (scope === 'custom') label.innerText = 'قيمة القسط للسنوات المحددة';
         else if (scope === 'specific_inst') label.innerText = 'قيمة القسط للأقساط المحددة';
-
         else label.innerText = 'قيمة كل قسط';
-
-    }
-
-    let container = document.getElementById('fixed-inst-custom-years-container');
-
-    if (container) {
-
-        container.style.display = (scope === 'custom') ? 'block' : 'none';
-
-    }
-
-    let specificContainer = document.getElementById('fixed-inst-specific-insts-container');
-
-    if (specificContainer) {
-
-        specificContainer.style.display = (scope === 'specific_inst') ? 'block' : 'none';
-
     }
 
     let years = parseInt(document.getElementById('duration-years')?.value) || 8;
-
     if (scope === 'custom') {
-
         window.renderFixedYearCheckboxes(years);
-
     } else if (scope === 'specific_inst') {
-
         window.renderFixedInstCheckboxes();
-
+    } else if (scope === 'by_years_multi') {
+        window.renderFixedMultiYearsGrid(years);
     }
 
     if (window.onFixedTargetModeChange) window.onFixedTargetModeChange();
-
     calculate();
-
 };
 
 
@@ -883,7 +1074,9 @@ window.onFixedTargetModeChange = function() {
 
     if (noteEl) {
 
-        if (mode === 'single_inst') {
+        if (mode === 'annual_balloon') {
+            noteEl.innerHTML = '⭐ <strong style="color: #38bdf8;">دفعة في نهاية كل سنة (Year-End Balloon):</strong> يتم ترحيل فرق الأقساط المخفضة في كل سنة كدفعة سنوية في نهاية تلك السنة (الربع الرابع)، بحيث يكون <strong>إجمالي التحصيل السنوي في كل سنة متطابقاً 100% مع الخطة القياسية</strong> لعدد السنوات المختار!';
+        } else if (mode === 'single_inst') {
 
             noteEl.innerHTML = '🎯 <strong style="color: #38bdf8;">تحميل على قسط واحد:</strong> سيتم تحميل كامل فرق التثبيت على رقم القسط المختار أعلاه، وتظل باقي الأقساط عند نسبتها الأصلية الطبيعية كشيت الإكسيل بالملي.';
 
@@ -967,7 +1160,7 @@ window.selectFixedInstPreset = function(preset) {
 
     let years = parseInt(document.getElementById('duration-years')?.value) || 8;
 
-    let freqMonths = (document.getElementById('payment-frequency')?.value == '2') ? 6 : 3;
+    let freqMonths = window.getFreqMonths('payment-frequency');
 
     let instsPerYear = 12 / freqMonths;
 
@@ -1097,7 +1290,7 @@ window.renderFixedInstCheckboxes = function(totalInsts) {
 
         let years = parseInt(document.getElementById('duration-years')?.value) || 8;
 
-        let freqMonths = (document.getElementById('payment-frequency')?.value == '2') ? 6 : 3;
+        let freqMonths = window.getFreqMonths('payment-frequency');
 
         totalInsts = years * (12 / freqMonths);
 
@@ -1207,7 +1400,7 @@ window.renderFixedSingleTargetSelect = function(totalInsts) {
 
         let years = parseInt(document.getElementById('duration-years')?.value) || 8;
 
-        let freqMonths = (document.getElementById('payment-frequency')?.value == '2') ? 6 : 3;
+        let freqMonths = window.getFreqMonths('payment-frequency');
 
         totalInsts = years * (12 / freqMonths);
 
@@ -1223,7 +1416,7 @@ window.renderFixedSingleTargetSelect = function(totalInsts) {
 
         let fixedYears = window.getFixedSelectedYears ? window.getFixedSelectedYears() : [1, 2];
 
-        let freqMonths = (document.getElementById('payment-frequency')?.value == '2') ? 6 : 3;
+        let freqMonths = window.getFreqMonths('payment-frequency');
 
         let ipy = 12 / freqMonths;
 
@@ -1299,7 +1492,7 @@ window.renderFixedTargetInstsCheckboxes = function(totalInsts) {
 
         let years = parseInt(document.getElementById('duration-years')?.value) || 8;
 
-        let freqMonths = (document.getElementById('payment-frequency')?.value == '2') ? 6 : 3;
+        let freqMonths = window.getFreqMonths('payment-frequency');
 
         totalInsts = years * (12 / freqMonths);
 
@@ -1315,7 +1508,7 @@ window.renderFixedTargetInstsCheckboxes = function(totalInsts) {
 
         let fixedYears = window.getFixedSelectedYears ? window.getFixedSelectedYears() : [1, 2];
 
-        let freqMonths = (document.getElementById('payment-frequency')?.value == '2') ? 6 : 3;
+        let freqMonths = window.getFreqMonths('payment-frequency');
 
         let ipy = 12 / freqMonths;
 
@@ -2523,7 +2716,7 @@ window.applyFixedVal = function(v) {
 
 window.onPaymentFrequencyChange = function() {
 
-    let freqMonths = parseInt(document.getElementById('payment-frequency')?.value) === 2 ? 6 : 3;
+    let freqMonths = window.getFreqMonths('payment-frequency');
 
     let intraToggle = document.getElementById('toggle-intra-year');
 
@@ -2545,7 +2738,7 @@ window.onPaymentFrequencyChange = function() {
 
     if (label) {
 
-        label.innerText = (freqMonths === 6) ? 'قسط الفترة النصف سنوية الأولى (H1)' : 'قسط الفترات العادية (أول 3 فترات ربع سنوية)';
+        label.innerText = (freqMonths === 12) ? 'قسط سنوي (دفعة واحدة سنوياً)' : ((freqMonths === 6) ? 'قسط الفترة النصف سنوية الأولى (H1)' : 'قسط الفترات العادية (أول 3 فترات ربع سنوية)');
 
     }
 
@@ -2627,7 +2820,7 @@ window.onIntraYearTypeChange = function() {
 
     let valEl = document.getElementById('intra-year-val');
 
-    let freqMonths = parseInt(document.getElementById('payment-frequency')?.value) === 2 ? 6 : 3;
+    let freqMonths = window.getFreqMonths('payment-frequency');
 
     let label = document.getElementById('intra-year-val-label');
 
@@ -2635,7 +2828,7 @@ window.onIntraYearTypeChange = function() {
 
     if (label) {
 
-        label.innerText = freqMonths === 3 ? 'قسط أول 3 فترات ربع سنوية' : 'قسط الفترة النصف سنوية الأولى';
+        label.innerText = freqMonths === 12 ? 'قسط سنوي' : (freqMonths === 3 ? 'قسط أول 3 فترات ربع سنوية' : 'قسط الفترة النصف سنوية الأولى');
 
     }
 
@@ -2734,11 +2927,15 @@ window.onIntraYearScopeChange = function() {
     let scope = document.getElementById('intra-year-scope')?.value || 'all';
 
     let container = document.getElementById('intra-custom-years-container');
+    let specCont = document.getElementById('intra-specific-insts-container');
 
     if (container) {
 
         container.style.display = (scope === 'custom') ? 'block' : 'none';
 
+    }
+    if (specCont) {
+        specCont.style.display = (scope === 'specific_inst') ? 'block' : 'none';
     }
 
     if (scope === 'custom') {
@@ -3201,7 +3398,7 @@ function renderIntraGuidanceBox(g) {
 
 function resetCustomInputs() {
 
-    document.getElementById('duration-years').value = 8;
+    document.getElementById('duration-years').value = (currentProject === 'Sky Ridge') ? 6 : 8;
 
     document.getElementById('payment-frequency').value = 4;
 
@@ -3465,7 +3662,7 @@ function renderBaseInputs() {
 
         <label>Base Years</label>
 
-        <input type="number" id="base-duration-years" value="8" min="1" max="10" oninput="delayedCalculate()">
+        <input type="number" id="base-duration-years" value="${currentProject === 'Sky Ridge' ? 6 : 8}" min="1" max="10" oninput="delayedCalculate()">
 
     </div>`;
 
@@ -3473,12 +3670,10 @@ function renderBaseInputs() {
 
         <label>Base Freq</label>
 
-        <select id="base-payment-frequency" onchange="delayedCalculate()">
-
+                <select id="base-payment-frequency" onchange="delayedCalculate()">
             <option value="4">Quarterly</option>
-
             <option value="2">Semi-Annual</option>
-
+            <option value="1">Annual</option>
         </select>
 
     </div>`;
@@ -3511,9 +3706,12 @@ function renderBaseInputs() {
 
         
 
-    html += createBaseInput('dp1', 'Base DP 1', currentProject==='Zomra'?2.5:5);
-
-    html += createBaseInput('dp2', 'Base DP 2', currentProject==='Zomra'?2.5:5);
+    if (currentProject === 'Sky Ridge') {
+        html += createBaseInput('dp1', 'Base DP (10%)', 10);
+    } else {
+        html += createBaseInput('dp1', 'Base DP 1', currentProject==='Zomra'?2.5:5);
+        html += createBaseInput('dp2', 'Base DP 2', currentProject==='Zomra'?2.5:5);
+    }
 
     if(currentProject === 'Zomra') {
 
@@ -3689,15 +3887,15 @@ function renderCustomInputs() {
 
 
 
-    let defDp1Pct = isZomra ? 2.5 : 5.0;
+    let defDp1Pct = currentProject === 'Sky Ridge' ? 10.0 : (isZomra ? 2.5 : 5.0);
 
-    let defDp2Pct = isZomra ? 2.5 : 5.0;
+    let defDp2Pct = currentProject === 'Sky Ridge' ? 0.0 : (isZomra ? 2.5 : 5.0);
 
 
 
-    let dp1Label = currentProject === 'Jirian' ? 'Down Payment (5%)' : 'المقدم الأول (Down Payment 1)';
+    let dp1Label = currentProject === 'Sky Ridge' ? 'المقدم (Down Payment 10%)' : (currentProject === 'Jirian' ? 'Down Payment (5%)' : 'المقدم الأول (Down Payment 1)');
 
-    let dp2Label = currentProject === 'Jirian' ? '1st Dec Payment (5%)' : (isZomra ? 'الدفعة الثانية بعد شهر (DP 2)' : 'الدفعة الثانية بعد 3 شهور (DP 2)');
+    let dp2Label = currentProject === 'Sky Ridge' ? 'لا يوجد دفعة ثانية (N/A)' : (currentProject === 'Jirian' ? '1st Dec Payment (5%)' : (isZomra ? 'الدفعة الثانية بعد شهر (DP 2)' : 'الدفعة الثانية بعد 3 شهور (DP 2)'));
 
 
 
@@ -3879,6 +4077,7 @@ function renderCustomInputs() {
 
 
 
+    if (currentProject !== 'Sky Ridge') {
     // DP2 Split vs Single
 
     html += `<div style="margin-bottom: 10px;">`;
@@ -4022,6 +4221,7 @@ function renderCustomInputs() {
     }
 
     html += `</div>`; // End DP2
+    }
 
 
 
@@ -4643,7 +4843,7 @@ function applyDiscountLogic(f, contractDateStr, forceNormal = false, forceFlex =
 
         }
 
-    } else if (currentProject === 'Perla' || currentProject === 'ORB') {
+    } else if (currentProject === 'Perla' || currentProject === 'ORB' || currentProject === 'Sky Ridge') {
 
         if (f.isMnt) {
 
@@ -4692,6 +4892,22 @@ function applyDiscountLogic(f, contractDateStr, forceNormal = false, forceFlex =
                 else if (diffDays < 1936) r = 0.11;
 
                 else if (diffDays < 3397) r = 0.10;
+
+                else r = 0.09;
+
+            } else if (currentProject === 'Sky Ridge') {
+
+                if (diffDays < 427) r = 0.20;
+
+                else if (diffDays < 793) r = 0.19;
+
+                else if (diffDays < 1158) r = 0.16;
+
+                else if (diffDays < 1523) r = 0.14;
+
+                else if (diffDays < 2315) r = 0.11;
+
+                else if (diffDays < 3776) r = 0.10;
 
                 else r = 0.09;
 
@@ -4817,7 +5033,7 @@ function generateFlowsTemplate(contractDateStr, years, freqMonths, isBase = fals
 
     years = Math.max(1, Math.min(10, parseInt(years) || 8));
 
-    freqMonths = (parseInt(freqMonths) === 6 || parseInt(freqMonths) === 3) ? parseInt(freqMonths) : 3;
+    freqMonths = (parseInt(freqMonths) === 12 || parseInt(freqMonths) === 6 || parseInt(freqMonths) === 3) ? parseInt(freqMonths) : 3;
 
     let totalMonths = years * 12;
 
@@ -5209,7 +5425,7 @@ function generateFlowsTemplate(contractDateStr, years, freqMonths, isBase = fals
 
         
 
-        let startMonth = (freqMonths === 6) ? 7 : 4;
+        let startMonth = (freqMonths === 12) ? 13 : ((freqMonths === 6) ? 7 : 4);
 
         let firstDate = customFirstDateStr ? new Date(customFirstDateStr) : null;
 
@@ -5275,7 +5491,7 @@ function generateFlowsTemplate(contractDateStr, years, freqMonths, isBase = fals
 
 
 
-        let startMonth = (freqMonths === 6) ? 6 : 3;
+        let startMonth = (freqMonths === 12) ? 12 : ((freqMonths === 6) ? 6 : 3);
 
         let firstDate = customFirstDateStr ? new Date(customFirstDateStr) : null;
 
@@ -5291,7 +5507,8 @@ function generateFlowsTemplate(contractDateStr, years, freqMonths, isBase = fals
 
             let dStr = customFirstDateStr ? formatDate(addMonths(customFirstDateStr, i * freqMonths)) : formatDate(addMonths(contractDateStr, m));
 
-            flows.push({ id: 'inst_' + i, label: 'Installment ' + (i+1), date: dStr, months: m, isInst: true, defaultPct: defaultInstPct, exactPct: defaultInstPct });
+            let stdInstPct = (currentProject === 'Zomra') ? (0.85 / numInst) : (0.90 / numInst);
+        flows.push({ id: 'inst_' + i, label: 'Installment ' + (i+1), date: dStr, months: m, isInst: true, defaultPct: defaultInstPct, exactPct: defaultInstPct, _standardBasePct: stdInstPct });
 
         }
 
@@ -5331,7 +5548,7 @@ function generateFlowsTemplate(contractDateStr, years, freqMonths, isBase = fals
 
 
 
-        let numInst = overrideInstCount !== null ? overrideInstCount : (freqMonths === 6 ? (years * 2) : (years * 4));
+        let numInst = overrideInstCount !== null ? overrideInstCount : (years * (12 / freqMonths));
 
         let totalMilestonesPct = flows.filter(f => f.isDP).reduce((s, f) => s + (f.defaultPct || 0), 0);
 
@@ -5341,7 +5558,7 @@ function generateFlowsTemplate(contractDateStr, years, freqMonths, isBase = fals
 
         
 
-        let startMonth = (freqMonths === 6) ? 9 : 6;
+        let startMonth = (freqMonths === 12) ? 15 : ((freqMonths === 6) ? 9 : 6);
 
         let firstDate = customFirstDateStr ? new Date(customFirstDateStr) : null;
 
@@ -5357,7 +5574,65 @@ function generateFlowsTemplate(contractDateStr, years, freqMonths, isBase = fals
 
             let dStr = customFirstDateStr ? formatDate(addMonths(customFirstDateStr, i * freqMonths)) : formatDate(addMonths(contractDateStr, m));
 
-            flows.push({ id: 'inst_' + i, label: 'Installment ' + (i+1), date: dStr, months: m, isInst: true, defaultPct: defaultInstPct, exactPct: defaultInstPct });
+            let stdInstPct = (currentProject === 'Zomra') ? (0.85 / numInst) : (0.90 / numInst);
+        flows.push({ id: 'inst_' + i, label: 'Installment ' + (i+1), date: dStr, months: m, isInst: true, defaultPct: defaultInstPct, exactPct: defaultInstPct, _standardBasePct: stdInstPct });
+
+        }
+
+    } else if (currentProject === 'Sky Ridge') {
+
+        pushDP1(0.10, 'Down Payment');
+
+        let delivDate = (!isBase && msState && msState.deliv_date) ? msState.deliv_date : formatDate(addMonths(contractDateStr, 6));
+
+        let delivOverride = isBase ? 0 : getOverridePct('deliv', 0);
+
+        if (delivOverride > 0 || (!isBase && msState && msState.deliv_val && parseFloat(msState.deliv_val) > 0)) {
+
+            let dPct = delivOverride > 0 ? delivOverride : (parseFloat(msState.deliv_val) / 100);
+
+            flows.push({ id: 'deliv', label: 'Delivery Payment', date: delivDate, months: getMonthsDiff(delivDate, contractDateStr), isDP: true, defaultPct: dPct, exactPct: dPct });
+
+        }
+
+        let mnt1Date = (!isBase && msState && msState.mnt1_date) ? msState.mnt1_date : formatDate(addMonths(contractDateStr, 6));
+
+        let mnt2Date = (!isBase && msState && msState.mnt2_date) ? msState.mnt2_date : formatDate(addMonths(contractDateStr, 9));
+
+        flows.push({ id: 'mnt1', label: 'Maintenance 1 (5% - Month 6)', date: mnt1Date, months: 6, isMnt: true, mntPct: 0.05 });
+
+        flows.push({ id: 'mnt2', label: 'Maintenance 2 (5% - Month 9)', date: mnt2Date, months: 9, isMnt: true, mntPct: 0.05 });
+
+        let finishDate = (!isBase && msState && msState.finish_date) ? msState.finish_date : formatDate(addMonths(contractDateStr, 9));
+
+        flows.push({ id: 'finishing', label: 'Finishing Fee (5% - Month 9)', date: finishDate, months: 9, isMnt: true, isFinishing: true, mntPct: 0.05 });
+
+        pushExtraPayments();
+
+        let numInst = overrideInstCount !== null ? overrideInstCount : (years * (12 / freqMonths));
+
+        let totalMilestonesPct = flows.filter(f => f.isDP).reduce((s, f) => s + (f.defaultPct || 0), 0);
+
+        let poolForInst = Math.max(0, 1.0 - totalMilestonesPct);
+
+        let defaultInstPct = numInst > 0 ? (poolForInst / numInst) : 0;
+
+        let startMonth = (freqMonths === 12) ? 12 : ((freqMonths === 6) ? 6 : 3);
+
+        let firstDate = customFirstDateStr ? new Date(customFirstDateStr) : null;
+
+        let diffMonths = firstDate ? Math.round((firstDate - cDate) / (1000 * 60 * 60 * 24 * 30.44)) : startMonth;
+
+        if (diffMonths < 0) diffMonths = startMonth;
+
+        for (let i = 0; i < numInst; i++) {
+
+            let m = diffMonths + i * freqMonths;
+
+            let dStr = customFirstDateStr ? formatDate(addMonths(customFirstDateStr, i * freqMonths)) : formatDate(addMonths(contractDateStr, m));
+
+            let stdInstPct = (currentProject === 'Zomra') ? (0.85 / numInst) : (0.90 / numInst);
+        flows.push({ id: 'inst_' + i, label: 'Installment ' + (i+1), date: dStr, months: m, isInst: true, defaultPct: defaultInstPct, exactPct: defaultInstPct, _standardBasePct: stdInstPct });
 
         }
 
@@ -5395,7 +5670,7 @@ function generateFlowsTemplate(contractDateStr, years, freqMonths, isBase = fals
 
 
 
-        let numInst = overrideInstCount !== null ? overrideInstCount : (freqMonths === 6 ? (years * 2) : (years * 4 - 1));
+        let numInst = overrideInstCount !== null ? overrideInstCount : (freqMonths === 3 ? (years * 4 - 1) : (years * (12 / freqMonths)));
 
         let totalMilestonesPct = flows.filter(f => f.isDP).reduce((s, f) => s + (f.defaultPct || 0), 0);
 
@@ -5405,7 +5680,7 @@ function generateFlowsTemplate(contractDateStr, years, freqMonths, isBase = fals
 
         
 
-        let startMonth = (freqMonths === 6) ? 9 : 6;
+        let startMonth = (freqMonths === 12) ? 15 : ((freqMonths === 6) ? 9 : 6);
 
         let firstDate = customFirstDateStr ? new Date(customFirstDateStr) : null;
 
@@ -5421,7 +5696,8 @@ function generateFlowsTemplate(contractDateStr, years, freqMonths, isBase = fals
 
             let dStr = customFirstDateStr ? formatDate(addMonths(customFirstDateStr, i * freqMonths)) : formatDate(addMonths(contractDateStr, m));
 
-            flows.push({ id: 'inst_' + i, label: 'Installment ' + (i+1), date: dStr, months: m, isInst: true, defaultPct: defaultInstPct, exactPct: defaultInstPct });
+            let stdInstPct = (currentProject === 'Zomra') ? (0.85 / numInst) : (0.90 / numInst);
+        flows.push({ id: 'inst_' + i, label: 'Installment ' + (i+1), date: dStr, months: m, isInst: true, defaultPct: defaultInstPct, exactPct: defaultInstPct, _standardBasePct: stdInstPct });
 
         }
 
@@ -5438,6 +5714,23 @@ function generateFlowsTemplate(contractDateStr, years, freqMonths, isBase = fals
         let existing = shouldMerge ? mergedFlows.find(mf => mf.date === f.date && !mf.isMnt && !f.isMnt) : null;
 
         if (existing) {
+
+            if (existing.isExtra && !existing.hasExtra) {
+                existing.hasExtra = true;
+                if (existing._isFixedCash && existing._exactFixedVal !== undefined) {
+                    existing._extraCash = (existing._extraCash || 0) + existing._exactFixedVal;
+                } else {
+                    existing._extraPct = (existing._extraPct || 0) + (existing.defaultPct || 0);
+                }
+            }
+            if (f.isExtra) {
+                existing.hasExtra = true;
+                if (f._isFixedCash && f._exactFixedVal !== undefined) {
+                    existing._extraCash = (existing._extraCash || 0) + f._exactFixedVal;
+                } else {
+                    existing._extraPct = (existing._extraPct || 0) + (f.defaultPct || 0);
+                }
+            }
 
             existing.label += ' + ' + f.label;
 
@@ -5530,7 +5823,7 @@ function calculateBaseFlows(price, template, contractDateStr) {
 
         if (f.isMnt) {
 
-            f.amount = basePriceCache * 0.04;
+            f.amount = basePriceCache * (f.mntPct !== undefined ? f.mntPct : 0.04);
 
         } else if (f.isMerged) {
 
@@ -5653,171 +5946,34 @@ function solveForPrice(basePv, template) {
         return basePriceCache || 0;
     }
 
-    let nonMntTpl = template.filter(f => !f.isMnt);
-    let contractDateStr = document.getElementById('contract-date')?.value || '';
-    
-    // Pre-calculate discount factors for each flow
-    nonMntTpl.forEach(f => {
-        if (f.pvFactor === undefined || isNaN(f.pvFactor)) {
-            let tempF = { date: f.date, months: f.months, period: f.period, amount: 1, id: f.id };
-            applyDiscountLogic(tempF, contractDateStr);
-            f.pvFactor = tempF.pvFactor !== undefined ? tempF.pvFactor : 1.0;
-        }
-    });
-
-    let isFixedInst = document.getElementById('fixed-inst-toggle')?.checked;
-    let fixedInstVal = parseFloat(document.getElementById('fixed-inst-val')?.value) || 0;
-    let fixedInstType = document.getElementById('fixed-inst-type')?.value || 'amt';
-    let hasFixedCash = isFixedInst && fixedInstVal > 0 && fixedInstType === 'amt' && (!window.meltState || Object.keys(window.meltState).length === 0);
-    let hasZeroShifts = window.installmentShiftState && window.installmentShiftState.zeroInsts && window.installmentShiftState.zeroInsts.length > 0;
-
-    if (hasFixedCash || hasZeroShifts) {
-        // Analytical Closed-Form Solver for Fixed Cash and Zeroed Installments
-        let msFlows = nonMntTpl.filter(f => !f.isInst && !f.isMerged);
-        let mergedFlows = nonMntTpl.filter(f => f.isMerged);
-        let allInsts = nonMntTpl.filter(f => f.isInst || f.isMerged);
-
-        let S_ms = 0;
-        let W_ms = 0;
-        msFlows.forEach(f => {
-            let p = (f.defaultPct !== undefined ? f.defaultPct : 0.05);
-            if (f._exactFixedPct !== undefined) p = f._exactFixedPct / 100.0;
-            S_ms += p;
-            W_ms += p * (f.pvFactor || 1.0);
-        });
-        mergedFlows.forEach(f => {
-            let delivP = f._delivDefaultPct !== undefined ? f._delivDefaultPct : 0.05;
-            if (f._exactMergedDelivPct !== undefined) delivP = f._exactMergedDelivPct / 100.0;
-            S_ms += delivP;
-            W_ms += delivP * (f.pvFactor || 1.0);
-        });
-
-        let fixedInstScope = document.getElementById('fixed-inst-scope')?.value || 'all';
-        let fixedSelectedYears = (fixedInstScope === 'custom' && window.getFixedSelectedYears) ? window.getFixedSelectedYears() : [1, 2];
-        let fixedSelectedInsts = (fixedInstScope === 'specific_inst' && window.getFixedSelectedInsts) ? window.getFixedSelectedInsts() : [1];
-        let delivMonth = (currentProject === 'ORB') ? 24 : ((currentProject === 'Zomra') ? 37 : (currentProject === 'Perla' ? 51 : 48));
-
-        let isFixedFlow = (f) => {
-            if (!hasFixedCash) return false;
-            if (fixedInstScope === 'all') return true;
-            if (fixedInstScope === 'pre') return f.months <= delivMonth;
-            if (fixedInstScope === 'post') return f.months > delivMonth;
-            if (fixedInstScope === 'custom') return fixedSelectedYears.includes(f._instYear);
-            if (fixedInstScope === 'specific_inst') return fixedSelectedInsts.includes(f._instNum);
-            return false;
-        };
-
-        let zeros = (hasZeroShifts && window.installmentShiftState.zeroInsts) ? window.installmentShiftState.zeroInsts : [];
-        let shiftTargets = (hasZeroShifts && window.installmentShiftState.targetInsts) ? window.installmentShiftState.targetInsts : [];
-
-        let fixedCashEntries = [];
-        let targetFlows = [];
-        let neutralFlows = [];
-
-        let nTotalInsts = allInsts.length;
-        let baselinePerInstPct = nTotalInsts > 0 ? (1.0 - S_ms) / nTotalInsts : 0;
-
-        allInsts.forEach((f, idx) => {
-            let instNum = idx + 1;
-            let df = f.pvFactor || 1.0;
-
-            if (zeros.includes(instNum)) {
-                fixedCashEntries.push({ flow: f, amount: 0, df: df });
-            } else if (isFixedFlow(f)) {
-                fixedCashEntries.push({ flow: f, amount: fixedInstVal, df: df });
-            } else if (hasZeroShifts && shiftTargets.includes(instNum)) {
-                targetFlows.push({ flow: f, df: df });
-            } else if (hasFixedCash) {
-                let fixedTargetMode = document.getElementById('fixed-inst-target-mode')?.value || 'all_remaining';
-                let targetYears = (fixedTargetMode === 'specific_years' && window.getFixedTargetYears) ? window.getFixedTargetYears() : [];
-                let targetInsts = (fixedTargetMode === 'specific_insts' && window.getFixedTargetInsts) ? window.getFixedTargetInsts() : [];
-                let singleInst = (fixedTargetMode === 'single_inst' && window.getFixedSingleTargetInst) ? window.getFixedSingleTargetInst() : 8;
-
-                let isTarget = false;
-                if (fixedTargetMode === 'all_remaining') isTarget = true;
-                else if (fixedTargetMode === 'single_inst' && instNum === singleInst) isTarget = true;
-                else if (fixedTargetMode === 'specific_insts' && targetInsts.includes(instNum)) isTarget = true;
-                else if (fixedTargetMode === 'specific_years' && targetYears.includes(f._instYear)) isTarget = true;
-
-                if (isTarget) {
-                    targetFlows.push({ flow: f, df: df });
-                } else {
-                    neutralFlows.push({ flow: f, pct: baselinePerInstPct, df: df });
-                }
-            } else {
-                neutralFlows.push({ flow: f, pct: baselinePerInstPct, df: df });
-            }
-        });
-
-        if (targetFlows.length === 0 && neutralFlows.length > 0) {
-            targetFlows = neutralFlows.map(n => ({ flow: n.flow, df: n.df }));
-            neutralFlows = [];
-        }
-
-        let S_u = neutralFlows.reduce((sum, n) => sum + n.pct, 0);
-        let W_u = neutralFlows.reduce((sum, n) => sum + n.pct * n.df, 0);
-
-        let nTarget = targetFlows.length;
-        let sumTargetDf = targetFlows.reduce((sum, t) => sum + t.df, 0);
-        let W_target_bar = nTarget > 0 ? (sumTargetDf / nTarget) : 1.0;
-
-        let cashShortfallPv = 0;
-        fixedCashEntries.forEach(fc => {
-            cashShortfallPv += fc.amount * (fc.df - W_target_bar);
-        });
-
-        let denom = W_ms + W_u + (1.0 - S_ms - S_u) * W_target_bar;
-        if (Math.abs(denom) > 1e-9) {
-            let P_eff = (basePv - cashShortfallPv) / denom;
-            if (!isNaN(P_eff) && isFinite(P_eff) && P_eff > 0) {
-                return P_eff;
-            }
-        }
-    }
-
-    // Default Linear & Secant Fallback Solver
-    let pRef = basePriceCache;
-    let flows1 = calculateCustomFlows(pRef, template);
-    let fixedCashPv = 0.0;
-    let sumVarWeight = 0.0;
-    let hasVariable = false;
-    
-    flows1.filter(f => !f.isMnt).forEach(f => {
-        let df = (f.pvFactor !== undefined && !isNaN(f.pvFactor)) ? f.pvFactor : 1.0;
-        if (f._isFixedCash) {
-            fixedCashPv += (f.amount || 0) * df;
-        } else {
-            let pct = (f._exactFixedPct !== undefined && !isNaN(f._exactFixedPct) && f._exactFixedPct > 0)
-                ? (f._exactFixedPct / 100.0)
-                : ((f.exactPct !== undefined && !isNaN(f.exactPct) && f.exactPct > 0) ? f.exactPct : (f.amount / pRef));
-            sumVarWeight += pct * df;
-            hasVariable = true;
-        }
-    });
-    
-    let solvedPrice = pRef;
-    if (hasVariable && sumVarWeight > 1e-9) {
-        solvedPrice = (basePv - fixedCashPv) / sumVarWeight;
-    }
-    
+    // Direct closed-form linear evaluation
     let getPv = (p) => {
         let flows = calculateCustomFlows(p, template);
         return flows.filter(f => !f.isMnt).reduce((sum, f) => sum + (f.pv || 0), 0);
     };
 
-    let curPv = getPv(solvedPrice);
-    let err = curPv - basePv;
-    if (Math.abs(err) > 0.05) {
-        for (let iter = 0; iter < 15; iter++) {
-            let iterPv = getPv(solvedPrice);
-            let iterErr = iterPv - basePv;
-            if (Math.abs(iterErr) < 1e-4) break;
-            let pNext = solvedPrice + (Math.abs(iterErr) > 10 ? 10 : 1);
-            let s = (getPv(pNext) - iterPv) / (pNext - solvedPrice);
-            if (Math.abs(s) > 1e-9) {
-                solvedPrice = solvedPrice - iterErr / s;
-            } else {
-                break;
+    let p1 = basePriceCache;
+    let pv1 = getPv(p1);
+
+    if (Math.abs(pv1 - basePv) < 1e-5) {
+        return p1;
+    }
+
+    let p2 = p1 * 1.25 + 100000;
+    let pv2 = getPv(p2);
+
+    let slope = (pv2 - pv1) / (p2 - p1);
+    let solvedPrice = p1;
+
+    if (Math.abs(slope) > 1e-9) {
+        solvedPrice = p1 + (basePv - pv1) / slope;
+        
+        let curPv = getPv(solvedPrice);
+        let err = curPv - basePv;
+        if (Math.abs(err) > 1e-5) {
+            let nextPrice = solvedPrice - err / slope;
+            if (!isNaN(nextPrice) && isFinite(nextPrice) && nextPrice > 0) {
+                solvedPrice = nextPrice;
             }
         }
     }
@@ -6000,7 +6156,7 @@ function calculateCustomFlows(price, template, options = {}) {
 
         if (f.isMnt) {
 
-            f.amount = basePriceCache * 0.04;
+            f.amount = basePriceCache * (f.mntPct !== undefined ? f.mntPct : 0.04);
 
         } else {
 
@@ -6019,6 +6175,8 @@ function calculateCustomFlows(price, template, options = {}) {
                 if (pDate.getDate() < cDate.getDate() && pDate.getDate() < 28) m--;
 
                 f.months = Math.max(0, m);
+
+                applyDiscountLogic(f);
 
             }
 
@@ -6186,6 +6344,16 @@ function calculateCustomFlows(price, template, options = {}) {
 
                 }
 
+                if (f.hasExtra) {
+                    let extraMergedAmt = (f._extraCash || 0) + (price * (f._extraPct || 0));
+                    m_amt += extraMergedAmt;
+                    if (f._extraCash && !(f._extraPct > 0)) {
+                        exactDelivVal = (exactDelivVal || 0) + f._extraCash;
+                    } else if (f._extraPct > 0) {
+                        exactDelivPct = (exactDelivPct || 0) + (f._extraPct * 100);
+                    }
+                }
+
                 f.amount = m_amt; 
 
                 f._mergedDelivAmt = m_amt;
@@ -6226,6 +6394,15 @@ function calculateCustomFlows(price, template, options = {}) {
 
             }
 
+            else if (f.isExtra) {
+                if (f._isFixedCash && f._exactFixedVal !== undefined) {
+                    f.amount = f._exactFixedVal;
+                } else {
+                    f.amount = price * (f.defaultPct || 0);
+                    if (f.defaultPct) f._exactFixedPct = (f.defaultPct || 0) * 100;
+                }
+            }
+
             
 
             if (f.amount !== undefined) {
@@ -6248,7 +6425,7 @@ function calculateCustomFlows(price, template, options = {}) {
 
     let instIndex = 0;
 
-    let freqMonths = parseInt(document.getElementById('payment-frequency')?.value) === 2 ? 6 : 3;
+    let freqMonths = window.getFreqMonths('payment-frequency');
 
     let instsPerYear = 12 / freqMonths;
 
@@ -6292,9 +6469,12 @@ function calculateCustomFlows(price, template, options = {}) {
 
     let allInstFlows = flows.filter(f => (f.isInst || f.isMerged) && !f.isMnt);
 
+    let _durY = parseInt(document.getElementById('duration-years')?.value) || 8;
     allInstFlows.forEach((f, idx) => {
 
-        f._instYear = Math.floor(idx / instsPerYear) + 1;
+        f._instYear = (typeof f.months === 'number' && !isNaN(f.months))
+            ? Math.min(_durY, Math.max(1, Math.ceil(f.months / 12)))
+            : (Math.floor(idx / instsPerYear) + 1);
 
         f._instNum = idx + 1;
 
@@ -6312,11 +6492,28 @@ function calculateCustomFlows(price, template, options = {}) {
 
     let fixedInstType = document.getElementById('fixed-inst-type') ? document.getElementById('fixed-inst-type').value : 'amt';
 
-    let hasFixedInst = isFixedInst && fixedInstVal > 0;
+    let fixedPreVal = document.getElementById('fixed-inst-pre-val') ? parseFloat(document.getElementById('fixed-inst-pre-val').value) : NaN;
+    let fixedPreType = document.getElementById('fixed-inst-pre-type') ? document.getElementById('fixed-inst-pre-type').value : 'amt';
+    let fixedPostVal = document.getElementById('fixed-inst-post-val') ? parseFloat(document.getElementById('fixed-inst-post-val').value) : NaN;
+    let fixedPostType = document.getElementById('fixed-inst-post-type') ? document.getElementById('fixed-inst-post-type').value : 'amt';
+    let multiYearsData = (typeof window.getFixedMultiYearsValues === 'function') ? window.getFixedMultiYearsValues() : {};
+    let hasMultiYears = Object.keys(multiYearsData).some(k => multiYearsData[k] && multiYearsData[k].val > 0);
+
+    let hasFixedInst = isFixedInst && (
+        (fixedInstScope === 'split_pre_post' && ((!isNaN(fixedPreVal) && fixedPreVal > 0) || (!isNaN(fixedPostVal) && fixedPostVal > 0))) ||
+        (fixedInstScope === 'by_years_multi' && hasMultiYears) ||
+        (fixedInstVal > 0)
+    );
 
     
 
-    let delivMonth = (currentProject === 'Zomra') ? 37 : (currentProject === 'Perla' ? 51 : 48);
+    let delivFlowTpl = template.find(f => f.id === 'deliv' || (f.mergedIds && f.mergedIds.includes('deliv')) || (f.label && f.label.includes('Delivery') && !f.isMnt));
+    let delivMonth = delivFlowTpl ? delivFlowTpl.months : (
+        (currentProject === 'Sky Ridge') ? 6 :
+        ((currentProject === 'ORB') ? 24 :
+        ((currentProject === 'Zomra') ? 37 :
+        ((currentProject === 'Perla') ? 51 : 48)))
+    );
 
     let preInsts = dynamicInsts.filter(f => f.months <= delivMonth);
 
@@ -6389,21 +6586,39 @@ function calculateCustomFlows(price, template, options = {}) {
 
 
     let isFlowFixedInst = (f) => {
-
-        if (!hasFixedInst || hasMeltActive) return false;
-
+        if (!hasFixedInst) return false;
         if (fixedInstScope === 'all') return true;
-
         if (fixedInstScope === 'pre') return f.months <= delivMonth;
-
         if (fixedInstScope === 'post') return f.months > delivMonth;
-
         if (fixedInstScope === 'custom') return fixedSelectedYears.includes(f._instYear);
-
         if (fixedInstScope === 'specific_inst') return fixedSelectedInsts.includes(f._instNum);
-
+        if (fixedInstScope === 'split_pre_post') {
+            if (f.months <= delivMonth && !isNaN(fixedPreVal) && fixedPreVal > 0) return true;
+            if (f.months > delivMonth && !isNaN(fixedPostVal) && fixedPostVal > 0) return true;
+            return false;
+        }
+        if (fixedInstScope === 'by_years_multi') {
+            return !!(multiYearsData[f._instYear] && multiYearsData[f._instYear].val > 0);
+        }
         return false;
+    };
 
+    let getFlowFixedAmt = (f) => {
+        if (fixedInstScope === 'split_pre_post') {
+            if (f.months <= delivMonth && !isNaN(fixedPreVal) && fixedPreVal > 0) {
+                return (fixedPreType === 'pct') ? price * (fixedPreVal / 100) : fixedPreVal;
+            }
+            if (f.months > delivMonth && !isNaN(fixedPostVal) && fixedPostVal > 0) {
+                return (fixedPostType === 'pct') ? price * (fixedPostVal / 100) : fixedPostVal;
+            }
+        }
+        if (fixedInstScope === 'by_years_multi') {
+            let my = multiYearsData[f._instYear];
+            if (my && my.val > 0) {
+                return (my.type === 'pct') ? price * (my.val / 100) : my.val;
+            }
+        }
+        return (fixedInstType === 'pct') ? price * (fixedInstVal / 100) : fixedAmt;
     };
 
 
@@ -6428,23 +6643,27 @@ function calculateCustomFlows(price, template, options = {}) {
 
     let targetFlows = [];
 
-    if (hasFixedInst && !hasMeltActive) {
+    if (hasFixedInst) {
 
         if (targetIsDelivery) {
+
+            targetFlows = [];
+
+        } else if (fixedTargetMode === 'annual_balloon') {
 
             targetFlows = [];
 
         } else if (fixedTargetMode === 'single_inst') {
 
             targetFlows = allInstFlows.filter(f => f._instNum === singleTargetInst && !isFlowFixedInst(f));
-
             if (targetFlows.length === 0 && unfixedFlows.length > 0) targetFlows = [unfixedFlows[0]];
+            if (targetFlows.length === 0) targetFlows = allInstFlows.filter(f => f._instNum === singleTargetInst);
 
         } else if (fixedTargetMode === 'specific_insts') {
 
             targetFlows = allInstFlows.filter(f => targetInsts.includes(f._instNum) && !isFlowFixedInst(f));
-
             if (targetFlows.length === 0 && unfixedFlows.length > 0) targetFlows = unfixedFlows;
+            if (targetFlows.length === 0) targetFlows = allInstFlows.filter(f => targetInsts.includes(f._instNum));
 
         } else if (fixedTargetMode === 'specific_years') {
 
@@ -6457,6 +6676,9 @@ function calculateCustomFlows(price, template, options = {}) {
             // all_remaining
 
             targetFlows = unfixedFlows;
+            if (targetFlows.length === 0 && fixedInstScope === 'split_pre_post') {
+                targetFlows = allInstFlows.filter(f => f.months > delivMonth);
+            }
 
         }
 
@@ -6464,25 +6686,36 @@ function calculateCustomFlows(price, template, options = {}) {
 
 
 
+    if (targetFlows.length > 0) {
+        fixedFlows = fixedFlows.filter(f => !targetFlows.includes(f));
+    }
+
     let normalBaseInstAmt = nTotal > 0 ? (remAmt / nTotal) : 0;
 
     let nFixed = fixedFlows.length;
 
-    let totalFixedCash = (fixedInstType === 'pct') ? (nFixed * price * (fixedInstVal / 100)) : (nFixed * fixedAmt);
+    let totalFixedCash = fixedFlows.reduce((sum, f) => sum + getFlowFixedAmt(f), 0);
 
+    // In Excel NPV model: Neutral installments retain Price * defaultPct!
+    let neutralFlows = allInstFlows.filter(f => !fixedFlows.includes(f) && !targetFlows.includes(f));
+    let getNeutralFlowAmt = (f) => {
+        let stdPct = f._standardBasePct || f.defaultPct;
+        if (stdPct !== undefined && stdPct > 0) {
+            return price * stdPct;
+        }
+        return normalBaseInstAmt;
+    };
+    let totalNeutralCash = neutralFlows.reduce((sum, f) => sum + getNeutralFlowAmt(f), 0);
+
+    let nTarget = targetFlows.length;
+    let remForTarget = remAmt - totalFixedCash - totalNeutralCash;
+    let amtPerTarget = (nTarget > 0) ? (remForTarget / nTarget) : normalBaseInstAmt;
+    let amtPerNeutral = normalBaseInstAmt;
     let totalShortfall = (nFixed * normalBaseInstAmt) - totalFixedCash;
 
 
 
-    let nTarget = targetFlows.length;
-
-    let amtPerTarget = (nTarget > 0) ? (normalBaseInstAmt + totalShortfall / nTarget) : normalBaseInstAmt;
-
-    let amtPerNeutral = normalBaseInstAmt;
-
-
-
-    if (hasFixedInst && !hasMeltActive) {
+    if (hasFixedInst) {
 
         let preCash = 0;
 
@@ -6490,11 +6723,11 @@ function calculateCustomFlows(price, template, options = {}) {
 
         allInstFlows.forEach(f => {
 
-            let amt = amtPerNeutral;
+            let amt = 0;
 
             if (isFlowFixedInst(f)) {
 
-                amt = fixedAmt;
+                amt = getFlowFixedAmt(f);
 
             } else if (!targetIsDelivery && targetFlows.includes(f)) {
 
@@ -6502,7 +6735,7 @@ function calculateCustomFlows(price, template, options = {}) {
 
             } else {
 
-                amt = amtPerNeutral;
+                amt = getNeutralFlowAmt(f);
 
             }
 
@@ -6718,11 +6951,11 @@ function calculateCustomFlows(price, template, options = {}) {
 
         if ((f.isInst || f.isMerged) && !f.isFixedOverride) {
 
-            let isFixed = (hasFixedInst && !hasMeltActive) ? isFlowFixedInst(f) : false;
+            let isTarget = (hasFixedInst && !targetIsDelivery) ? targetFlows.includes(f) : false;
 
-            let isTarget = (hasFixedInst && !hasMeltActive && !targetIsDelivery) ? targetFlows.includes(f) : false;
+            let isFixed = (hasFixedInst && !isTarget) ? isFlowFixedInst(f) : false;
 
-            let isNeutral = (hasFixedInst && !hasMeltActive) ? (!isFixed && !isTarget) : false;
+            let isNeutral = hasFixedInst ? (!isFixed && !isTarget) : false;
 
             
 
@@ -6735,29 +6968,26 @@ function calculateCustomFlows(price, template, options = {}) {
             
 
             let isPreDeliv = f.months <= delivMonth;
-            let normalNeutralInstAmt = (hasFixedInst && !hasMeltActive) ? amtPerNeutral : (isPreDeliv ? instAmtPre : instAmtPost);
+            let normalNeutralInstAmt = hasFixedInst ? getNeutralFlowAmt(f) : (isPreDeliv ? instAmtPre : instAmtPost);
             let baseInstAmt = normalNeutralInstAmt;
 
             if (isFixed) {
-
-                f._isFixedCash = (fixedInstType === 'amt');
-
-                f._isFixedPct = (fixedInstType === 'pct');
-
-                if (fixedInstType === 'amt') {
-
-                    f._exactFixedVal = fixedInstVal;
-
-                    baseInstAmt = fixedInstVal;
-
+                let thisFixedAmt = getFlowFixedAmt(f);
+                baseInstAmt = thisFixedAmt;
+                if (fixedInstScope === 'split_pre_post') {
+                    let isPre = (f.months <= delivMonth);
+                    f._isFixedCash = isPre ? (fixedPreType === 'amt') : (fixedPostType === 'amt');
+                    f._isFixedPct = !f._isFixedCash;
+                } else if (fixedInstScope === 'by_years_multi') {
+                    let my = multiYearsData[f._instYear];
+                    f._isFixedCash = (my && my.type === 'amt');
+                    f._isFixedPct = !f._isFixedCash;
                 } else {
-
-                    f._exactFixedPct = fixedInstVal;
-
-                    baseInstAmt = price * (fixedInstVal / 100);
-
+                    f._isFixedCash = (fixedInstType === 'amt');
+                    f._isFixedPct = (fixedInstType === 'pct');
                 }
-
+                if (f._isFixedCash) f._exactFixedVal = thisFixedAmt;
+                else f._exactFixedPct = price > 0 ? (thisFixedAmt / price) * 100 : 0;
                 f.isFixedOverride = true;
 
             } else if (isTarget) {
@@ -6782,35 +7012,46 @@ function calculateCustomFlows(price, template, options = {}) {
 
             let applyShift = hasIntraYearShift && !isFixed;
 
+            let intraSpecificIdsRaw = document.getElementById('intra-specific-inst-ids')?.value || '';
+            let intraSpecificIds = intraSpecificIdsRaw ? intraSpecificIdsRaw.split(/[\s,]+/).map(s => parseInt(s.trim())).filter(n => !isNaN(n) && n > 0) : [];
+
+            let yearGroup = dynamicInsts.filter(x => x._instYear === f._instYear);
+            let isBumpInst = (yearGroup[yearGroup.length - 1] === f);
+
             if (intraScope === 'pre' && f.months > delivMonth) applyShift = false;
 
             if (intraScope === 'post' && f.months <= delivMonth) applyShift = false;
 
             if (intraScope === 'custom') {
 
-                let y = Math.floor(instIndex / instsPerYear) + 1;
-
                 let selectedYears = window.getIntraSelectedYears ? window.getIntraSelectedYears() : [1, 2];
 
-                if (!selectedYears.includes(y)) applyShift = false;
+                if (!selectedYears.includes(f._instYear)) applyShift = false;
 
+            }
+
+            if (intraScope === 'specific_inst') {
+                let yearHasSelected = yearGroup.some(x => intraSpecificIds.includes(x._instNum));
+                if (!intraSpecificIds.includes(f._instNum) && !(isBumpInst && yearHasSelected)) {
+                    applyShift = false;
+                }
             }
 
             
 
             if (applyShift) {
 
-                let isBumpInst = (instIndex % instsPerYear === instsPerYear - 1);
+                let yearInstCount = Math.max(1, yearGroup.length);
 
                 let isLastInst = (instIndex === dynamicInsts.length - 1);
 
                 
 
-                let cycleTotal = baseInstAmt * instsPerYear;
+                let cycleTotal = baseInstAmt * yearInstCount;
 
-                let regularInstCount = instsPerYear - 1;
+                let regularInstCount = Math.max(1, yearInstCount - 1);
 
-                let maxSafeLight = regularInstCount > 0 ? (cycleTotal / regularInstCount) * 0.99 : cycleTotal;
+                let maxSafeLight = (yearInstCount > 1) ? (cycleTotal / regularInstCount) * 0.99 : cycleTotal;
 
                 
 
@@ -6903,58 +7144,47 @@ function calculateCustomFlows(price, template, options = {}) {
 
 
     // Handle Delivery Milestone absorption when fixedTargetMode === 'delivery_milestone'
-
-    if (!isPure && hasFixedInst && fixedInstScope === 'custom') {
-
-        let fixedTargetModeCalc = document.getElementById('fixed-inst-target-mode')?.value || 'all_remaining';
-
-        if (fixedTargetModeCalc === 'delivery_milestone') {
-
-            let fixedSelectedYearsCalc = window.getFixedSelectedYears ? window.getFixedSelectedYears() : [1, 2];
-
-            let fixedInstsCalc = allInstFlows.filter(fl => fixedSelectedYearsCalc.includes(fl._instYear));
-
-            let totalFixedCashCalc = fixedInstsCalc.length * fixedAmt;
-
-            let normalBaseInstAmtCalc = nTotal > 0 ? (remAmt / nTotal) : 0;
-
-            let totalShortfallCalc = (fixedInstsCalc.length * normalBaseInstAmtCalc) - totalFixedCashCalc;
+    // Delivery milestone shortfall is absorbed cleanly and accurately in the first pass above (lines 6640-6663)
 
 
 
-            let delivFlow = flows.find(f => f.id === 'deliv' || (f.mergedIds && f.mergedIds.includes('deliv')) || (f.label && f.label.includes('Delivery') && !f.isMnt));
 
-            if (delivFlow) {
+    // Annual Balloon (ترحيل الفرق على دفعة في نهاية كل سنة - متوازن 100.00% عبر جميع السنين)
+    if (!isPure && hasFixedInst && fixedTargetMode === 'annual_balloon') {
+        let durYears = parseInt(document.getElementById('duration-years')?.value) || (flows.some(f => f._instYear) ? Math.max(...flows.filter(f => f._instYear).map(f => f._instYear)) : 8);
+        let totalInstCnt = Math.max(1, allInstFlows.length);
+        let totalDpPct = 0.10;
+        let addlFlowObj = flows.find(f => f.id === 'addl');
+        let addlPct = (currentProject === 'Zomra' && addlFlowObj) ? (addlFlowObj.defaultPct || 0.05) : 0.0;
+        let delivFlowObj = flows.find(f => f.id === 'deliv' || (f.mergedIds && f.mergedIds.includes('deliv')) || (f.label && f.label.includes('Delivery') && !f.isMnt));
+        let delivPct = delivFlowObj ? (delivFlowObj._delivDefaultPct !== undefined ? delivFlowObj._delivDefaultPct : (delivFlowObj.defaultPct || 0.05)) : 0.0;
+        if (currentProject === 'Zomra' && delivFlowObj && !delivFlowObj.isMerged) delivPct = delivFlowObj.defaultPct || 0.05;
+        let delivYear = (delivFlowObj && delivFlowObj._instYear) ? delivFlowObj._instYear : Math.max(1, Math.min(durYears, Math.ceil(delivMonth / 12)));
+        let stdRemInstPct = (1.0 - totalDpPct - addlPct - delivPct) / totalInstCnt;
 
-                if (delivFlow.isMerged) {
+        for (let y = 1; y <= durYears; y++) {
+            let flowsInYear = flows.filter(f => !f.isMnt && (f._instYear === y || ((f.isDP || f.id === 'addl' || f.isFinishing) && y === 1)));
+            let instsInYear = flowsInYear.filter(f => (f.isInst || f.isMerged) && !f.isMnt);
+            let targetPct_y = (y === 1 ? (totalDpPct + addlPct) : 0) + (y === delivYear ? delivPct : 0) + (instsInYear.length * stdRemInstPct);
+            let targetAmt_y = price * targetPct_y;
 
-                    delivFlow._mergedDelivAmt = (delivFlow._savedMergedDelivAmt || delivFlow._mergedDelivAmt || 0) + totalShortfallCalc;
+            let curAlloc_y = flowsInYear.reduce((sum, f) => sum + (f.amount || 0), 0);
+            let shortfall_y = targetAmt_y - curAlloc_y;
 
-                    delivFlow._savedMergedDelivAmt = delivFlow._mergedDelivAmt;
-
-                    delivFlow.amount = (delivFlow._instPortionAmt || 0) + delivFlow._mergedDelivAmt;
-
-                } else {
-
-                    delivFlow.amount = (delivFlow.amount || (price * 0.05)) + totalShortfallCalc;
-
-                    delivFlow.exactPct = price > 0 ? (delivFlow.amount / price) : 0.05;
-
+            if (Math.abs(shortfall_y) >= 0.001) {
+                if (instsInYear.length > 0) {
+                    let lastInst = instsInYear[instsInYear.length - 1];
+                    lastInst._isYearEndBalloon = true;
+                    lastInst._balloonPortionAmt = (lastInst._balloonPortionAmt || 0) + shortfall_y;
+                    lastInst.amount = Math.max(0, (lastInst.amount || 0) + shortfall_y);
+                    if (lastInst._instPortionAmt !== undefined) {
+                        lastInst._instPortionAmt = Math.max(0, (lastInst._instPortionAmt || 0) + shortfall_y);
+                    }
+                    applyDiscountLogic(lastInst);
                 }
-
-                delivFlow._hasFixedShiftLoad = true;
-
-                delivFlow._fixedShiftLoadedAmt = totalShortfallCalc;
-
-                applyDiscountLogic(delivFlow);
-
             }
-
         }
-
     }
-
-
 
     // Universal Precision Balance: absorb any millimeter/penny difference so total flow sum strictly equals price (100.00%)
 
@@ -7016,6 +7246,20 @@ function calculateCustomFlows(price, template, options = {}) {
 
         // Custom Installment Zero & Shift Execution
 
+    if (!isPure) {
+        let zInputEl = document.getElementById('zero-inst-ids');
+        let tInputEl = document.getElementById('target-inst-ids');
+        let mInputEl = document.getElementById('inst-shift-dest-mode');
+        if (zInputEl) {
+            let zRaw = zInputEl.value.trim();
+            let parsedZ = zRaw ? zRaw.split(/[\s,]+/).map(s => parseInt(s.trim())).filter(n => !isNaN(n) && n > 0) : [];
+            let parsedT = (tInputEl && tInputEl.value.trim()) ? tInputEl.value.split(/[\s,]+/).map(s => parseInt(s.trim())).filter(n => !isNaN(n) && n > 0) : [];
+            let dMode = mInputEl ? mInputEl.value : 'all';
+            if (parsedZ.length > 0 || (zRaw === '' && !window._shiftAppliedFromOR)) {
+                window.installmentShiftState = { zeroInsts: parsedZ, targetInsts: (dMode === 'specific' ? parsedT : []), destMode: dMode };
+            }
+        }
+    }
     if (!isPure && window.installmentShiftState && window.installmentShiftState.zeroInsts && window.installmentShiftState.zeroInsts.length > 0) {
 
         let zeros = window.installmentShiftState.zeroInsts;
@@ -7114,16 +7358,12 @@ function calculateCustomFlows(price, template, options = {}) {
 
                 zeros.forEach(num => {
 
-                    let y = Math.ceil(num / instsPerYear);
-
-                    let balloonInstIdx = y * instsPerYear - 1;
-
-                    if (balloonInstIdx < instFlowsList.length && !zeros.includes(balloonInstIdx + 1)) {
-
-                        let bf = instFlowsList[balloonInstIdx];
-
-                        if (!recipientFlows.includes(bf)) recipientFlows.push(bf);
-
+                    let zf = instFlowsList[num - 1];
+                    let y = zf ? zf._instYear : Math.ceil(num / instsPerYear);
+                    let yearFlows = instFlowsList.filter((x, i) => x._instYear === y && !zeros.includes(i + 1));
+                    let bf = yearFlows.length > 0 ? yearFlows[yearFlows.length - 1] : null;
+                    if (bf && !recipientFlows.includes(bf)) {
+                        recipientFlows.push(bf);
                     }
 
                 });
@@ -7332,6 +7572,11 @@ function reconcileIntegerInstallments(flows, targetTotalPrice) {
             if (f._isZeroShifted) {
                 f._instPortionAmt = 0;
                 f.amount = delivPart;
+            } else if (f._isYearEndBalloon && f._balloonPortionAmt) {
+                let baseInstPart = (f.isFixedOverride && f._exactFixedVal !== undefined) ? f._exactFixedVal : Math.max(0, idealInst - f._balloonPortionAmt);
+                f._instPortionAmt = Math.round(baseInstPart + f._balloonPortionAmt);
+                f.amount = delivPart + f._instPortionAmt;
+                fixedInstSum += f._instPortionAmt;
             } else if (f.isFixedOverride && f._exactFixedPct !== undefined) {
                 let totalMergedAmt = Math.round(targetTotal * (f._exactFixedPct / 100.0));
                 f._instPortionAmt = Math.max(0, totalMergedAmt - delivPart);
@@ -7357,6 +7602,12 @@ function reconcileIntegerInstallments(flows, targetTotalPrice) {
     pureInstFlows.forEach(f => {
         if (f._isZeroShifted) {
             f.amount = 0;
+        } else if (f._isYearEndBalloon && f._balloonPortionAmt) {
+            let baseAmt = (f.isFixedOverride && f._exactFixedVal !== undefined) ? f._exactFixedVal : 
+                          (f.isFixedOverride && f._exactFixedPct !== undefined) ? Math.round(targetTotal * (f._exactFixedPct / 100.0)) : 
+                          Math.round((f.amount || 0) - f._balloonPortionAmt);
+            f.amount = Math.round(baseAmt + f._balloonPortionAmt);
+            fixedInstSum += f.amount;
         } else if (f.isFixedOverride && f._exactFixedPct !== undefined) {
             f.amount = Math.round(targetTotal * (f._exactFixedPct / 100.0));
             fixedInstSum += f.amount;
@@ -7376,7 +7627,19 @@ function reconcileIntegerInstallments(flows, targetTotalPrice) {
 
     let remForDyn = targetTotal - sumNonInst - fixedInstSum;
 
-    if (dynInstEntries.length === 0) {
+    let targetIsDelivFlow = flows.some(f => f._isTargetDeliv);
+    if (targetIsDelivFlow) {
+        let delivFlow = flows.find(f => f.id === 'deliv' || (f.mergedIds && f.mergedIds.includes('deliv')) || (f.label && f.label.includes('Delivery') && !f.isMnt));
+        if (delivFlow) {
+            if (delivFlow.isMerged) {
+                delivFlow._delivPortionAmt = (delivFlow._delivPortionAmt || 0) + remForDyn;
+                delivFlow.amount = (delivFlow._instPortionAmt || 0) + delivFlow._delivPortionAmt;
+            } else {
+                delivFlow.amount = (delivFlow.amount || 0) + remForDyn;
+            }
+            remForDyn = 0;
+        }
+    } else if (dynInstEntries.length === 0) {
         // If all installments are fixed or neutral, distribute any remainder across neutral installments
         let neutralFlows = nonMnt.filter(f => f._isNeutralInst && !f._isZeroShifted);
         if (neutralFlows.length > 0) {
@@ -7387,6 +7650,19 @@ function reconcileIntegerInstallments(flows, targetTotalPrice) {
                 f.amount = (f.amount || 0) + add;
                 if (f.isMerged) f._instPortionAmt = (f._instPortionAmt || 0) + add;
             });
+        } else {
+            // All flows were fixed (e.g. from OR scenario with table overrides)
+            // Distribute across regular installments to strictly match targetTotal
+            let regularInsts = nonMnt.filter(f => (f.isInst || f.isMerged) && !f._isZeroShifted && f.amount > 0);
+            if (regularInsts.length > 0 && remForDyn !== 0) {
+                let addEach = Math.floor(remForDyn / regularInsts.length);
+                let remExtra = remForDyn - (addEach * regularInsts.length);
+                regularInsts.forEach((f, idx) => {
+                    let add = addEach + (idx < remExtra ? 1 : 0);
+                    f.amount = (f.amount || 0) + add;
+                    if (f.isMerged) f._instPortionAmt = (f._instPortionAmt || 0) + add;
+                });
+            }
         }
     } else {
         let isStandardUniform = dynInstEntries.every(d => Math.abs(d.idealAmt - dynInstEntries[0].idealAmt) < 0.5);
@@ -7545,6 +7821,12 @@ function applyPerfectPercentages(flows, totalAmt) {
 
             f.displayPct = f._pctVal.toFixed(2);
 
+            if (basePriceCache > 0) {
+
+                f._basePctVal = ((f._exactFixedVal / basePriceCache) * 100).toFixed(2);
+
+            }
+
             return;
 
         }
@@ -7676,19 +7958,34 @@ function applyPerfectPercentages(flows, totalAmt) {
 
 
 
-    // Step 3: Hare-Niemeyer Largest Remainder Method (Strict 100.00% Mathematical Guarantee)
+    // Preserve exact unrounded floating percentage before 2-decimal display balancing!
+    nonMnt.forEach(f => {
+        {
+            if (f.scenarioPct !== undefined && f.scenarioPct !== null) {
+                f._trueExactPct = f.scenarioPct;
+            } else if (f._exactFixedPct !== undefined && f._exactFixedPct !== null && !f._isFixedCash) {
+                f._trueExactPct = f._exactFixedPct / 100.0;
+            } else if (!f.isInst && !f.isMerged && f.defaultPct !== undefined && f.defaultPct !== null && !f._exactFixedVal && !f._isFixedCash) {
+                f._trueExactPct = f.defaultPct;
+            } else if (validTotal > 0) {
+                f._trueExactPct = (f.amount || 0) / validTotal;
+            } else {
+                f._trueExactPct = f.exactPct || 0;
+            }
+        }
+    });
 
-    // When installments are standard/uniform, we PRESERVE identical percentages across all regular installments (no 2.65% vs 2.66% split)
+    // Step 3: Universal 100.00% Basis Point Balancing (Strict 100.00% Mathematical Guarantee for Display)
 
     let activeNonMnt = nonMnt.filter(f => (f.amount > 0) && !f._isZeroShifted);
 
-    if (!isAllInstsUniform && activeNonMnt.length > 0) {
+    if (activeNonMnt.length > 0) {
 
         let totalCents = 10000; // 100.00%
 
         let sumAssignedCents = 0;
 
-        
+
 
         activeNonMnt.forEach(f => {
 
@@ -7700,7 +7997,7 @@ function applyPerfectPercentages(flows, totalAmt) {
 
             let rawPct = (f.amount / validTotal) * 100;
 
-            f._rawPctRem = (rawPct * 100) - cents;
+            f._rawPctRem = (rawPct * 100) - Math.floor(rawPct * 100);
 
             sumAssignedCents += cents;
 
@@ -7712,51 +8009,113 @@ function applyPerfectPercentages(flows, totalAmt) {
 
         if (diffCents !== 0) {
 
-            let adjustable = activeNonMnt.filter(f => (f.isInst || f.isMerged) && !f._isFixedInst && !f.isFixedOverride);
+            // First Priority for absorbing small rounding diffs: Delivery flow (if not explicitly locked by user)
 
-            if (adjustable.length === 0) adjustable = activeNonMnt.filter(f => !f.isDP && !f._isFixedInst && !f.isFixedOverride);
+            let delivFlow = activeNonMnt.find(f => (f.id === 'deliv' || (f.mergedIds && f.mergedIds.includes('deliv')) || (f.label && f.label.includes('Delivery'))) && !f.isFixedOverride);
 
-            if (adjustable.length === 0) adjustable = activeNonMnt;
+            
+
+            // If all regular installments are uniform and delivery is available, delivery absorbs diff to keep all regular installments identical
+
+            if (isAllInstsUniform && delivFlow && Math.abs(diffCents) <= 15) {
+
+                delivFlow._cents += diffCents;
+
+                delivFlow._pctVal = delivFlow._cents / 100.0;
+
+                delivFlow.displayPct = delivFlow._pctVal.toFixed(2);
+
+                delivFlow.exactPct = delivFlow._cents / 10000.0;
+
+            } else {
+
+                let adjustable = activeNonMnt.filter(f => (f.isInst || f.isMerged) && !f._isFixedInst && !f.isFixedOverride);
+
+                if (adjustable.length === 0) adjustable = activeNonMnt.filter(f => !f.isDP && !f._isFixedInst && !f.isFixedOverride);
+
+                if (adjustable.length === 0) adjustable = activeNonMnt;
 
 
 
-            if (diffCents > 0 && adjustable.length > 0) {
+                if (diffCents > 0 && adjustable.length > 0) {
 
-                let sorted = [...adjustable].sort((a, b) => b._rawPctRem - a._rawPctRem);
+                    let sorted = [...adjustable].sort((a, b) => b._rawPctRem - a._rawPctRem);
 
-                for (let i = 0; i < diffCents; i++) {
+                    for (let i = 0; i < diffCents; i++) {
 
-                    sorted[i % sorted.length]._cents += 1;
+                        sorted[i % sorted.length]._cents += 1;
+
+                    }
+
+                } else if (diffCents < 0 && adjustable.length > 0) {
+
+                    let toRemove = Math.abs(diffCents);
+
+                    let sorted = [...adjustable].sort((a, b) => a._rawPctRem - b._rawPctRem);
+
+                    for (let i = 0; i < toRemove; i++) {
+
+                        let target = sorted[i % sorted.length];
+
+                        if (target._cents > 0) target._cents -= 1;
+
+                    }
 
                 }
 
-            } else if (diffCents < 0 && adjustable.length > 0) {
 
-                let toRemove = Math.abs(diffCents);
 
-                let sorted = [...adjustable].sort((a, b) => a._rawPctRem - b._rawPctRem);
+                adjustable.forEach(f => {
 
-                for (let i = 0; i < toRemove; i++) {
+                    f._pctVal = f._cents / 100.0;
 
-                    let target = sorted[i % sorted.length];
+                    f.displayPct = f._pctVal.toFixed(2);
 
-                    if (target._cents > 0) target._cents -= 1;
+                    f.exactPct = f._cents / 10000.0;
 
-                }
+                });
 
             }
 
+        }
 
 
-            activeNonMnt.forEach(f => {
+
+        // Final Universal Safety Net: Guarantee total basis points strictly equal 10000 (100.00%)
+
+        let checkSumCents = activeNonMnt.reduce((sum, f) => sum + Math.round(parseFloat(f.displayPct) * 100), 0);
+
+        let finalGap = totalCents - checkSumCents;
+
+        if (finalGap !== 0 && activeNonMnt.length > 0) {
+
+            let lastActive = activeNonMnt.filter(f => (f.isInst || f.isMerged) && !f._isFixedInst && !f.isFixedOverride).pop() || activeNonMnt[activeNonMnt.length - 1];
+
+            lastActive._cents = Math.round(parseFloat(lastActive.displayPct) * 100) + finalGap;
+
+            lastActive._pctVal = lastActive._cents / 100.0;
+
+            lastActive.displayPct = lastActive._pctVal.toFixed(2);
+
+            lastActive.exactPct = lastActive._cents / 10000.0;
+
+        }
+
+
+
+        activeNonMnt.forEach(f => {
+
+            if (f._cents !== undefined) {
 
                 f._pctVal = f._cents / 100.0;
 
                 f.displayPct = f._pctVal.toFixed(2);
 
-            });
+                f.exactPct = f._cents / 10000.0;
 
-        }
+            }
+
+        });
 
     }
 
@@ -7786,7 +8145,7 @@ function updatePreDeliveryTracker(flows, elementId) {
 
     if (!flows || !Array.isArray(flows)) return 0;
 
-    let delivMonth = (currentProject === 'Zomra') ? 37 : (currentProject === 'Perla' ? 51 : 48); // Zomra delivery is month 37
+    let delivMonth = (currentProject === 'Sky Ridge') ? 6 : ((currentProject === 'ORB') ? 24 : ((currentProject === 'Zomra') ? 37 : ((currentProject === 'Perla') ? 51 : 48))); // Zomra delivery is month 37
 
     let totAmt = flows.filter(f => !f.isMnt).reduce((s, f) => s + (f.amount || 0), 0);
 
@@ -7830,7 +8189,7 @@ window.getPureOriginalBaseline = function(proj, years, freqMonths, contractDateS
 
     years = Math.max(1, Math.min(20, parseInt(years) || 8));
 
-    freqMonths = (parseInt(freqMonths) === 6 || parseInt(freqMonths) === 3) ? parseInt(freqMonths) : 3;
+    freqMonths = (parseInt(freqMonths) === 12 || parseInt(freqMonths) === 6 || parseInt(freqMonths) === 3) ? parseInt(freqMonths) : 3;
 
     let tpl = generateFlowsTemplate(contractDateStr, years, freqMonths, true, null, true);
 
@@ -7852,7 +8211,7 @@ window.getPureOriginalBaseline = function(proj, years, freqMonths, contractDateS
 
     let isZomra = (proj === 'Zomra');
 
-    let delivMonth = (proj === 'ORB') ? 24 : (isZomra ? 37 : (proj === 'Perla' ? 51 : 48));
+    let delivMonth = (proj === 'Sky Ridge') ? 6 : ((proj === 'ORB') ? 24 : (isZomra ? 37 : (proj === 'Perla' ? 51 : 48)));
 
     
 
@@ -7912,7 +8271,7 @@ window.getOfferCumulativeAnalysis = function(flows, years, proj) {
 
     let isZomra = (proj === 'Zomra');
 
-    let delivMonth = (proj === 'ORB') ? 24 : (isZomra ? 37 : (proj === 'Perla' ? 51 : 48));
+    let delivMonth = (proj === 'Sky Ridge') ? 6 : ((proj === 'ORB') ? 24 : (isZomra ? 37 : (proj === 'Perla' ? 51 : 48)));
 
     
 
@@ -8014,7 +8373,7 @@ window.approvalBenchmarkMode = 'auto';
 
 function getProjectBenchmarks() {
 
-    let freqMonths = parseInt(document.getElementById('payment-frequency')?.value) === 2 ? 6 : 3;
+    let freqMonths = window.getFreqMonths('payment-frequency');
 
     let contractDateStr = document.getElementById('contract-date')?.value;
 
@@ -8036,7 +8395,7 @@ function getProjectBenchmarks() {
 
         y10: y10_val,
 
-        delivMonth: (currentProject === 'ORB') ? 24 : (currentProject === 'Zomra' ? 37 : (currentProject === 'Perla' ? 51 : 48)),
+        delivMonth: (currentProject === 'Sky Ridge') ? 6 : ((currentProject === 'ORB') ? 24 : (currentProject === 'Zomra' ? 37 : (currentProject === 'Perla' ? 51 : 48))),
 
         fixedDP: (currentProject === 'Zomra') ? 15.0 : 10.0
 
@@ -8098,7 +8457,7 @@ function getActiveBenchmark(benchmarks) {
 
     let currentYears = parseInt(document.getElementById('duration-years')?.value) || 8;
 
-    let freqMonths = parseInt(document.getElementById('payment-frequency')?.value) === 2 ? 6 : 3;
+    let freqMonths = window.getFreqMonths('payment-frequency');
 
     let contractDateStr = document.getElementById('contract-date')?.value;
 
@@ -8140,7 +8499,7 @@ function updateBenchmarkButtonLabels() {
 
     let currentYears = parseInt(document.getElementById('duration-years')?.value) || 8;
 
-    let freqMonths = parseInt(document.getElementById('payment-frequency')?.value) === 2 ? 6 : 3;
+    let freqMonths = window.getFreqMonths('payment-frequency');
 
     let contractDateStr = document.getElementById('contract-date')?.value;
 
@@ -8504,7 +8863,18 @@ function updateDistUI(distInfo) {
 
     let fixedInstVal = document.getElementById('fixed-inst-val') ? parseFloat(document.getElementById('fixed-inst-val').value) : 0;
 
-    let hasFixedInst = isFixedInst && fixedInstVal > 0;
+    let fixedPreVal = document.getElementById('fixed-inst-pre-val') ? parseFloat(document.getElementById('fixed-inst-pre-val').value) : NaN;
+    let fixedPreType = document.getElementById('fixed-inst-pre-type') ? document.getElementById('fixed-inst-pre-type').value : 'amt';
+    let fixedPostVal = document.getElementById('fixed-inst-post-val') ? parseFloat(document.getElementById('fixed-inst-post-val').value) : NaN;
+    let fixedPostType = document.getElementById('fixed-inst-post-type') ? document.getElementById('fixed-inst-post-type').value : 'amt';
+    let multiYearsData = (typeof window.getFixedMultiYearsValues === 'function') ? window.getFixedMultiYearsValues() : {};
+    let hasMultiYears = Object.keys(multiYearsData).some(k => multiYearsData[k] && multiYearsData[k].val > 0);
+
+    let hasFixedInst = isFixedInst && (
+        (fixedInstScope === 'split_pre_post' && ((!isNaN(fixedPreVal) && fixedPreVal > 0) || (!isNaN(fixedPostVal) && fixedPostVal > 0))) ||
+        (fixedInstScope === 'by_years_multi' && hasMultiYears) ||
+        (fixedInstVal > 0)
+    );
 
 
 
@@ -8655,6 +9025,10 @@ function getMilestoneDefs() {
             { id: 'dp1', label: 'المقدم الأول (DP1)', defaultPct: 5.0, month: 0 },
             { id: 'dp2', label: 'دفعة 1 ديسمبر (1st Dec Payment)', defaultPct: 5.0, month: 1 }
         ];
+    } else if (currentProject === 'Sky Ridge') {
+        return [
+            { id: 'dp1', label: 'المقدم (Down Payment 10%)', defaultPct: 10.0, month: 0 }
+        ];
     } else { // Perla
         return [
             { id: 'dp1', label: 'المقدم الأول (DP1)', defaultPct: 5.0, month: 0 },
@@ -8781,8 +9155,8 @@ window.resetMeltPayments = function() {
 
 function recalcMeltDistribution() {
     let years = parseInt(document.getElementById('duration-years')?.value) || 8;
-    let freqMonths = parseInt(document.getElementById('payment-frequency')?.value) === 2 ? 6 : 3;
-    let delivMonth = (currentProject === 'Zomra') ? 37 : (currentProject === 'Perla' ? 51 : (currentProject === 'ORB' ? 24 : 48));
+    let freqMonths = window.getFreqMonths('payment-frequency');
+    let delivMonth = (currentProject === 'Sky Ridge') ? 6 : ((currentProject === 'Zomra') ? 37 : (currentProject === 'Perla' ? 51 : (currentProject === 'ORB' ? 24 : 48)));
     
     let tpl = generateFlowsTemplate(formatDate(new Date()), years, freqMonths, true);
     let dynamicInsts = tpl.filter(f => (f.isInst || f.isMerged));
@@ -8796,7 +9170,8 @@ function recalcMeltDistribution() {
     let basePostPct = nTotal > 0 ? standardBaselinePool * (nPost / nTotal) : 0;
     
     let getDefMilestonePct = (id) => {
-        if (id === 'dp1' || id === 'dp2') return (currentProject === 'Zomra') ? 2.5 : 5.0;
+        if (id === 'dp1') return (currentProject === 'Sky Ridge') ? 10.0 : ((currentProject === 'Zomra') ? 2.5 : 5.0);
+        if (id === 'dp2') return (currentProject === 'Sky Ridge') ? 0.0 : ((currentProject === 'Zomra') ? 2.5 : 5.0);
         if (id === 'addl') return 5.0;
         if (id === 'deliv') return (currentProject === 'Zomra' && years >= 3) ? 5.0 : 0.0;
         return 0.0;
@@ -8851,7 +9226,7 @@ function renderMeltImpactSummary(flows) {
         return;
     }
     
-    let delivMonth = (currentProject === 'Zomra') ? 37 : (currentProject === 'Perla' ? 51 : (currentProject === 'ORB' ? 24 : 48));
+    let delivMonth = (currentProject === 'Sky Ridge') ? 6 : ((currentProject === 'Zomra') ? 37 : (currentProject === 'Perla' ? 51 : (currentProject === 'ORB' ? 24 : 48)));
     let preInsts = (flows || []).filter(f => (f.isInst || f.isMerged) && !f.isMnt && f.months <= delivMonth);
     let postInsts = (flows || []).filter(f => (f.isInst || f.isMerged) && !f.isMnt && f.months > delivMonth);
     
@@ -8914,7 +9289,7 @@ function renderFixedGuidanceBox(g) {
 
     let contractDateStr = document.getElementById('contract-date').value || new Date();
 
-    let freqMonths = parseInt(document.getElementById('payment-frequency').value) === 2 ? 6 : 3;
+    let freqMonths = window.getFreqMonths('payment-frequency');
 
     let targetPv = basePvCache || (basePrice * 0.712);
 
@@ -10178,7 +10553,7 @@ function renderTargetPriceGuidance(targetPrice, currentOfferPrice, targetPv) {
 
     let contractDateStr = document.getElementById('contract-date').value || new Date();
 
-    let freqMonths = parseInt(document.getElementById('payment-frequency').value) === 2 ? 6 : 3;
+    let freqMonths = window.getFreqMonths('payment-frequency');
 
 
 
@@ -10370,7 +10745,7 @@ function renderTargetPriceGuidance(targetPrice, currentOfferPrice, targetPv) {
 
     let tplCurrent = generateFlowsTemplate(contractDateStr, currentYears, freqMonths, false);
 
-    let delivMonth = (currentProject === 'Zomra') ? 37 : (currentProject === 'Perla' ? 51 : 48);
+    let delivMonth = (currentProject === 'Sky Ridge') ? 6 : ((currentProject === 'ORB') ? 24 : ((currentProject === 'Zomra') ? 37 : ((currentProject === 'Perla') ? 51 : 48)));
 
     let dynInsts = tplCurrent.filter(f => (f.isInst || f.isMerged) && !f.isFixedOverride);
 
@@ -10607,7 +10982,7 @@ function calculate() {
 
         let freqEl = document.getElementById('payment-frequency');
 
-        let freqMonths = (freqEl && parseInt(freqEl.value) === 2) ? 6 : 3;
+        let freqMonths = window.getFreqMonths(freqEl);
 
         
 
@@ -10627,15 +11002,26 @@ function calculate() {
 
         let baseFreqEl = document.getElementById('base-payment-frequency');
 
-        let baseFreq = (baseFreqEl && parseInt(baseFreqEl.value) === 2) ? 6 : 3;
+        let baseFreq = window.getFreqMonths(baseFreqEl);
 
         
 
         let isFixedInst = document.getElementById('fixed-inst-toggle') && document.getElementById('fixed-inst-toggle').checked;
-
+        let fixedInstScope = document.getElementById('fixed-inst-scope') ? document.getElementById('fixed-inst-scope').value : 'all';
         let fixedInstVal = document.getElementById('fixed-inst-val') ? parseFloat(document.getElementById('fixed-inst-val').value) : 0;
 
-        let hasFixedInst = isFixedInst && fixedInstVal > 0;
+        let fixedPreVal = document.getElementById('fixed-inst-pre-val') ? parseFloat(document.getElementById('fixed-inst-pre-val').value) : NaN;
+    let fixedPreType = document.getElementById('fixed-inst-pre-type') ? document.getElementById('fixed-inst-pre-type').value : 'amt';
+    let fixedPostVal = document.getElementById('fixed-inst-post-val') ? parseFloat(document.getElementById('fixed-inst-post-val').value) : NaN;
+    let fixedPostType = document.getElementById('fixed-inst-post-type') ? document.getElementById('fixed-inst-post-type').value : 'amt';
+    let multiYearsData = (typeof window.getFixedMultiYearsValues === 'function') ? window.getFixedMultiYearsValues() : {};
+    let hasMultiYears = Object.keys(multiYearsData).some(k => multiYearsData[k] && multiYearsData[k].val > 0);
+
+    let hasFixedInst = isFixedInst && (
+        (fixedInstScope === 'split_pre_post' && ((!isNaN(fixedPreVal) && fixedPreVal > 0) || (!isNaN(fixedPostVal) && fixedPostVal > 0))) ||
+        (fixedInstScope === 'by_years_multi' && hasMultiYears) ||
+        (fixedInstVal > 0)
+    );
 
         let flexibleToggle = document.getElementById('flexible-toggle');
 
@@ -10731,7 +11117,7 @@ function calculate() {
 
         let hasTargetPrice = targetPrice !== null;
 
-        let fixedInstScope = document.getElementById('fixed-inst-scope') ? document.getElementById('fixed-inst-scope').value : 'all';
+        // fixedInstScope already declared above
 
         let hasCustomMilestones = ['dp1', 'dp2', 'addl', 'deliv'].some(id => {
 
@@ -10765,58 +11151,54 @@ function calculate() {
 
 
 
-        let naturalOfferPrice = 0;
-
-        let hasCustomMsActive = window.customMilestonesState && (window.customMilestonesState.splitDP1 || window.customMilestonesState.splitDP2 || (Array.isArray(window.customMilestonesState.extraPayments) && window.customMilestonesState.extraPayments.length > 0));
-
-        if ((currentProject === 'Perla' || currentProject === 'ORB') && years === 8 && freqMonths === 3 && !hasFixedInst && !hasTableOverrides && !hasCustomInputs && !isDistCustomized && !hasIntraYearShift && !hasCustomMsActive) {
-
-            naturalOfferPrice = basePriceCache;
-
-        } else if (currentProject === 'Jirian' && years === 8 && freqMonths === 3 && !hasFixedInst && !hasTableOverrides && !hasCustomInputs && !isDistCustomized && !hasIntraYearShift && !hasCustomMsActive) {
-
-            naturalOfferPrice = basePriceCache;
-
-        } else {
-
-            naturalOfferPrice = solveForPrice(targetPv, customTemplate);
-
-        }
-
-
-
-        if (hasTargetPrice) {
-
-            bestPrice = targetPrice;
-
-        } else {
-
-            bestPrice = naturalOfferPrice;
-
-        }
-
-        // Manual Discount / Increase Application
-
+        // Manual Discount / Increase Application (Declared before isPureStandardPlan to avoid TDZ)
         let manualActionEl = document.getElementById('manual-discount-action');
-
         let manualAction = manualActionEl ? manualActionEl.value : 'discount';
-
         let manualDiscEl = document.getElementById('manual-discount-val');
-
         let manualDiscTypeEl = document.getElementById('manual-discount-type');
-
         let manualDiscVal = manualDiscEl ? parseFloat(manualDiscEl.value) : NaN;
-
         let manualDiscType = manualDiscTypeEl ? manualDiscTypeEl.value : 'pct';
-
         let hasManualDiscount = !isNaN(manualDiscVal) && manualDiscVal > 0;
 
-        
+        let hasCustomMsActive = window.customMilestonesState && (window.customMilestonesState.splitDP1 || window.customMilestonesState.splitDP2 || (Array.isArray(window.customMilestonesState.extraPayments) && window.customMilestonesState.extraPayments.length > 0));
+        let _zInEl = document.getElementById('zero-inst-ids');
+        let _tInEl = document.getElementById('target-inst-ids');
+        let _mInEl = document.getElementById('inst-shift-dest-mode');
+        if (_zInEl) {
+            let _zRaw = _zInEl.value.trim();
+            let _parsedZ = _zRaw ? _zRaw.split(/[\s,]+/).map(s => parseInt(s.trim())).filter(n => !isNaN(n) && n > 0) : [];
+            let _parsedT = (_tInEl && _tInEl.value.trim()) ? _tInEl.value.split(/[\s,]+/).map(s => parseInt(s.trim())).filter(n => !isNaN(n) && n > 0) : [];
+            let _dMode = _mInEl ? _mInEl.value : 'all';
+            if (_parsedZ.length > 0 || (_zRaw === '' && !window._shiftAppliedFromOR)) {
+                window.installmentShiftState = { zeroInsts: _parsedZ, targetInsts: (_dMode === 'specific' ? _parsedT : []), destMode: _dMode };
+            }
+        }
+        let hasInstallmentShift = window.installmentShiftState && window.installmentShiftState.zeroInsts && window.installmentShiftState.zeroInsts.length > 0;
+        let hasFirstDateShift = customFirstDateStr !== null;
+        let hasMeltActive = window.meltState && Object.keys(window.meltState).length > 0;
+
+        let isPureStandardPlan = (freqMonths === baseFreq) && 
+                                 !hasFixedInst && !hasTableOverrides && !hasCustomInputs && 
+                                 !isDistCustomized && !hasIntraYearShift && !hasTargetPrice && !hasManualDiscount &&
+                                 !hasInstallmentShift && !hasFirstDateShift && !hasMeltActive && !hasCustomMsActive;
+
+        let isPureBaselinePlan = isPureStandardPlan && (years === baseYears);
+
+        let naturalOfferPrice = 0;
+        if (isPureBaselinePlan) {
+            naturalOfferPrice = basePriceCache;
+        } else {
+            naturalOfferPrice = solveForPrice(targetPv, customTemplate);
+        }
+
+        if (hasTargetPrice) {
+            bestPrice = targetPrice;
+        } else {
+            bestPrice = naturalOfferPrice;
+        }
 
         let manualDiscAmt = 0;
-
         let manualDiscPct = 0;
-
         let finalOfferPrice = bestPrice;
 
         
@@ -10859,7 +11241,7 @@ function calculate() {
 
         if (intraLabel) {
 
-            intraLabel.innerText = freqMonths === 3 ? 'قسط أول 3 فترات ربع سنوية (Q1, Q2, Q3)' : 'قسط الفترة النصف سنوية الأولى (H1)';
+            intraLabel.innerText = freqMonths === 12 ? 'قسط سنوي (دفعة واحدة سنوياً)' : (freqMonths === 3 ? 'قسط أول 3 فترات ربع سنوية (Q1, Q2, Q3)' : 'قسط الفترة النصف سنوية الأولى (H1)');
 
         }
 
@@ -10881,19 +11263,7 @@ function calculate() {
 
         // GoalSeek solver is skipped entirely to prevent any floating-point drift or 4,999,998 gap.
 
-        let hasInstallmentShift = window.installmentShiftState && window.installmentShiftState.zeroInsts && window.installmentShiftState.zeroInsts.length > 0;
-
-        let hasFirstDateShift = customFirstDateStr !== null;
-
-        let isPureStandardPlan = (freqMonths === baseFreq) && 
-
-                                 !hasFixedInst && !hasTableOverrides && !hasCustomInputs && 
-
-                                 !isDistCustomized && !hasIntraYearShift && !hasTargetPrice && !hasManualDiscount &&
-
-                                 !hasInstallmentShift && !hasFirstDateShift;
-
-        let isPureBaselinePlan = isPureStandardPlan && (years === baseYears);
+        // isPureBaselinePlan and isPureStandardPlan resolved above
 
 
 
@@ -10971,7 +11341,7 @@ function calculate() {
 
         let offerPreDelivPct = 0;
 
-        let delivMonth = (currentProject === 'Zomra') ? 37 : (currentProject === 'Perla' ? 51 : 48);
+        let delivMonth = (currentProject === 'Sky Ridge') ? 6 : ((currentProject === 'ORB') ? 24 : ((currentProject === 'Zomra') ? 37 : ((currentProject === 'Perla') ? 51 : 48)));
 
         let offerNonMntTot = globalCustomFlows.filter(f => !f.isMnt).reduce((s, f) => s + (f.amount || 0), 0);
 
@@ -11016,6 +11386,9 @@ function calculate() {
 
 
         renderTable(globalCustomFlows, 'offer-tbody');
+        if (typeof window.renderAnnualCollectionTable === 'function') {
+            window.renderAnnualCollectionTable(globalCustomFlows, finalOfferPrice, years, freqMonths, contractDateStr);
+        }
 
         updatePreDeliveryTracker(globalCustomFlows, 'offer-pre-delivery');
 
@@ -11032,6 +11405,12 @@ function calculate() {
         renderTargetPriceGuidance(targetPrice, naturalOfferPrice, targetPv);
 
         generateExportTemplate(actualPrice, offerPreDelivPct);
+        if (typeof window.updateActiveStackBar === 'function') {
+            window.updateActiveStackBar({
+                hasCustomInputs, hasTargetPrice, hasFixedInst, hasIntraYearShift,
+                hasMeltActive, hasInstallmentShift, hasManualDiscount
+            });
+        }
 
         
 
@@ -11139,7 +11518,7 @@ function calculate() {
 
                 `;
 
-            } else if (Math.abs(priceDiff) < 1000) {
+            } else if (isPureBaselinePlan || (Math.abs(priceDiff) < 1.0 && !hasFixedInst && !hasTargetPrice && !hasInstallmentShift && !hasMeltActive)) {
 
                 diffEl.innerHTML = `<span style="color:var(--success)">✅ Base Plan Applied</span>`;
 
@@ -11186,6 +11565,59 @@ function renderTable(flows, tbodyId) {
 
     if (!tbody) return;
 
+    let isEditingInThisTable = (tbodyId === 'offer-tbody') && document.activeElement && tbody.contains(document.activeElement);
+    let nonMntFlows = (flows || []).filter(f => !f.isMnt);
+
+    if (isEditingInThisTable && tbody.children.length >= nonMntFlows.length) {
+        let activeEl = document.activeElement;
+        let activeTr = activeEl.closest('tr');
+        let activeFlowId = activeTr ? activeTr.dataset.flowId : null;
+        let rowFreq = window.getFreqMonths('payment-frequency');
+        let curTotalAmt = 0;
+        let curTotalPv = 0;
+
+        nonMntFlows.forEach((cf) => {
+            let tr = tbody.querySelector(`tr[data-flow-id="${cf.id}"]`);
+            if (!tr) return;
+
+            let dateInp = tr.querySelector('.tbl-date');
+            let pctInp = tr.querySelector('.tbl-pct');
+            let amtInp = tr.querySelector('.tbl-amt');
+            let pvCell = tr.querySelector('.tbl-pv');
+
+            let isFocusedRow = (cf.id === activeFlowId);
+
+            if (dateInp && (!isFocusedRow || activeEl !== dateInp)) {
+                if (dateInp.value !== cf.date) dateInp.value = cf.date;
+            }
+            if (pctInp && (!isFocusedRow || activeEl !== pctInp)) {
+                let pStr = cf.displayPct || '0.00';
+                if (pctInp.value !== pStr) pctInp.value = pStr;
+            }
+            if (amtInp && (!isFocusedRow || activeEl !== amtInp)) {
+                let aStr = String(Math.round(cf.amount || 0));
+                if (amtInp.value !== aStr) amtInp.value = aStr;
+            }
+            if (pvCell) {
+                pvCell.innerText = formatCurr(cf.pv);
+            }
+            curTotalAmt += (cf.amount || 0);
+            curTotalPv += (cf.pv || 0);
+        });
+
+        let totalTr = tbody.querySelector('tr:last-child');
+        if (totalTr) {
+            let totalDisplayPctSum = nonMntFlows.reduce((sum, f) => sum + (parseFloat(f.displayPct) || 0), 0);
+            let cells = totalTr.querySelectorAll('td');
+            if (cells.length >= 5) {
+                cells[2].innerText = totalDisplayPctSum.toFixed(2) + '%';
+                cells[3].innerText = formatCurr(curTotalAmt);
+                cells[4].innerText = formatCurr(curTotalPv);
+            }
+        }
+        return;
+    }
+
     tbody.innerHTML = '';
 
     
@@ -11196,15 +11628,11 @@ function renderTable(flows, tbodyId) {
 
     
 
-    let rowFreq = (tbodyId === 'base-tbody') ? 
-
-        (document.getElementById('base-payment-frequency')?.value === '2' ? 6 : 3) : 
-
-        (document.getElementById('payment-frequency')?.value === '2' ? 6 : 3);
+    let rowFreq = window.getFreqMonths(tbodyId === 'base-tbody' ? 'base-payment-frequency' : 'payment-frequency');
 
 
 
-    let nonMntFlows = (flows || []).filter(f => !f.isMnt);
+    nonMntFlows = (flows || []).filter(f => !f.isMnt);
 
     nonMntFlows.forEach((cf) => {
 
@@ -11217,6 +11645,8 @@ function renderTable(flows, tbodyId) {
         let displayPct = cf.displayPct;
 
         let isInstRow = cf.isInst || cf.isMerged;
+
+        let basePctBadge = (cf._exactFixedVal && cf._basePctVal) ? `<div style="font-size:0.68rem; color:#94a3b8; font-weight:normal; margin-top:1px;">(${cf._basePctVal}% أساسي)</div>` : '';
 
         let monthlyBadgeHtml = '';
 
@@ -11250,6 +11680,11 @@ function renderTable(flows, tbodyId) {
 
         }
 
+        if (cf._isYearEndBalloon && cf._balloonPortionAmt) {
+            let regularPortion = Math.max(0, (cf.amount || 0) - cf._balloonPortionAmt);
+            monthlyBadgeHtml = `<div style="font-size: 0.72rem; color: #38bdf8; font-weight: bold; margin-top: 1px;">⭐ شامل دفعة نهاية السنة (+${formatCurr(cf._balloonPortionAmt)}) | قسط دوري: ${formatCurr(regularPortion)}</div>` + monthlyBadgeHtml;
+        }
+
         
 
         if (tbodyId === 'base-tbody') {
@@ -11260,7 +11695,7 @@ function renderTable(flows, tbodyId) {
 
                 <td>${cf.date}</td>
 
-                <td>${displayPct}%</td>
+                <td>${displayPct}%${basePctBadge}</td>
 
                 <td style="color:var(--accent-blue); font-weight:bold;">${formatCurr(cf.amount)}${monthlyBadgeHtml}</td>
 
@@ -11284,11 +11719,11 @@ function renderTable(flows, tbodyId) {
 
                 <td><input type="date" style="width:125px; padding: 2px 4px; font-size: 0.85rem;" class="tbl-input tbl-date" value="${cf.date}" onchange="applyTableEdits(this)"></td>
 
-                <td><input type="number" step="any" style="width:65px;" class="tbl-input tbl-pct" value="${displayPct}" onchange="applyTableEdits(this)">%</td>
+                <td><input type="number" step="any" style="width:65px;" class="tbl-input tbl-pct" value="${displayPct}" oninput="window.delayedTableEdit(this)" onchange="applyTableEdits(this)">%${basePctBadge}</td>
 
                 <td>
 
-                    <input type="number" step="1" style="width:105px; color:var(--accent-blue); font-weight:bold;" class="tbl-input tbl-amt" value="${(cf.amount !== undefined && cf.amount !== null) ? Math.round(cf.amount) : '0'}" onchange="applyTableEdits(this)">
+                    <input type="number" step="1" style="width:105px; color:var(--accent-blue); font-weight:bold;" class="tbl-input tbl-amt" value="${(cf.amount !== undefined && cf.amount !== null) ? Math.round(cf.amount) : '0'}" oninput="window.delayedTableEdit(this)" onchange="applyTableEdits(this)">
 
                     ${monthlyBadgeHtml}
 
@@ -11326,6 +11761,8 @@ function renderTable(flows, tbodyId) {
 
     totalAmt = nonMntFlows.reduce((sum, f) => sum + (f.amount || 0), 0);
 
+    let totalDisplayPctSum = nonMntFlows.reduce((sum, f) => sum + (parseFloat(f.displayPct) || 0), 0);
+
 
 
     let trTotal = document.createElement('tr');
@@ -11338,7 +11775,7 @@ function renderTable(flows, tbodyId) {
 
         <td></td>
 
-        <td style="font-weight:bold; color:#27ae60; font-size:1.02rem;">100.00%</td>
+        <td style="font-weight:bold; color:#27ae60; font-size:1.02rem;">${totalDisplayPctSum.toFixed(2)}%</td>
 
         <td style="color:var(--accent-blue); font-weight:bold;">${formatCurr(totalAmt)}</td>
 
@@ -11382,7 +11819,11 @@ function renderTable(flows, tbodyId) {
 
         trMntHead.style.color = 'white';
 
-        trMntHead.innerHTML = `<td colspan="5" style="font-weight:bold;">Maintenance Schedule (8%)</td>`;
+        let hasFin = mnts.some(f => f.isFinishing);
+
+        let mntHeaderTitle = hasFin ? 'Maintenance & Finishing Schedule' : (currentProject === 'Sky Ridge' ? 'Maintenance Schedule (10%)' : 'Maintenance Schedule (8%)');
+
+        trMntHead.innerHTML = `<td colspan="5" style="font-weight:bold;">${mntHeaderTitle}</td>`;
 
         tbody.appendChild(trMntHead);
 
@@ -11390,19 +11831,27 @@ function renderTable(flows, tbodyId) {
 
         let mntSum = 0;
 
+        let mntCount = 0;
+
         mnts.forEach(cf => {
 
             let trM = document.createElement('tr');
 
             trM.style.backgroundColor = '#d9e1f2';
 
+            let labelText = cf.isFinishing ? 'Finishing' : (cf.label || `Maintenance 0${++mntCount}`);
+
+            let pctVal = cf.displayPct ? parseFloat(cf.displayPct) : (cf.mntPct ? (cf.mntPct * 100) : 5.0);
+
+            let pctText = pctVal.toFixed(2) + '%';
+
             trM.innerHTML = `
 
-                <td style="text-align:left">${cf.label}</td>
+                <td style="text-align:left">${labelText}</td>
 
                 <td>${cf.date}</td>
 
-                <td>4.00%</td>
+                <td>${pctText}</td>
 
                 <td style="color:var(--accent-blue); font-weight:bold;">${formatCurr(cf.amount)}</td>
 
@@ -11422,13 +11871,15 @@ function renderTable(flows, tbodyId) {
 
         trMntTotal.style.backgroundColor = '#bdd7ee';
 
+        let totalPctText = currentProject === 'Sky Ridge' ? (hasFin ? '15.00%' : '10.00%') : '8.00%';
+
         trMntTotal.innerHTML = `
 
-            <td style="text-align:right; font-weight:bold;">Total Maintenance:</td>
+            <td style="text-align:right; font-weight:bold;">${hasFin ? 'Total Maintenance & Finishing:' : 'Total Maintenance:'}</td>
 
             <td></td>
 
-            <td style="font-weight:bold;">8.00%</td>
+            <td style="font-weight:bold;">${totalPctText}</td>
 
             <td style="color:var(--accent-blue); font-weight:bold;">${formatCurr(mntSum)}</td>
 
@@ -12194,11 +12645,13 @@ function buildExportPlanHtml(opts) {
 
         <tr><td colspan="2" class="export-bold" style="text-align: left; border-left: 1.5px solid black; padding: ${cellPadding}; padding-left: 12px;">Unit Base Price :</td><td colspan="3" style="text-align: left; border-right: 1.5px solid black; padding: ${cellPadding}; padding-left: 14px;">${formatNum(basePriceCache)}</td></tr>
 
-        <tr><td colspan="2" class="export-bold" style="text-align: left; border-left: 1.5px solid black; padding: ${cellPadding}; padding-left: 12px;">Maintenance (8%) :</td><td colspan="3" style="text-align: left; border-right: 1.5px solid black; padding: ${cellPadding}; padding-left: 14px;">${formatNum(mntTotal)}</td></tr>
+        <tr><td colspan="2" class="export-bold" style="text-align: left; border-left: 1.5px solid black; padding: ${cellPadding}; padding-left: 12px;">Maintenance (${currentProject === 'Sky Ridge' ? '10%' : '8%'}) :</td><td colspan="3" style="text-align: left; border-right: 1.5px solid black; padding: ${cellPadding}; padding-left: 14px;">${formatNum(mntFlows.filter(f => !f.isFinishing).reduce((s,f)=>s+(f.amount||0), 0) || (price * (currentProject === 'Sky Ridge' ? 0.10 : 0.08)))}</td></tr>
 
-        ${totalGarageAmt > 0 ? `<tr><td colspan="2" class="export-bold" style="text-align: left; border-left: 1.5px solid black; padding: ${cellPadding}; padding-left: 12px;">Garage Option :</td><td colspan="3" style="text-align: left; border-right: 1.5px solid black; padding: ${cellPadding}; padding-left: 14px;">${garSched ? garSched.title : ''}</td></tr>
+        ${mntFlows.some(f => f.isFinishing) ? `<tr><td colspan="2" class="export-bold" style="text-align: left; border-left: 1.5px solid black; padding: ${cellPadding}; padding-left: 12px;">Finishing (5%) :</td><td colspan="3" style="text-align: left; border-right: 1.5px solid black; padding: ${cellPadding}; padding-left: 14px;">${formatNum(mntFlows.filter(f => f.isFinishing).reduce((s,f)=>s+(f.amount||0), 0) || (price * 0.05))}</td></tr>` : ''}
 
-        <tr><td colspan="2" class="export-bold" style="text-align: left; border-left: 1.5px solid black; padding: ${cellPadding}; padding-left: 12px; color: #1b365d;">Grand Total (Unit+Mnt+Gar) :</td><td colspan="3" class="export-bold" style="text-align: left; border-right: 1.5px solid black; padding: ${cellPadding}; padding-left: 14px; color: #1b365d;">${formatNum(price + mntTotal + totalGarageAmt)} EGP</td></tr>` : ''}
+        ${(totalGarageAmt > 0 || mntFlows.some(f => f.isFinishing)) ? `
+        ${totalGarageAmt > 0 ? `<tr><td colspan="2" class="export-bold" style="text-align: left; border-left: 1.5px solid black; padding: ${cellPadding}; padding-left: 12px;">Garage Option :</td><td colspan="3" style="text-align: left; border-right: 1.5px solid black; padding: ${cellPadding}; padding-left: 14px;">${garSched ? garSched.title : ''}</td></tr>` : ''}
+        <tr><td colspan="2" class="export-bold" style="text-align: left; border-left: 1.5px solid black; padding: ${cellPadding}; padding-left: 12px; color: #1b365d;">Grand Total (Unit+Mnt${mntFlows.some(f => f.isFinishing) ? '+Finishing' : ''}${totalGarageAmt > 0 ? '+Gar' : ''}) :</td><td colspan="3" class="export-bold" style="text-align: left; border-right: 1.5px solid black; padding: ${cellPadding}; padding-left: 14px; color: #1b365d;">${formatNum(price + mntFlows.reduce((s,f)=>s+(f.amount||0),0) + totalGarageAmt)} EGP</td></tr>` : ''}
 
         ${priceRows}
 
@@ -12306,7 +12759,8 @@ function buildExportPlanHtml(opts) {
 
             if (grp.name !== 'Down Payment' || grp.items.length > 1) {
 
-                html += `<td style="${bottomBorder} border-right: 1px dotted #888; text-align: center; padding: ${cellPadding};">${item.label}</td>`;
+                let exportItemLabel = item.label + (item._isYearEndBalloon && item._balloonPortionAmt ? ' (شامل دفعة نهاية السنة)' : '');
+                html += `<td style="${bottomBorder} border-right: 1px dotted #888; text-align: center; padding: ${cellPadding};">${exportItemLabel}</td>`;
 
             }
 
@@ -12342,11 +12796,19 @@ function buildExportPlanHtml(opts) {
 
 
 
-    html += `<tr><th colspan="2" class="export-header-blue" style="border-left: 1.5px solid black; border-top: 1.5px solid black; border-bottom: 1.5px solid black; padding: ${cellPadding}; font-size: ${subHeaderFontSize};">Maintenance Payments</th><th colspan="3" style="border-right: 1.5px solid black; border-top: 1.5px solid black; border-bottom: 1.5px solid black; padding: ${cellPadding};"></th></tr>`;
+    let hasFinishingInMnt = mntFlows.some(m => m.isFinishing);
+
+    let mntSectionHeader = hasFinishingInMnt ? 'Maintenance & Finishing Payments' : 'Maintenance Payments';
+
+    html += `<tr><th colspan="2" class="export-header-blue" style="border-left: 1.5px solid black; border-top: 1.5px solid black; border-bottom: 1.5px solid black; padding: ${cellPadding}; font-size: ${subHeaderFontSize};">${mntSectionHeader}</th><th colspan="3" style="border-right: 1.5px solid black; border-top: 1.5px solid black; border-bottom: 1.5px solid black; padding: ${cellPadding};"></th></tr>`;
 
 
 
     let totalMntAmt = 0;
+
+    let totalMntPct = 0;
+
+    let mntCounter = 0;
 
     mntFlows.forEach((m, i) => {
 
@@ -12356,11 +12818,29 @@ function buildExportPlanHtml(opts) {
 
         let bottomBorder = isLastMnt ? 'border-bottom: 1.5px solid black;' : 'border-bottom: 1px dotted #888;';
 
+        let rowLabel = '';
+
+        if (m.isFinishing) {
+
+            rowLabel = 'Finishing';
+
+        } else {
+
+            mntCounter++;
+
+            rowLabel = `Maintenance 0${mntCounter}`;
+
+        }
+
+        let rowPct = m.displayPct ? parseFloat(m.displayPct) : (m.mntPct ? (m.mntPct * 100) : 5.0);
+
+        totalMntPct += rowPct;
+
         html += `<tr>
 
-            <td colspan="2" style="border-left: 1.5px solid black; border-right: 1px dotted #888; ${bottomBorder} padding: ${cellPadding};">Maintenance 0${i+1}</td>
+            <td colspan="2" style="border-left: 1.5px solid black; border-right: 1px dotted #888; ${bottomBorder} padding: ${cellPadding};">${rowLabel}</td>
 
-            <td style="${bottomBorder} border-right: 1px dotted #888; padding: ${cellPadding};">${parseFloat(m.displayPct).toFixed(2)}%</td>
+            <td style="${bottomBorder} border-right: 1px dotted #888; padding: ${cellPadding};">${rowPct.toFixed(2)}%</td>
 
             <td style="${bottomBorder} border-right: 1px dotted #888; padding: ${cellPadding};">${formatNum(m.amount)}</td>
 
@@ -12374,9 +12854,9 @@ function buildExportPlanHtml(opts) {
 
     html += `<tr>
 
-        <td colspan="2" class="export-header-blue" style="border-left: 1.5px solid black; border-bottom: 1.5px solid black; text-align: center; padding: ${cellPadding};">Total Maintenance</td>
+        <td colspan="2" class="export-header-blue" style="border-left: 1.5px solid black; border-bottom: 1.5px solid black; text-align: center; padding: ${cellPadding};">${hasFinishingInMnt ? 'Total Maintenance & Finishing' : 'Total Maintenance'}</td>
 
-        <td class="export-header-blue" style="border-bottom: 1.5px solid black; padding: ${cellPadding};">8.00%</td>
+        <td class="export-header-blue" style="border-bottom: 1.5px solid black; padding: ${cellPadding};">${totalMntPct.toFixed(2)}%</td>
 
         <td class="export-header-blue" style="border-bottom: 1.5px solid black; padding: ${cellPadding};">${formatNum(totalMntAmt)}</td>
 
@@ -13140,7 +13620,8 @@ async function populateTemplateWorkbook(workbook, offerPrice) {
 
             if (isFirst) r.getCell(4).value = grp.name;
 
-            r.getCell(6).value = item.label;
+            let excelItemLabel = item.label + (item._isYearEndBalloon && item._balloonPortionAmt ? ' (شامل دفعة نهاية السنة)' : '');
+            r.getCell(6).value = excelItemLabel;
 
             r.getCell(7).value = exactRatio;
 
@@ -13192,13 +13673,49 @@ async function populateTemplateWorkbook(workbook, offerPrice) {
 
     let excelMntPctSum = 0;
 
+    let mntCounter = 0;
+
+    let hasFinishing = mnts.some(m => m.isFinishing);
+
+    if (hasFinishing) {
+
+        try { ws.getCell('D' + (totalRowIdx + 2)).value = 'Maintenance & Finishing'; } catch(e){}
+
+    }
+
+    let modelMntRow = ws.getRow(totalRowIdx + 5);
+
     mnts.forEach(m => {
 
         let mAmt = Math.round(m.amount || 0);
 
-        let mntPct = offerPrice > 0 ? (mAmt / offerPrice) : 0;
+        let mntPct = (m.displayPct ? parseFloat(m.displayPct) / 100 : (m.mntPct || (offerPrice > 0 ? (mAmt / offerPrice) : 0.05)));
 
         let r = ws.getRow(mntRowIdx++);
+
+        
+
+        [4, 5, 6, 7].forEach(c => {
+
+            let mCell = modelMntRow.getCell(c);
+
+            if (mCell && mCell.style) {
+
+                r.getCell(c).style = JSON.parse(JSON.stringify(mCell.style));
+
+            }
+
+        });
+
+        
+
+        let label = m.isFinishing ? 'Finishing' : `Maintenance 0${++mntCounter}`;
+
+        r.getCell(4).value = label;
+
+        r.getCell(5).value = mntPct;
+
+        r.getCell(5).numFmt = '0.00%';
 
         r.getCell(6).value = mAmt;
 
@@ -13414,7 +13931,7 @@ function exportExcelFallback(offerPrice) {
 
         let itemAmt = Math.round(f.amount || 0);
 
-        let exactRatio = (!f || f._isZeroShifted || !f.amount || f.amount <= 0) ? 0.0 : ((f._pctVal !== undefined && f._pctVal !== null) ? (f._pctVal / 100.0) : (f.displayPct ? (parseFloat(f.displayPct) / 100.0) : (offerPrice > 0 ? (itemAmt / offerPrice) : 0)));
+        let exactRatio = (!f || f._isZeroShifted || !f.amount || f.amount <= 0) ? 0.0 : ((f._cents !== undefined) ? (f._cents / 10000.0) : ((f._pctVal !== undefined && f._pctVal !== null) ? (f._pctVal / 100.0) : (f.displayPct ? (parseFloat(f.displayPct) / 100.0) : (offerPrice > 0 ? (itemAmt / offerPrice) : 0))));
 
         let row = [
 
@@ -13448,9 +13965,15 @@ function exportExcelFallback(offerPrice) {
 
     if (mnts.length > 0) {
 
+        let hasFin = mnts.some(m => m.isFinishing);
+
+        let headerTitle = hasFin ? 'Maintenance & Finishing Schedule' : 'Maintenance Schedule';
+
+        let subTitle = currentProject === 'Sky Ridge' ? '10% Mnt + 5% Finishing' : '8% of Base Price';
+
         ws_data.push(['', '', '', '', '']);
 
-        ws_data.push(['Maintenance Schedule', '', '8% of Base Price', '', '']);
+        ws_data.push([headerTitle, '', subTitle, '', '']);
 
         ws_data.push(['Type', 'Description', '%', 'Amount', 'Date']);
 
@@ -13458,11 +13981,17 @@ function exportExcelFallback(offerPrice) {
 
         let mntPctSum = 0;
 
+        let mntCounter = 0;
+
         mnts.forEach(m => {
 
-            let mPct = offerPrice > 0 ? (m.amount / offerPrice) : 0;
+            let mPct = (m.displayPct ? parseFloat(m.displayPct) / 100 : (m.mntPct || (offerPrice > 0 ? (m.amount / offerPrice) : 0)));
 
-            ws_data.push(['Maintenance', m.label, mPct, m.amount || 0, formatDateExport(m.date)]);
+            let typeLabel = m.isFinishing ? 'Finishing' : 'Maintenance';
+
+            let descLabel = m.isFinishing ? 'Finishing' : `Maintenance 0${++mntCounter}`;
+
+            ws_data.push([typeLabel, descLabel, mPct, m.amount || 0, formatDateExport(m.date)]);
 
             mntSum += (m.amount || 0);
 
@@ -13470,7 +13999,7 @@ function exportExcelFallback(offerPrice) {
 
         });
 
-        ws_data.push(['Total Maintenance:', '', mntPctSum, mntSum, '']);
+        ws_data.push([hasFin ? 'Total Maintenance & Finishing:' : 'Total Maintenance:', '', mntPctSum, mntSum, '']);
 
     }
 
@@ -13697,9 +14226,9 @@ function initSystem() {
     let dateEl = document.getElementById('contract-date');
 
     if (dateEl && !dateEl.value) {
-
-        dateEl.value = formatDate(new Date());
-
+        let todayStr = formatDate(new Date());
+        dateEl.value = todayStr;
+        dateEl.setAttribute("value", todayStr);
     }
 
     let flexToggle = document.getElementById('flexible-toggle');
@@ -13911,7 +14440,7 @@ window.showToast = function(msg, isSuccess = true) {
 window.formatFlowsToExcelRows = function(flows, offerPrice) {
     if (!flows || flows.length === 0) return '';
     let nonMnt = flows.filter(f => !f.isMnt);
-    let freqMonths = (document.getElementById('payment-frequency') && parseInt(document.getElementById('payment-frequency').value) === 2) ? 6 : 3;
+    let freqMonths = window.getFreqMonths('payment-frequency');
     let isZomra = (currentProject === 'Zomra');
     let totalTemplateRows = isZomra ? 43 : 42; // Row 16 to 58 = 43 rows for Zomra, Row 16 to 57 = 42 rows for Others
 
@@ -13926,14 +14455,23 @@ window.formatFlowsToExcelRows = function(flows, offerPrice) {
             exactPct = f.scenarioPct * 100;
         }
         // 2. Explicit percentage override in table or milestone input
-        else if (f._exactFixedPct !== undefined && f._exactFixedPct !== null && !f._isFixedCash) {
+        else if (!f.isMerged && f._exactFixedPct !== undefined && f._exactFixedPct !== null && !f._isFixedCash) {
             exactPct = f._exactFixedPct;
         }
         // 3. Milestone default percentage (when NOT cash fixed)
         else if (!f.isInst && !f.isMerged && f.defaultPct !== undefined && f.defaultPct !== null && !f._isFixedCash && !f._exactFixedVal) {
             exactPct = f.defaultPct * 100;
         }
-        // 4. Exact mathematical ratio on flow
+        // 4. Exact unrounded mathematical ratio on flow (for exact Excel parity!)
+        else if (price > 0 && f.amount > 0) {
+            // Use raw amount / price so pasted Excel % * M13 == exact cash amount, or _trueExactPct if uniform exact match
+            let ratioPct = (f.amount / price) * 100;
+            let truePct = (f._trueExactPct !== undefined && f._trueExactPct !== null && f._trueExactPct > 0) ? (f._trueExactPct * 100) : ratioPct;
+            exactPct = Math.abs(truePct - ratioPct) < 0.002 ? truePct : ratioPct;
+        }
+        else if (f._trueExactPct !== undefined && f._trueExactPct !== null && f._trueExactPct > 0 && !f._isFixedCash) {
+            exactPct = f._trueExactPct * 100;
+        }
         else if (f.exactPct !== undefined && f.exactPct !== null && f.exactPct > 0 && !f._isFixedCash) {
             exactPct = f.exactPct * 100;
         }
@@ -13966,45 +14504,76 @@ window.formatFlowsToExcelRows = function(flows, offerPrice) {
     let addlFlow = nonMnt.find(f => f.id === 'addl');
     let instFlows = nonMnt.filter(f => (f.isInst || f.isMerged));
 
-    if (dp1Flow) excelRows[0] = formatFlowPct(dp1Flow);
-    if (dp2Flow) excelRows[1] = formatFlowPct(dp2Flow);
-
-    if (freqMonths === 6) {
-        // Semi-Annual Mode
-        if (isZomra) {
-            if (addlFlow) excelRows[3] = formatFlowPct(addlFlow);
-            instFlows.forEach((inst, idx) => {
-                let targetIdx = 4 + (idx * 2);
-                if (targetIdx < totalTemplateRows) {
-                    excelRows[targetIdx] = formatFlowPct(inst);
-                }
-            });
-        } else {
-            instFlows.forEach((inst, idx) => {
-                let targetIdx = 3 + (idx * 2);
-                if (targetIdx < totalTemplateRows) {
-                    excelRows[targetIdx] = formatFlowPct(inst);
-                }
-            });
-        }
+    if (currentProject === 'Sky Ridge') {
+        excelRows[0] = '0%'; // S16 is blank
+        if (dp1Flow) excelRows[1] = formatFlowPct(dp1Flow); // S17 is DP1
+        let startOffset = (freqMonths === 12) ? 5 : ((freqMonths === 6) ? 3 : 2);
+        let step = (freqMonths === 12) ? 4 : ((freqMonths === 6) ? 2 : 1);
+        instFlows.forEach((inst, idx) => {
+            let targetIdx = startOffset + (idx * step);
+            if (targetIdx < totalTemplateRows) {
+                excelRows[targetIdx] = formatFlowPct(inst);
+            }
+        });
     } else {
-        // Quarterly Mode
-        if (isZomra) {
-            if (instFlows.length > 0) excelRows[2] = formatFlowPct(instFlows[0]);
-            if (addlFlow) excelRows[3] = formatFlowPct(addlFlow);
-            for (let i = 1; i < instFlows.length; i++) {
-                let targetIdx = 3 + i;
-                if (targetIdx < totalTemplateRows) {
-                    excelRows[targetIdx] = formatFlowPct(instFlows[i]);
-                }
+        if (dp1Flow) excelRows[0] = formatFlowPct(dp1Flow);
+        if (dp2Flow) excelRows[1] = formatFlowPct(dp2Flow);
+
+        if (freqMonths === 12) {
+            // Annual Mode
+            if (isZomra) {
+                if (addlFlow) excelRows[3] = formatFlowPct(addlFlow);
+                instFlows.forEach((inst, idx) => {
+                    let targetIdx = 6 + (idx * 4);
+                    if (targetIdx < totalTemplateRows) {
+                        excelRows[targetIdx] = formatFlowPct(inst);
+                    }
+                });
+            } else {
+                instFlows.forEach((inst, idx) => {
+                    let targetIdx = 5 + (idx * 4);
+                    if (targetIdx < totalTemplateRows) {
+                        excelRows[targetIdx] = formatFlowPct(inst);
+                    }
+                });
+            }
+        } else if (freqMonths === 6) {
+            // Semi-Annual Mode
+            if (isZomra) {
+                if (addlFlow) excelRows[3] = formatFlowPct(addlFlow);
+                instFlows.forEach((inst, idx) => {
+                    let targetIdx = 4 + (idx * 2);
+                    if (targetIdx < totalTemplateRows) {
+                        excelRows[targetIdx] = formatFlowPct(inst);
+                    }
+                });
+            } else {
+                instFlows.forEach((inst, idx) => {
+                    let targetIdx = 3 + (idx * 2);
+                    if (targetIdx < totalTemplateRows) {
+                        excelRows[targetIdx] = formatFlowPct(inst);
+                    }
+                });
             }
         } else {
-            instFlows.forEach((inst, idx) => {
-                let targetIdx = 2 + idx;
-                if (targetIdx < totalTemplateRows) {
-                    excelRows[targetIdx] = formatFlowPct(inst);
+            // Quarterly Mode
+            if (isZomra) {
+                if (instFlows.length > 0) excelRows[2] = formatFlowPct(instFlows[0]);
+                if (addlFlow) excelRows[3] = formatFlowPct(addlFlow);
+                for (let i = 1; i < instFlows.length; i++) {
+                    let targetIdx = 3 + i;
+                    if (targetIdx < totalTemplateRows) {
+                        excelRows[targetIdx] = formatFlowPct(instFlows[i]);
+                    }
                 }
-            });
+            } else {
+                instFlows.forEach((inst, idx) => {
+                    let targetIdx = 2 + idx;
+                    if (targetIdx < totalTemplateRows) {
+                        excelRows[targetIdx] = formatFlowPct(inst);
+                    }
+                });
+            }
         }
     }
 
@@ -14043,8 +14612,6 @@ window.getExcelPercentagesText = function(isRawActiveOnly = false) {
                 exactPct = f._exactFixedPct;
             } else if (!f.isInst && !f.isMerged && f.defaultPct !== undefined && f.defaultPct !== null && !f._isFixedCash && !f._exactFixedVal) {
                 exactPct = f.defaultPct * 100;
-            } else if (f.exactPct !== undefined && f.exactPct !== null && f.exactPct > 0 && !f._isFixedCash) {
-                exactPct = f.exactPct * 100;
             } else {
                 let amt = Math.round(f.amount || 0);
                 if (offerPrice > 0 && amt > 0) exactPct = (amt / offerPrice) * 100;
@@ -14053,7 +14620,8 @@ window.getExcelPercentagesText = function(isRawActiveOnly = false) {
             if (exactPct <= 0) return '0%';
             let cleanRound = Math.round(exactPct * 100) / 100;
             if (Math.abs(exactPct - cleanRound) < 1e-5) return cleanRound.toFixed(2) + '%';
-            let s = exactPct.toFixed(8);
+            // Output 6 decimal places for exact cash match in Excel (eliminating any amount drift)
+            let s = exactPct.toFixed(6);
             s = s.replace(/(\.\d*?[1-9])0+$/, '$1').replace(/\.00+$/, '');
             return s + '%';
         };
@@ -14373,20 +14941,34 @@ window._orOptionScenariosData = window._orOptionScenariosData || {};
 window._orScenariosData = window._orScenariosData || [];
 
 window.createORSolverContext = function(forceFlexible = false) {
+    let _flexEl = document.getElementById('flexible-toggle');
+    let _prevFlexVal = _flexEl ? _flexEl.value : null;
+    if (_flexEl) _flexEl.value = forceFlexible ? 'yes' : 'no';
+    try {
     let proj = currentProject;
     let isZomra = (proj === 'Zomra');
     let basePrice = basePriceCache || 5000000;
     let contractDateStr = document.getElementById('contract-date') ? document.getElementById('contract-date').value : formatDate(new Date());
     let years = parseInt(document.getElementById('duration-years') ? document.getElementById('duration-years').value : 8) || 8;
-    let freqMonths = (document.getElementById('payment-frequency') && parseInt(document.getElementById('payment-frequency').value) === 2) ? 6 : 3;
+    let freqMonths = window.getFreqMonths('payment-frequency');
+    let baseYearsEl = document.getElementById('base-duration-years');
+    let baseYears = parseInt(baseYearsEl ? baseYearsEl.value : years) || years;
+    let baseFreqEl = document.getElementById('base-payment-frequency');
+    let baseFreq = baseFreqEl ? window.getFreqMonths(baseFreqEl) : freqMonths;
 
-    // 1. Calculate Target Base PV according to mode (ADJUST = standard period, FLEXIBLE = daily discount)
-    let baseTpl = generateFlowsTemplate(contractDateStr, years, freqMonths, true, null, forceFlexible, forceFlexible);
+    // 1. Calculate Target Base PV identically to calculate()
+    let baseTpl = generateFlowsTemplate(contractDateStr, baseYears, baseFreq, true, null, false, forceFlexible);
     let bFlows = calculateBaseFlows(basePrice, baseTpl, contractDateStr);
+    bFlows.forEach(f => {
+        if (!f.isMnt) {
+            applyDiscountLogic(f, contractDateStr, true, forceFlexible);
+            f.pv = (f.amount || 0) * (f.pvFactor !== undefined ? f.pvFactor : 1.0);
+        }
+    });
     let targetPv = bFlows.filter(f => !f.isMnt).reduce((sum, f) => sum + (f.pv || 0), 0);
 
     // 2. Working template with appropriate discount logic
-    let tpl = generateFlowsTemplate(contractDateStr, years, freqMonths, false, null, forceFlexible, forceFlexible);
+    let tpl = generateFlowsTemplate(contractDateStr, years, freqMonths, false, null, false, forceFlexible);
     tpl.forEach(f => applyDiscountLogic(f, contractDateStr, false, forceFlexible));
 
     let instPeriods = tpl.filter(f => (f.isInst || f.isMerged) && !f.isMnt);
@@ -14407,14 +14989,39 @@ window.createORSolverContext = function(forceFlexible = false) {
         return isPct ? (v / 100.0) : (v / basePrice);
     };
 
-    let dp1Pct = getEffectiveMilestonePct('dp1', isZomra ? 0.025 : 0.05);
-    let dp2Pct = getEffectiveMilestonePct('dp2', isZomra ? 0.025 : 0.05);
+    let dp1Pct = getEffectiveMilestonePct('dp1', (currentProject === 'Sky Ridge') ? 0.10 : (isZomra ? 0.025 : 0.05));
+    let dp2Pct = getEffectiveMilestonePct('dp2', (currentProject === 'Sky Ridge') ? 0.00 : (isZomra ? 0.025 : 0.05));
     let addlPct = isZomra ? getEffectiveMilestonePct('addl', 0.05) : 0;
     let delivPct = hasDeliv ? getEffectiveMilestonePct('deliv', (isZomra ? 0.05 : 0.05)) : 0;
+
+    // Respect active Melts (تسييح الدفعات)
+    let mState = window.meltState || {};
+    if (mState['dp2']) dp2Pct = 0;
+    if (mState['addl']) addlPct = 0;
+    if (mState['deliv']) delivPct = 0;
+
+    // Respect active Zeroed Installments (تصفير أقساط)
+    let zeroInsts = (window.installmentShiftState && Array.isArray(window.installmentShiftState.zeroInsts))
+        ? window.installmentShiftState.zeroInsts : [];
+    let userTargetP = parseFloat(document.getElementById('target-price-val')?.value);
+    let hasUserTargetP = (!isNaN(userTargetP) && userTargetP > 0);
 
     let solve = function(getFlowPct, customFlowDates = null) {
         let scFlows = [];
         let W = 0.0;
+        let activeInsts = instPeriods.filter((x, idx) => !zeroInsts.includes(idx + 1));
+        let zeroedPool = 0.0;
+        if (zeroInsts.length > 0 && activeInsts.length > 0) {
+            instPeriods.forEach((x, idx) => {
+                if (zeroInsts.includes(idx + 1)) {
+                    let rawP = getFlowPct(x);
+                    if (x.isMerged) rawP = Math.max(0, rawP - delivPct);
+                    zeroedPool += rawP;
+                }
+            });
+        }
+        let extraPerActive = (activeInsts.length > 0) ? (zeroedPool / activeInsts.length) : 0.0;
+
         tpl.forEach(f => {
             if (f.isMnt) return;
             let fCopy = Object.assign({}, f);
@@ -14423,10 +15030,28 @@ window.createORSolverContext = function(forceFlexible = false) {
                 // Recalculate discount factor for the shifted date
                 applyDiscountLogic(fCopy, contractDateStr, false, forceFlexible);
             }
-            fCopy.scenarioPct = getFlowPct(fCopy);
+            let pVal = getFlowPct(fCopy);
+            if ((fCopy.isInst || fCopy.isMerged) && zeroInsts.length > 0) {
+                let instPos = instPeriods.findIndex(x => x.id === fCopy.id) + 1;
+                if (zeroInsts.includes(instPos)) {
+                    pVal = fCopy.isMerged ? delivPct : 0.0;
+                } else {
+                    pVal += extraPerActive;
+                }
+            }
+            fCopy.scenarioPct = pVal;
+            scFlows.push(fCopy);
+        });
+        // Normalize residual floating-point drift so sum(scenarioPct) === 1.000000
+        let totalScPct = scFlows.reduce((s, f) => s + f.scenarioPct, 0);
+        let pctDrift = 1.0 - totalScPct;
+        if (Math.abs(pctDrift) > 1e-9 && scFlows.length > 0) {
+            let lastInstFlow = [...scFlows].reverse().find(f => (f.isInst || f.isMerged) && f.scenarioPct > 0) || scFlows[scFlows.length - 1];
+            lastInstFlow.scenarioPct = Math.max(0, lastInstFlow.scenarioPct + pctDrift);
+        }
+        scFlows.forEach(fCopy => {
             let df = fCopy.pvFactor !== undefined ? fCopy.pvFactor : 1.0;
             W += fCopy.scenarioPct * df;
-            scFlows.push(fCopy);
         });
         let solvedP = targetPv / W;
         let preSum = scFlows.filter(f => new Date(f.date) <= delivDateObj).reduce((s, f) => s + f.scenarioPct, 0) * 100;
@@ -14443,6 +15068,9 @@ window.createORSolverContext = function(forceFlexible = false) {
         targetPv, tpl, instPeriods, totalInstCount, hasDeliv, delivDateObj,
         dp1Pct, dp2Pct, addlPct, delivPct, solve
     };
+    } finally {
+        if (_flexEl && _prevFlexVal !== null) _flexEl.value = _prevFlexVal;
+    }
 };
 
 // ------------------------------------------------------------------------------
@@ -14585,43 +15213,70 @@ window.applyOROptionScenario = function(containerId, idx) {
 
     // 1. Sync Flexible Mode Switch
     let flexToggle = document.getElementById('flexible-toggle');
-    if (sc.mode === 'FLEXIBLE') {
-        if (flexToggle) flexToggle.value = 'yes';
-    } else {
-        if (flexToggle) flexToggle.value = 'no';
-    }
+    if (flexToggle) flexToggle.value = (sc.mode === 'FLEXIBLE') ? 'yes' : 'no';
 
-    // 2. Sync Top Inputs if modified in scenario
-    if (sc.dp1Pct !== undefined) {
-        let dp1El = document.getElementById('dp1-val');
-        let dp1Type = document.getElementById('dp1-type');
-        if (dp1El) dp1El.value = (sc.dp1Pct * 100).toFixed(2);
-        if (dp1Type) dp1Type.value = 'pct';
-    }
-    if (sc.dp2Pct !== undefined) {
-        let dp2El = document.getElementById('dp2-val');
-        let dp2Type = document.getElementById('dp2-type');
-        if (dp2El) dp2El.value = (sc.dp2Pct * 100).toFixed(2);
-        if (dp2Type) dp2Type.value = 'pct';
-    }
+    // 2. Clear conflicting active module states so the exact OR scenario applies 1:1
+    let fixedTgl = document.getElementById('fixed-inst-toggle');
+    if (fixedTgl) fixedTgl.checked = false;
+    let fixedWrap = document.getElementById('fixed-inst-controls-wrapper');
+    if (fixedWrap) fixedWrap.style.display = 'none';
+    let fixedBadge = document.getElementById('fixed-inst-status-badge');
+    if (fixedBadge) { fixedBadge.innerText = 'غير مفعّل'; fixedBadge.style.color = 'var(--text-muted)'; }
+
+    let tgl7030 = document.getElementById('toggle-70-30');
+    if (tgl7030) tgl7030.checked = false;
+    let tglIntra = document.getElementById('toggle-intra-year');
+    if (tglIntra) tglIntra.checked = false;
+    let intraWrap = document.getElementById('intra-year-controls-wrapper');
+    if (intraWrap) intraWrap.style.display = 'none';
+
+    let zIn = document.getElementById('zero-inst-ids');
+    if (zIn) zIn.value = '';
+    let tIn = document.getElementById('target-inst-ids');
+    if (tIn) tIn.value = '';
+    let mDisc = document.getElementById('manual-discount-val');
+    if (mDisc) mDisc.value = '';
+    window.meltState = {};
+
+    // 3. Sync Top Inputs (DP1, DP2, Addl, Deliv, Target Price) from scenario flows
+    let setMs = (id, pctVal) => {
+        let el = document.getElementById(id + '-val');
+        let tp = document.getElementById(id + '-type');
+        if (el) el.value = (pctVal !== undefined && pctVal !== null) ? (pctVal * 100).toFixed(2) : '';
+        if (tp) tp.value = 'pct';
+    };
+    let fDp1 = sc.flows.find(f => f.id === 'dp1');
+    let fDp2 = sc.flows.find(f => f.id === 'dp2');
+    let fAddl = sc.flows.find(f => f.id === 'addl');
+    if (sc.dp1Pct !== undefined) setMs('dp1', sc.dp1Pct);
+    else if (fDp1) setMs('dp1', fDp1.scenarioPct);
+    if (sc.dp2Pct !== undefined) setMs('dp2', sc.dp2Pct);
+    else if (fDp2) setMs('dp2', fDp2.scenarioPct);
+    if (fAddl) setMs('addl', fAddl.scenarioPct);
+
+    let tpEl = document.getElementById('target-price-val');
+    let tpPctEl = document.getElementById('target-pct-val');
     if (sc.targetPrice !== undefined) {
-        let tpEl = document.getElementById('target-price-val');
-        if (tpEl) tpEl.value = Math.round(sc.targetPrice);
-        let tpPctEl = document.getElementById('target-pct-val');
+        if (tpEl) tpEl.value = sc.targetPrice.toFixed(2);
         if (tpPctEl) tpPctEl.value = sc.diffPct ? sc.diffPct.toFixed(2) : '';
+    } else {
+        if (tpEl) tpEl.value = '';
+        if (tpPctEl) tpPctEl.value = '';
     }
 
-    // 3. Clear conflicting override states
+    // 4. Clear conflicting override states & populate exact table overrides from scenario flows
     window.globalTableOverrides = {};
     window.installmentShiftState = { zeroInsts: [], targetInsts: [], destMode: 'all' };
-    
-    // 4. Populate table overrides from scenario flows
+
     sc.flows.forEach(f => {
-        window.globalTableOverrides[f.id] = {
+        let ovObj = {
             amount: f.scenarioPct * 100,
-            isPct: true,
-            date: f.date
+            isPct: true
         };
+        if (sc.mode === 'FLEXIBLE' || sc.dateChanged) {
+            ovObj.date = f.date;
+        }
+        window.globalTableOverrides[f.id] = ovObj;
     });
 
     // 5. Run full calculation engine
@@ -14685,7 +15340,7 @@ window.runORForBalloonShift = function(isRefresh = false) {
 
     let msSum = ctxAdjust.dp1Pct + ctxAdjust.dp2Pct + ctxAdjust.addlPct + ctxAdjust.delivPct;
     let instPool = Math.max(0, 1.0 - msSum);
-    let qPerYear = (ctxAdjust.freqMonths === 6) ? 2 : 4;
+    let qPerYear = Math.round(12 / ctxAdjust.freqMonths);
     let totalYears = ctxAdjust.years;
 
     // Check user intra installment / balloon input
@@ -14707,13 +15362,16 @@ window.runORForBalloonShift = function(isRefresh = false) {
             if (f.id === 'dp2') return ctx.dp2Pct;
             if (f.id === 'addl') return ctx.addlPct;
             if (f.id === 'deliv' && !f.isMerged) return ctx.delivPct;
-            let instIdx = ctx.instPeriods.findIndex(x => x.id === f.id);
-            let yIdx = Math.floor(instIdx / qPerYear);
-            let qInY = instIdx % qPerYear;
+            let getYear = x => Math.min(totalYears, Math.max(1, Math.ceil((x.months || 0) / 12)));
+            let yNum = getYear(f);
+            let yIdx = yNum - 1;
+            let yearList = ctx.instPeriods.filter(x => getYear(x) === yNum);
+            let instsInThisYear = Math.max(1, yearList.length);
             let splits = getYearSplits(yIdx);
-            let annualPool = effInstPool / totalYears;
-            let isBalloonQ = (qInY === qPerYear - 1);
-            let part = isBalloonQ ? (annualPool * splits.balloonPct) : ((annualPool * splits.regularPct) / (qPerYear - 1));
+            let annualPool = effInstPool * (instsInThisYear / Math.max(1, ctx.instPeriods.length));
+            let numRegularInThisYear = Math.max(1, instsInThisYear - 1);
+            let isBalloonQ = (yearList[yearList.length - 1]?.id === f.id);
+            let part = (instsInThisYear === 1) ? annualPool : (isBalloonQ ? (annualPool * splits.balloonPct) : ((annualPool * splits.regularPct) / numRegularInThisYear));
             if (f.isMerged) return ctx.delivPct + part;
             return part;
         }, customDates);
@@ -14730,7 +15388,7 @@ window.runORForBalloonShift = function(isRefresh = false) {
             price: sc.price, diffPct: sc.diffPct, preDelivPct: sc.preDelivPct, flows: sc.flows,
             metrics: [
                 { label: 'التحصيل قبل الاستلام', val: sc.preDelivPct.toFixed(1) + '%', unit: '(مستوفى)' },
-                { label: 'متوسط القسط الخفيف', val: formatCurr(sc.price * (effInstPool / totalYears * regShare / (qPerYear - 1))), unit: '/ دوري' },
+                { label: 'متوسط القسط الخفيف', val: formatCurr(qPerYear > 1 ? (sc.price * (effInstPool / totalYears * regShare / (qPerYear - 1))) : (sc.price * effInstPool / totalYears)), unit: '/ دوري' },
                 { label: 'متوسط البالون السنوي', val: formatCurr(sc.price * (effInstPool / totalYears * userBalloonShare)), unit: '/ سنوي' },
                 { label: 'فرق السعر', val: (sc.diffPct >= 0 ? '+' : '') + sc.diffPct.toFixed(2) + '%', unit: '' }
             ],
@@ -14822,7 +15480,7 @@ window.runORForZeroShift = function(isRefresh = false) {
         zeroIndices = window.installmentShiftState.zeroInsts.map(n => n - 1);
     } else {
         // Intelligent default: first 2 quarterly installments
-        let defCount = (ctxAdjust.freqMonths === 6) ? 1 : 2;
+        let defCount = (ctxAdjust.freqMonths >= 6) ? 1 : 2;
         for (let i = 0; i < defCount; i++) zeroIndices.push(i);
     }
 
@@ -15165,7 +15823,7 @@ window.runORForFixedInst = function(isRefresh = false) {
 
     let msSum = ctxAdjust.dp1Pct + ctxAdjust.dp2Pct + ctxAdjust.addlPct + ctxAdjust.delivPct;
     let instPool = Math.max(0, 1.0 - msSum);
-    let numEarly = (ctxAdjust.freqMonths === 6) ? 4 : 8; // First 2 years
+    let numEarly = Math.round(24 / ctxAdjust.freqMonths); // First 2 years
     let numLate = ctxAdjust.totalInstCount - numEarly;
 
     // Check user fixed inst input
@@ -15442,8 +16100,10 @@ window.generateAndRenderORFacilities = function() {
 
     let msSum = ctxAdjust.dp1Pct + ctxAdjust.dp2Pct + ctxAdjust.addlPct + ctxAdjust.delivPct;
     let instPool = Math.max(0, 1.0 - msSum);
-    let qPerYear = (ctxAdjust.freqMonths === 6) ? 2 : 4;
+    let qPerYear = Math.round(12 / ctxAdjust.freqMonths);
     let totalYears = ctxAdjust.years;
+
+    let getPkgYear = x => Math.min(totalYears, Math.max(1, Math.ceil((x.months || 0) / 12)));
 
     // Package 1: ADJUST - Commercial Investment 70/30 Balloon
     let sc1 = ctxAdjust.solve(f => {
@@ -15451,11 +16111,12 @@ window.generateAndRenderORFacilities = function() {
         if (f.id === 'dp2') return ctxAdjust.dp2Pct;
         if (f.id === 'addl') return ctxAdjust.addlPct;
         if (f.id === 'deliv' && !f.isMerged) return ctxAdjust.delivPct;
-        let instIdx = ctxAdjust.instPeriods.findIndex(x => x.id === f.id);
-        let qInY = instIdx % qPerYear;
-        let annualPool = instPool / totalYears;
-        let isBalloonQ = (qInY === qPerYear - 1);
-        let part = isBalloonQ ? (annualPool * 0.30) : ((annualPool * 0.70) / (qPerYear - 1));
+        let yNum = getPkgYear(f);
+        let yearList = ctxAdjust.instPeriods.filter(x => getPkgYear(x) === yNum);
+        let instsInY = Math.max(1, yearList.length);
+        let annualPool = instPool * (instsInY / Math.max(1, ctxAdjust.instPeriods.length));
+        let isBalloonQ = (yearList[yearList.length - 1]?.id === f.id);
+        let part = (instsInY === 1) ? annualPool : (isBalloonQ ? (annualPool * 0.30) : ((annualPool * 0.70) / (instsInY - 1)));
         if (f.isMerged) return ctxAdjust.delivPct + part;
         return part;
     });
@@ -15473,13 +16134,14 @@ window.generateAndRenderORFacilities = function() {
         if (f.id === 'dp2') return ctxAdjust.dp2Pct;
         if (f.id === 'addl') return ctxAdjust.addlPct;
         if (f.id === 'deliv' && !f.isMerged) return ctxAdjust.delivPct;
-        let instIdx = ctxAdjust.instPeriods.findIndex(x => x.id === f.id);
-        let yIdx = Math.floor(instIdx / qPerYear);
-        let qInY = instIdx % qPerYear;
+        let yNum = getPkgYear(f);
+        let yIdx = yNum - 1;
+        let yearList = ctxAdjust.instPeriods.filter(x => getPkgYear(x) === yNum);
+        let instsInY = Math.max(1, yearList.length);
         let b = (yIdx === 0) ? 0.20 : ((yIdx === 1) ? 0.25 : 0.35);
-        let annualPool = p2_inst_pool / totalYears;
-        let isBalloonQ = (qInY === qPerYear - 1);
-        let part = isBalloonQ ? (annualPool * b) : ((annualPool * (1.0 - b)) / (qPerYear - 1));
+        let annualPool = p2_inst_pool * (instsInY / Math.max(1, ctxAdjust.instPeriods.length));
+        let isBalloonQ = (yearList[yearList.length - 1]?.id === f.id);
+        let part = (instsInY === 1) ? annualPool : (isBalloonQ ? (annualPool * b) : ((annualPool * (1.0 - b)) / (instsInY - 1)));
         if (f.isMerged) return ctxAdjust.delivPct + part;
         return part;
     });
@@ -15492,9 +16154,10 @@ window.generateAndRenderORFacilities = function() {
 
     // Package 3: FLEXIBLE - Bonus Season Balloon with Advanced Bulk Payment
     let p3_dates = {};
-    ctxFlex.instPeriods.forEach((inst, idx) => {
-        let qInY = idx % qPerYear;
-        if (qInY === qPerYear - 1) p3_dates[inst.id] = formatDate(addMonths(inst.date, 2));
+    ctxFlex.instPeriods.forEach((inst) => {
+        let yNum = getPkgYear(inst);
+        let yearList = ctxFlex.instPeriods.filter(x => getPkgYear(x) === yNum);
+        if (yearList[yearList.length - 1]?.id === inst.id) p3_dates[inst.id] = formatDate(addMonths(inst.date, 2));
     });
     let addlFlow = ctxFlex.tpl.find(f => f.id === 'addl');
     let p3_dateNotes = 'ترحيل موعد البالون السنوي شهرين ليتزامن مع أرباح العميل السنوية';
@@ -15508,11 +16171,12 @@ window.generateAndRenderORFacilities = function() {
         if (f.id === 'dp2') return ctxFlex.dp2Pct;
         if (f.id === 'addl') return ctxFlex.addlPct;
         if (f.id === 'deliv' && !f.isMerged) return ctxFlex.delivPct;
-        let instIdx = ctxFlex.instPeriods.findIndex(x => x.id === f.id);
-        let qInY = instIdx % qPerYear;
-        let annualPool = instPool / totalYears;
-        let isBalloonQ = (qInY === qPerYear - 1);
-        let part = isBalloonQ ? (annualPool * 0.30) : ((annualPool * 0.70) / (qPerYear - 1));
+        let yNum = getPkgYear(f);
+        let yearList = ctxFlex.instPeriods.filter(x => getPkgYear(x) === yNum);
+        let instsInY = Math.max(1, yearList.length);
+        let annualPool = instPool * (instsInY / Math.max(1, ctxFlex.instPeriods.length));
+        let isBalloonQ = (yearList[yearList.length - 1]?.id === f.id);
+        let part = (instsInY === 1) ? annualPool : (isBalloonQ ? (annualPool * 0.30) : ((annualPool * 0.70) / (instsInY - 1)));
         if (f.isMerged) return ctxFlex.delivPct + part;
         return part;
     }, p3_dates);
@@ -15525,7 +16189,7 @@ window.generateAndRenderORFacilities = function() {
     // Package 4: ADJUST - Early Reduced Installments (Fixed First 2 Years)
     let earlyFixedAmt = Math.round((basePrice * instPool / ctxAdjust.totalInstCount) * 0.65);
     let earlyFixedPct = earlyFixedAmt / basePrice;
-    let nEarly = (ctxAdjust.freqMonths === 6) ? 4 : 8;
+    let nEarly = Math.round(24 / ctxAdjust.freqMonths);
     let nLate = ctxAdjust.totalInstCount - nEarly;
     let remPoolP4 = Math.max(0, instPool - (nEarly * earlyFixedPct));
     let latePctP4 = nLate > 0 ? (remPoolP4 / nLate) : 0;
@@ -15731,4 +16395,66 @@ window.applyORScenario = function(idx) {
 window.applyORPlanDirect = window.applyORScenario;
 window.copyORScenarioForExcel = function(idx) {
     window.copyOROptionScenarioForExcel('or-facilities-results-container', idx);
+};
+
+window.getExcelAmountsText = function() {
+    if (!window.globalCustomFlows || window.globalCustomFlows.length === 0) return '';
+    let nonMnt = window.globalCustomFlows.filter(f => !f.isMnt);
+    return nonMnt.map(f => Math.round(f.amount || 0)).join('\r\n');
+};
+window.copyRawAmounts = function(btn) {
+    if (!btn && window.event && window.event.currentTarget) btn = window.event.currentTarget;
+    let textToCopy = window.getExcelAmountsText();
+    if (!textToCopy) return;
+    navigator.clipboard.writeText(textToCopy).then(() => {
+        if (typeof window.showToast === 'function') window.showToast('✅ تم نسخ مبالغ الأقساط للأكسيل (Column M) بدقة بالملي!');
+    });
+};
+window.delayedTableEditTimer = null;
+window.delayedTableEdit = function(callerEl) {
+    if (window.delayedTableEditTimer) clearTimeout(window.delayedTableEditTimer);
+    window.delayedTableEditTimer = setTimeout(() => {
+        window.applyTableEdits(callerEl);
+    }, 120);
+};
+
+window.updateActiveStackBar = function(flags) {
+    if (!flags) return;
+    let bar = document.getElementById('active-stack-bar');
+    let pillsEl = document.getElementById('active-stack-pills');
+    let items = [
+        { key: 'hasCustomInputs', mode: 'standard', btnId: 'pm-btn-standard', label: '🟢 دفعات/مقدمات' },
+        { key: 'hasTargetPrice',  mode: 'target',   btnId: 'pm-btn-target',   label: '🎯 سعر مستهدف' },
+        { key: 'hasFixedInst',    mode: 'fixed',    btnId: 'pm-btn-fixed',    label: '💵 تثبيت قسط' },
+        { key: 'hasIntraYearShift', mode: 'balloon', btnId: 'pm-btn-balloon', label: '🎈 70/30' },
+        { key: 'hasMeltActive',   mode: 'balloon',  btnId: 'pm-btn-balloon',  label: '🔥 تسييح دفعات' },
+        { key: 'hasInstallmentShift', mode: 'zero', btnId: 'pm-btn-zero',     label: '🔀 تصفير أقساط' },
+        { key: 'hasManualDiscount', mode: 'manual', btnId: 'pm-btn-manual',   label: '🏷️ خصم/زيادة يدوية' }
+    ];
+
+    // Update checkmarks on tab buttons
+    ['pm-btn-standard','pm-btn-target','pm-btn-fixed','pm-btn-balloon','pm-btn-zero','pm-btn-manual'].forEach(id => {
+        let b = document.getElementById(id);
+        if (!b) return;
+        let baseTxt = b.getAttribute('data-base-label');
+        if (!baseTxt) {
+            baseTxt = b.innerText.trim();
+            b.setAttribute('data-base-label', baseTxt);
+        }
+        let isAct = items.some(it => it.btnId === id && flags[it.key]);
+        b.innerText = isAct ? (baseTxt + ' ✓') : baseTxt;
+        b.style.borderColor = isAct ? 'rgba(52, 211, 153, 0.7)' : '';
+    });
+
+    if (!bar || !pillsEl) return;
+    let activeList = items.filter(it => flags[it.key]);
+    if (activeList.length === 0) {
+        bar.style.display = 'none';
+        pillsEl.innerHTML = '';
+        return;
+    }
+    bar.style.display = 'flex';
+    pillsEl.innerHTML = activeList.map(it =>
+        `<button type="button" onclick="if(window.switchPaymentMode) switchPaymentMode('${it.mode}')" style="background: rgba(16, 185, 129, 0.18); color: #6ee7b7; border: 1px solid rgba(52, 211, 153, 0.45); border-radius: 999px; padding: 2px 10px; font-size: 0.76rem; font-weight: bold; cursor: pointer;">${it.label} ✓</button>`
+    ).join('');
 };

@@ -21,6 +21,10 @@
     --text-primary: #f8fafc;
     --text-muted: #94a3b8;
     --text-subtle: #64748b;
+    --accent-blue: #38bdf8;
+    --success: #10b981;
+    --border: rgba(255, 255, 255, 0.12);
+    --text: #f8fafc;
 }
 
 * {
@@ -771,4 +775,49 @@ tr:hover td {
 .pm-module-card {
     background: rgba(15, 23, 42, 0.6) !important;
     border: 1px solid rgba(255, 255, 255, 0.08) !important;
+}
+
+/* POLISH: FULL-WIDTH MILESTONE CARD, COMPACT ANNUAL TABLE, 1-ROW DESKTOP HEADER & ARABIC BIDI */
+#custom-inputs > div {
+    grid-column: 1 / -1;
+}
+
+.studio-system-badge,
+.deal-card-title,
+.deal-card-subtitle,
+.active-plan-indicator,
+.pm-title,
+.pm-desc,
+.summary-drawer-badge,
+#approval-status-card,
+#annual-collection-card {
+    direction: rtl;
+    unicode-bidi: plaintext;
+}
+
+#annual-collection-table th,
+#annual-collection-table td {
+    padding: 6px 5px !important;
+    font-size: 0.78rem !important;
+    white-space: normal !important;
+    line-height: 1.25;
+}
+
+@media (min-width: 1480px) {
+    .studio-header {
+        flex-wrap: nowrap;
+        padding: 10px 16px;
+        gap: 10px;
+    }
+    .studio-system-badge {
+        display: none;
+    }
+    .tab-btn {
+        padding: 7px 11px;
+        font-size: 0.86rem;
+    }
+    .mode-btn {
+        padding: 5px 9px;
+        font-size: 0.78rem;
+    }
 }
